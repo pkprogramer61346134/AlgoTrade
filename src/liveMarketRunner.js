@@ -62,9 +62,10 @@ class LiveCandleAggregator {
     }
 }
 
-function runLiveMarketMode() {
+function runLiveMarketMode(autoPlaceOrders = true) {
+    const modeLabel = autoPlaceOrders ? "🟢 ORDER PLACEMENT SWITCH: ON (REAL EXECUTION)" : "🔴 ORDER PLACEMENT SWITCH: OFF (SIGNAL ALERT ONLY)";
     console.log("=========================================================================================");
-    console.log("⚡ OPTION 2: LIVE MARKET MODE (CONNECTING TO DHAN API REAL-TIME FEED)");
+    console.log(`⚡ LIVE MARKET MODE - ${modeLabel}`);
     console.log("=========================================================================================\n");
 
     const jsonStrategies = loadAllStrategiesFromJSON();
@@ -75,7 +76,7 @@ function runLiveMarketMode() {
 
     console.log(`📡 Registered ${jsonStrategies.length} Active Live Strategies:`);
     jsonStrategies.forEach(s => console.log(`   - 🟢 [${s.id}] ${s.name}`));
-    console.log("");
+    console.log(`⚙️ Execution Status: ${autoPlaceOrders ? "Automatic Order Placement Active" : "Signal Alerts Only (No Orders Sent to Broker)"}\n`);
 
     const aggregator = new LiveCandleAggregator(5); // 5-Minute Aggregator
     const dailyTradeCounts = {};
@@ -93,7 +94,7 @@ function runLiveMarketMode() {
         console.log(`📌 NIFTY 50 Live Spot Price from Dhan API: ₹${initialLtp}`);
         console.log("✅ Live Market Data API Connection Successful!");
         console.log(`📊 Live Option Chain PCR Initialized: ${livePCR} (Bullish Bias)`);
-        console.log("📡 Live Candle Aggregator is active & ready to receive per-second ticks.");
+        console.log(`📡 Live Candle Aggregator is active & ready. Order Switch: [${autoPlaceOrders ? "ON" : "OFF"}]`);
     }).catch(err => {
         console.error("❌ Dhan API Quote Fetch Error:", err);
     });
@@ -107,8 +108,10 @@ function runLiveMarketMode() {
                 else if (Buffer.isBuffer(tick) && tick.length >= 12) ltp = tick.readFloatLE(8);
 
                 if (ltp && ltp > 1000) {
-                    // Update live trailing stoploss on per-second price tick
-                    orderManager.processTickTrailingSL(ltp);
+                    // Update live trailing stoploss on per-second price tick if order active
+                    if (autoPlaceOrders) {
+                        orderManager.processTickTrailingSL(ltp);
+                    }
 
                     const activeCandle = aggregator.processTick(ltp);
 
@@ -125,8 +128,12 @@ function runLiveMarketMode() {
                                 console.log(`\n🚨 [LIVE MARKET SIGNAL!] Strategy: ${stratConfig.name}`);
                                 console.log(`   - Type: ${signal.type} | Entry: ₹${signal.entryPrice} | SL: ₹${signal.stopLoss} | Target: ₹${signal.targetPrice}`);
 
-                                // Execute live order with capital % & dynamic trailing SL via OrderExecutionManager
-                                orderManager.executeOrder(signal, ltp, 100000);
+                                if (autoPlaceOrders) {
+                                    console.log(`⚡ [ORDER SWITCH: ON] Placing Automatic Order via Order Execution Manager...`);
+                                    orderManager.executeOrder(signal, ltp, 100000);
+                                } else {
+                                    console.log(`ℹ️ [ORDER SWITCH: OFF] Trade Signal Alert Generated! (No Broker Order Placed)`);
+                                }
                             }
                         });
                     }

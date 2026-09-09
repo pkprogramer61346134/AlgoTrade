@@ -21,14 +21,18 @@ function promptOptions() {
 
     console.log("Please select Execution Mode:");
     console.log("  [1] Option 1: Historical Data Mode (Backtest over C:\\candle data)");
-    console.log("  [2] Option 2: Live Market Mode (Real-Time Dhan API Feed)\n");
+    console.log("  [2] Option 2: Live Market Signal Alert Only (Order Switch: 🔴 OFF)");
+    console.log("  [3] Option 3: Live Market Real Trading Mode (Order Switch: 🟢 ON)\n");
 
     const args = process.argv.slice(2);
     if (args[0] === '1') {
         runHistoricalBacktestMode();
         return;
     } else if (args[0] === '2') {
-        runLiveMarketMode();
+        runLiveMarketMode(false); // Order Switch OFF
+        return;
+    } else if (args[0] === '3') {
+        runLiveMarketMode(true);  // Order Switch ON
         return;
     }
 
@@ -37,17 +41,19 @@ function promptOptions() {
         output: process.stdout
     });
 
-    rl.question("Enter Option (1 or 2): ", (answer) => {
+    rl.question("Enter Option (1, 2, or 3): ", (answer) => {
         rl.close();
         const choice = answer.trim();
 
         if (choice === '1') {
             runHistoricalBacktestMode();
         } else if (choice === '2') {
-            runLiveMarketMode();
+            runLiveMarketMode(false); // Order Switch OFF
+        } else if (choice === '3') {
+            runLiveMarketMode(true);  // Order Switch ON
         } else {
-            console.log("⚠️ Invalid choice. Defaulting to Option 1: Historical Data Mode...\n");
-            runHistoricalBacktestMode();
+            console.log("⚠️ Invalid choice. Defaulting to Option 2: Live Market Signal Only (Order Switch OFF)...\n");
+            runLiveMarketMode(false);
         }
     });
 }
