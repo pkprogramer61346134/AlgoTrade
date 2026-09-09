@@ -1,0 +1,42 @@
+{
+  "id": "orb_optionchain_best",
+  "name": "15-Min ORB + Option Chain PCR High Confirmation Strategy",
+  "enabled": true,
+  "description": "Enhanced ORB Breakout strategy backed by Option Chain Put-Call Ratio (PCR >= 1.0) and Institutional Open Interest alignment.",
+  "author": "AlgoTrade Engine",
+  "timeframe": "5",
+  "maxTradesPerDay": 3,
+  "riskRewardRatio": 1.5,
+  "indicators": {
+    "orbMinutes": 15,
+    "emaTrendPeriod": 200,
+    "minRVOL": 2.0,
+    "rsiPeriod": 14,
+    "pcrMinBuy": 1.0,
+    "pcrMaxSell": 0.8
+  },
+  "rules": {
+    "buy": [
+      { "field": "close", "operator": ">", "target": "orbHigh" },
+      { "field": "close", "operator": ">", "target": "ema200" },
+      { "field": "rvol", "operator": ">=", "target": 2.0 },
+      { "field": "rsi", "operator": ">", "target": 50 },
+      { "field": "pcr", "operator": ">=", "target": 1.0 }
+    ],
+    "sell": [
+      { "field": "close", "operator": "<", "target": "orbLow" },
+      { "field": "close", "operator": "<", "target": "ema200" },
+      { "field": "rvol", "operator": ">=", "target": 2.0 },
+      { "field": "rsi", "operator": "<", "target": 50 },
+      { "field": "pcr", "operator": "<=", "target": 0.8 }
+    ]
+  },
+  "stopLoss": {
+    "type": "ORB_LEVEL",
+    "fallbackATRMultiplier": 1.2
+  },
+  "target": {
+    "type": "RISK_REWARD",
+    "multiplier": 1.5
+  }
+}

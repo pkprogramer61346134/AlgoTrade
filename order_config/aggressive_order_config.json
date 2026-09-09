@@ -1,0 +1,21 @@
+{
+  "id": "aggressive_order_config",
+  "name": "Aggressive 100% Capital Usage + Algo Internal Trailing SL Config",
+  "capitalUsagePct": 100,
+  "productType": "INTRADAY",
+  "exchangeSegment": "NSE_FNO",
+  "tradingSymbol": "NIFTY_OPTION",
+  "defaultQuantity": 50,
+  "trailingSL": {
+    "enabled": true,
+    "algoTrailing": true,
+    "lockAtTarget": true,
+    "costOffsetPoints": 1.0,
+    "trailingJumpStep": 5.0,
+    "stepMoveRequirement": 10.0
+  },
+  "riskManagement": {
+    "maxOpenPositions": 1,
+    "maxLossPerDay": 5000
+  }
+}

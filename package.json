@@ -16,5 +16,8 @@
     "url": "https://github.com/pkprogramer61346134/AlgoTrade/issues"
   },
   "homepage": "https://github.com/pkprogramer61346134/AlgoTrade#readme",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
 }
