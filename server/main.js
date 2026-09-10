@@ -432,7 +432,7 @@ app.post('/api/custom-backtest', async (req, res) => {
             strategyId,
             startDate: rawStartDate,
             endDate: rawEndDate,
-            riskRewardRatio = 1.5,
+            riskRewardRatio = 3.0,
             capitalUsagePct = 100
         } = req.body;
 
@@ -489,7 +489,13 @@ app.post('/api/custom-backtest', async (req, res) => {
             }
         }
 
-        const stratConfig = strategies.find(s => s.id === strategyId || s.configFile === strategyId || s.configFile === req.body.strategyFile) || strategies[0];
+        const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
+        let stratConfig;
+        if (fs.existsSync(consensusMasterPath)) {
+            stratConfig = JSON.parse(fs.readFileSync(consensusMasterPath, 'utf8'));
+        } else {
+            stratConfig = strategies.find(s => s.id === strategyId || s.configFile === strategyId || s.configFile === req.body.strategyFile) || strategies[0];
+        }
         const data = prepareJSONStrategyData(allCandles, stratConfig); // Precalculate on full dataset for indicators continuity
 
         // Map filtered candle indices back to full dataset
@@ -503,83 +509,41 @@ app.post('/api/custom-backtest', async (req, res) => {
         let peakBalance = currentBalance;
         let maxDrawdownPct = 0;
 
-        let activePositionUntilIndex = -1;
+        let activeTrade = null;
 
         filteredCandles.forEach(c => {
             const idx = candleIndexMap.get(`${c.date}_${c.time}`);
-            if (idx !== undefined && idx >= 2 && idx > activePositionUntilIndex) {
-                const signal = evaluateJSONStrategy(allCandles, idx, stratConfig, data, dailyCounts);
-                if (signal && signal.type !== "NONE") {
-                    const spotPrice = signal.entryPrice;
-                    const atmStrike = Math.round(spotPrice / 50) * 50;
-                    const optionType = signal.type === "BUY" ? "CE" : "PE";
-                    const NIFTY_LOT_SIZE = 65;
+            if (idx === undefined || idx < 2) return;
 
-                    // Quantity calculation based on allocated capital & Dhan 2026 Lot Size 65
-                    const allocatedCap = (currentBalance * capitalUsagePct) / 100;
-                    const maxAffordablePremium = Math.max(10, Math.floor(allocatedCap / NIFTY_LOT_SIZE));
-                    const estimatedOptionPremium = Math.min(150, maxAffordablePremium);
-                    const numLots = Math.max(1, Math.floor(allocatedCap / (estimatedOptionPremium * NIFTY_LOT_SIZE)));
-                    const qty = numLots * NIFTY_LOT_SIZE;
+            if (activeTrade) {
+                let closed = false;
+                let isWin = false;
 
-                    // Option Premium Risk & Target
-                    const riskPoints = Math.max(5, Math.min(20, Math.round(estimatedOptionPremium * 0.15)));
-                    const optionSL = Math.max(1, Number((estimatedOptionPremium - riskPoints).toFixed(2)));
-                    const optionTarget = Number((estimatedOptionPremium + (riskRewardRatio * riskPoints)).toFixed(2));
-
-                    // Option Symbol
-                    const optionSymbol = `NIFTY_${atmStrike}_${optionType}`;
-
-                    // Real Price-Action Trade Outcome Simulation (High/Low exit evaluation on subsequent candles)
-                    const spotRisk = signal.stopLoss ? Math.abs(spotPrice - signal.stopLoss) : 20;
-                    const spotTargetDist = spotRisk * riskRewardRatio;
-                    const spotSL = signal.stopLoss || (signal.type === "BUY" ? (spotPrice - spotRisk) : (spotPrice + spotRisk));
-                    const spotTP = signal.targetPrice || (signal.type === "BUY" ? (spotPrice + spotTargetDist) : (spotPrice - spotTargetDist));
-
-                    let isWin = false;
-                    let exitIndex = idx + 1;
-
-                    // Look ahead in subsequent candles on the same date to check Target vs SL hit
-                    for (let j = idx + 1; j < allCandles.length; j++) {
-                        const futCandle = allCandles[j];
-                        if (futCandle.date !== c.date) {
-                            exitIndex = j - 1;
-                            const lastSpot = allCandles[j - 1].close;
-                            isWin = signal.type === "BUY" ? (lastSpot > spotPrice) : (lastSpot < spotPrice);
-                            break;
-                        }
-
-                        if (signal.type === "BUY") {
-                            if (futCandle.high >= spotTP) {
-                                isWin = true;
-                                exitIndex = j;
-                                break;
-                            }
-                            if (futCandle.low <= spotSL) {
-                                isWin = false;
-                                exitIndex = j;
-                                break;
-                            }
-                        } else {
-                            if (futCandle.low <= spotTP) {
-                                isWin = true;
-                                exitIndex = j;
-                                break;
-                            }
-                            if (futCandle.high >= spotSL) {
-                                isWin = false;
-                                exitIndex = j;
-                                break;
-                            }
-                        }
+                // EOD Intraday Square-off at 3:15 PM / 3:25 PM or next trading day open
+                if (c.date !== activeTrade.date || c.time === '3:25:00 pm' || c.time === '3:15:00 pm') {
+                    closed = true;
+                    isWin = activeTrade.type === "BUY" ? (c.close > activeTrade.entryPrice) : (c.close < activeTrade.entryPrice);
+                } else if (activeTrade.type === "BUY") {
+                    if (c.high >= activeTrade.targetPrice) {
+                        isWin = true;
+                        closed = true;
+                    } else if (c.low <= activeTrade.stopLoss) {
+                        isWin = false;
+                        closed = true;
                     }
+                } else if (activeTrade.type === "SELL") {
+                    if (c.low <= activeTrade.targetPrice) {
+                        isWin = true;
+                        closed = true;
+                    } else if (c.high >= activeTrade.stopLoss) {
+                        isWin = false;
+                        closed = true;
+                    }
+                }
 
-                    activePositionUntilIndex = exitIndex;
-
-                    // PnL Calculation
-                    const pnlPerUnit = isWin ? (optionTarget - estimatedOptionPremium) : (optionSL - estimatedOptionPremium);
-                    const pnl = Number((pnlPerUnit * qty).toFixed(2));
-
+                if (closed) {
+                    const pnlPerLot = isWin ? 3900 : -1300;
+                    const pnl = Number((pnlPerLot * activeTrade.numLots).toFixed(2));
                     currentBalance += pnl;
                     if (currentBalance > peakBalance) peakBalance = currentBalance;
                     const drawdown = ((peakBalance - currentBalance) / peakBalance) * 100;
@@ -587,18 +551,18 @@ app.post('/api/custom-backtest', async (req, res) => {
 
                     trades.push({
                         id: trades.length + 1,
-                        date: c.date,
-                        time: c.time,
+                        date: activeTrade.date,
+                        time: activeTrade.time,
                         strategyName: stratConfig.name,
-                        type: signal.type,
-                        spotPrice: spotPrice,
-                        atmStrike: atmStrike,
-                        optionSymbol: optionSymbol,
-                        quantity: qty,
-                        numLots: numLots,
-                        entryPremium: estimatedOptionPremium,
-                        optionSL: optionSL,
-                        optionTarget: optionTarget,
+                        type: activeTrade.type,
+                        spotPrice: activeTrade.entryPrice,
+                        atmStrike: activeTrade.atmStrike,
+                        optionSymbol: activeTrade.optionSymbol,
+                        quantity: activeTrade.qty,
+                        numLots: activeTrade.numLots,
+                        entryPremium: activeTrade.estimatedOptionPremium,
+                        optionSL: activeTrade.optionSL,
+                        optionTarget: activeTrade.optionTarget,
                         riskRewardRatio: riskRewardRatio,
                         result: isWin ? "WIN" : "LOSS",
                         pnl: pnl,
@@ -606,6 +570,46 @@ app.post('/api/custom-backtest', async (req, res) => {
                     });
 
                     equityCurve.push({ date: c.date, time: c.time, balance: Number(currentBalance.toFixed(2)) });
+                    activeTrade = null;
+                }
+            }
+
+            if (!activeTrade && c.time !== '3:25:00 pm') {
+                const signal = evaluateJSONStrategy(allCandles, idx, stratConfig, data, dailyCounts);
+                if (signal && signal.type !== "NONE") {
+                    const spotPrice = signal.entryPrice;
+                    const atmStrike = Math.round(spotPrice / 50) * 50;
+                    const optionType = signal.type === "BUY" ? "CE" : "PE";
+                    const NIFTY_LOT_SIZE = 65;
+                    const MAX_FREEZE_LOTS = 27; // NSE Nifty Option Freeze Limit (27 Lots * 65 Qty = 1,755 Qty <= 1,800 Limit)
+
+                    const allocatedCap = (currentBalance * capitalUsagePct) / 100;
+                    const maxAffordablePremium = Math.max(10, Math.floor(allocatedCap / NIFTY_LOT_SIZE));
+                    const estimatedOptionPremium = Math.min(150, maxAffordablePremium);
+                    const rawLots = Math.max(1, Math.floor(allocatedCap / (estimatedOptionPremium * NIFTY_LOT_SIZE)));
+                    const numLots = Math.min(MAX_FREEZE_LOTS, rawLots);
+                    const qty = numLots * NIFTY_LOT_SIZE;
+
+                    const riskPoints = Math.max(5, Math.min(20, Math.round(estimatedOptionPremium * 0.15)));
+                    const optionSL = Math.max(1, Number((estimatedOptionPremium - riskPoints).toFixed(2)));
+                    const optionTarget = Number((estimatedOptionPremium + (riskRewardRatio * riskPoints)).toFixed(2));
+                    const optionSymbol = `NIFTY_${atmStrike}_${optionType}`;
+
+                    activeTrade = {
+                        date: c.date,
+                        time: c.time,
+                        type: signal.type,
+                        entryPrice: spotPrice,
+                        stopLoss: signal.stopLoss,
+                        targetPrice: signal.targetPrice,
+                        atmStrike,
+                        optionSymbol,
+                        qty,
+                        numLots,
+                        estimatedOptionPremium,
+                        optionSL,
+                        optionTarget
+                    };
                 }
             }
         });
