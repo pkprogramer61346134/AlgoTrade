@@ -59,9 +59,9 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
 
     for (const rule of buyRules) {
         if (rule.target === "orbHigh") {
-            if (!orb || orb.high === -Infinity || c.close <= orb.high) {
+            if (!orb || orb.high === -Infinity || (c.high < orb.high && c.close < orb.high)) {
                 buyMatch = false;
-                buyFailReasons.push(`Price ₹${c.close} <= ORB High ₹${orb ? orb.high : 'N/A'}`);
+                buyFailReasons.push(`Price High ₹${c.high} < ORB High ₹${orb ? orb.high : 'N/A'}`);
             }
         } else if (rule.target === "ema200" || rule.target === "ema50" || (typeof rule.target === "string" && rule.target.startsWith("ema"))) {
             if (eTrend !== null && c.close <= eTrend) {
@@ -121,9 +121,9 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
 
     for (const rule of sellRules) {
         if (rule.target === "orbLow") {
-            if (!orb || orb.low === Infinity || c.close >= orb.low) {
+            if (!orb || orb.low === Infinity || (c.low > orb.low && c.close > orb.low)) {
                 sellMatch = false;
-                sellFailReasons.push(`Price ₹${c.close} >= ORB Low ₹${orb ? orb.low : 'N/A'}`);
+                sellFailReasons.push(`Price Low ₹${c.low} > ORB Low ₹${orb ? orb.low : 'N/A'}`);
             }
         } else if (rule.target === "ema200" || rule.target === "ema50" || (typeof rule.target === "string" && rule.target.startsWith("ema"))) {
             if (eTrend !== null && c.close >= eTrend) {
@@ -136,9 +136,9 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
                 sellFailReasons.push(`RVOL ${r.toFixed(2)}x < ${rule.target}x`);
             }
         } else if (rule.field === "rsi") {
-            if (rsiVal <= rule.target) {
+            if (rsiVal >= rule.target) {
                 sellMatch = false;
-                sellFailReasons.push(`RSI ${rsiVal.toFixed(1)} <= ${rule.target}`);
+                sellFailReasons.push(`RSI ${rsiVal.toFixed(1)} >= ${rule.target}`);
             }
         } else if (rule.field === "supertrendDirection") {
             if (!st || st.direction !== rule.target) {

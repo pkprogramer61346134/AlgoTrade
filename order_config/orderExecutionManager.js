@@ -75,62 +75,68 @@ class OrderExecutionManager {
         return Math.round(spotPrice / 50) * 50; // Round to nearest 50 points Nifty strike
     }
 
-    async resolveOptionContractFromDhan(spotPrice = 24500, optionType = "CE", availableCapital = 100000) {
+    async resolveOptionContractFromDhan(spotPrice = 23400, optionType = "CE", availableCapital = 100000) {
         const atmStrike = this.getATMStrike(spotPrice);
         const maxAffordablePremium = Math.max(10, Math.floor(availableCapital / 65)); // Max affordable premium per unit (65 lot size)
 
-        const candidateMasterContracts = [
-            { strike: 23400, type: "CE", secId: "47293", symbol: "NIFTY-Sep2026-23400-CE" },
-            { strike: 23400, type: "PE", secId: "47294", symbol: "NIFTY-Sep2026-23400-PE" },
-            { strike: 23450, type: "CE", secId: "47295", symbol: "NIFTY-Sep2026-23450-CE" },
-            { strike: 23450, type: "PE", secId: "47296", symbol: "NIFTY-Sep2026-23450-PE" },
-            { strike: 23500, type: "CE", secId: "47297", symbol: "NIFTY-Sep2026-23500-CE" },
-            { strike: 23500, type: "PE", secId: "47298", symbol: "NIFTY-Sep2026-23500-PE" },
-            { strike: 23600, type: "CE", secId: "47301", symbol: "NIFTY-Sep2026-23600-CE" },
-            { strike: 23600, type: "PE", secId: "47302", symbol: "NIFTY-Sep2026-23600-PE" },
-            { strike: 23700, type: "CE", secId: "47305", symbol: "NIFTY-Sep2026-23700-CE" },
-            { strike: 23700, type: "PE", secId: "47306", symbol: "NIFTY-Sep2026-23700-PE" },
-            { strike: 23800, type: "CE", secId: "47309", symbol: "NIFTY-Sep2026-23800-CE" },
-            { strike: 23800, type: "PE", secId: "47310", symbol: "NIFTY-Sep2026-23800-PE" }
-        ];
-
         let resolvedContract = {
-            securityId: optionType === "CE" ? "47305" : "47306",
-            tradingSymbol: optionType === "CE" ? "NIFTY-Sep2026-23700-CE" : "NIFTY-Sep2026-23700-PE",
-            strike: 23700,
+            securityId: optionType === "CE" ? "47305" : "47286",
+            tradingSymbol: optionType === "CE" ? "NIFTY-Sep2026-23700-CE" : "NIFTY-Sep2026-23200-PE",
+            strike: optionType === "CE" ? 23700 : 23200,
             price: Math.min(36.5, maxAffordablePremium),
-            source: "dhan_master_lookup"
+            source: "dhan_master_fallback"
         };
 
         try {
-            if (this.dhan && this.dhan.marketData && typeof this.dhan.marketData.getMarketQuote === 'function') {
-                const candidates = candidateMasterContracts.filter(c => c.type === optionType);
-                const quoteReqPayload = candidates.map(c => ({ exchangeSegment: 'NSE_FNO', securityId: Number(c.secId) }));
-                const quoteRes = await this.dhan.marketData.getMarketQuote(quoteReqPayload);
+            if (this.dhan && this.dhan.marketData && typeof this.dhan.marketData.getOptionChain === 'function') {
+                // 1. Fetch live Expiry list from Dhan Option Chain API
+                const expRes = await this.dhan.marketData.getOptionChainExpiries(13, 'IDX_I');
+                const expiries = expRes?.data?.data || expRes?.data || [];
+                const nearestExpiry = expiries.length > 0 ? expiries[0] : '2026-09-15';
 
-                const quotesMap = quoteRes?.data?.data?.['NSE_FNO'] || quoteRes?.data?.['NSE_FNO'] || {};
+                // 2. Fetch full live Option Chain matrix directly from Dhan API
+                const ocRes = await this.dhan.marketData.getOptionChain(13, 'IDX_I', nearestExpiry);
+                const ocData = ocRes?.data?.data?.oc || ocRes?.data?.oc || {};
 
-                // Sort candidates by closeness to ATM strike
-                candidates.sort((a, b) => Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike));
+                const candidates = [];
+                const typeKey = optionType.toLowerCase();
 
-                for (const c of candidates) {
-                    const qData = quotesMap[c.secId] || quotesMap[String(c.secId)];
-                    const livePrice = Number(qData?.last_price || qData?.close || 0);
-                    if (livePrice > 0 && livePrice <= maxAffordablePremium) {
-                        resolvedContract = {
-                            securityId: String(c.secId),
-                            tradingSymbol: c.symbol,
-                            strike: c.strike,
-                            price: livePrice,
-                            source: "dhan_market_quote_api"
-                        };
-                        console.log(`📌 Budget-Matched Dhan Option Contract Found: ${c.symbol} (SecID: ${c.secId}, Live Premium: ₹${livePrice}, Lot Cost: ₹${(livePrice * 65).toFixed(2)})`);
-                        return resolvedContract;
+                for (const strikeStr in ocData) {
+                    const strikeVal = parseFloat(strikeStr);
+                    const optObj = ocData[strikeStr]?.[typeKey];
+                    if (optObj && optObj.security_id) {
+                        const ltp = Number(optObj.last_price || optObj.top_ask_price || optObj.top_bid_price || 0);
+                        if (ltp > 0) {
+                            candidates.push({
+                                strike: strikeVal,
+                                securityId: String(optObj.security_id),
+                                tradingSymbol: `NIFTY-${nearestExpiry}-${strikeVal}-${optionType}`,
+                                price: ltp
+                            });
+                        }
                     }
+                }
+
+                // Filter candidates that fit inside user's available capital budget
+                const affordableCandidates = candidates.filter(c => c.price <= maxAffordablePremium);
+                if (affordableCandidates.length > 0) {
+                    // Sort candidates by closeness to ATM strike
+                    affordableCandidates.sort((a, b) => Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike));
+                    const best = affordableCandidates[0];
+
+                    resolvedContract = {
+                        securityId: best.securityId,
+                        tradingSymbol: best.tradingSymbol,
+                        strike: best.strike,
+                        price: best.price,
+                        source: "dhan_option_chain_api"
+                    };
+                    console.log(`📌 Dynamic Dhan Option Chain Resolved [${optionType}]: ${best.tradingSymbol} (SecID: ${best.securityId}, Live Premium: ₹${best.price}, Lot Cost: ₹${(best.price * 65).toFixed(2)})`);
+                    return resolvedContract;
                 }
             }
         } catch (e) {
-            console.warn(`⚠️ Market Quote lookup fallback: ${e.message}`);
+            console.warn(`⚠️ Dhan Option Chain API lookup warning: ${e.message}`);
         }
 
         return resolvedContract;

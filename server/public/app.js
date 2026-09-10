@@ -256,13 +256,6 @@ async function fetchLiveStatus() {
             document.getElementById('live-pcr').innerText = data.livePCR;
             document.getElementById('live-account-capital').innerText = `₹${data.accountBalance.toLocaleString()}`;
 
-            // Auto-sync Custom Capital Input in Backtest & Strategy Lab with Live Dhan Balance
-            const capitalInput = document.getElementById('custom-capital');
-            if (capitalInput && (capitalInput.value === '' || capitalInput.value === '10000' || capitalInput.getAttribute('data-auto-synced') !== 'user_edited')) {
-                capitalInput.value = Math.floor(data.accountBalance);
-                capitalInput.setAttribute('data-auto-synced', 'true');
-            }
-
             // Sync all control settings with persistent defaults
             updateLiveControlsUI(data);
 

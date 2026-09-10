@@ -104,7 +104,7 @@ setInterval(async () => {
         if (status !== "FLAT") {
             const optionType = status === "BUY_SIGNAL" ? "CE" : "PE";
             const config = orderManager.loadConfig();
-            const rr = config.riskRewardRatio || 1.5;
+            const rr = config.riskRewardRatio !== undefined ? config.riskRewardRatio : 3.0;
             const liveCapital = await orderManager.fetchLiveCapital();
             const usagePct = config.capitalUsagePct !== undefined ? config.capitalUsagePct : 100;
             const allocatedCapital = (liveCapital * usagePct) / 100;
@@ -307,7 +307,7 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
     const eDate = normalizeDateString(endDate) || sDate;
     
     try {
-        console.log(`📡 Fetching missing intraday candles from Dhan API for ${sDate} to ${eDate}...`);
+        console.log(`📡 Fetching intraday candles from Dhan API for date range: ${sDate} to ${eDate}...`);
         const res = await dhan.marketData.getIntradayData({
             securityId: "13",
             exchangeSegment: "IDX_I",
@@ -319,15 +319,17 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
 
         const rawData = res?.data?.data || res?.data || res;
         if (rawData && rawData.timestamp && rawData.timestamp.length > 0) {
-            const downloadedCandles = [];
+            const candlesByDate = {};
             for (let i = 0; i < rawData.timestamp.length; i++) {
                 const ts = rawData.timestamp[i];
                 const dateObj = new Date(ts * 1000);
                 const dateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
                 const timeStr = dateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-                downloadedCandles.push({
-                    index: i + 1,
+                if (!candlesByDate[dateStr]) candlesByDate[dateStr] = [];
+
+                candlesByDate[dateStr].push({
+                    index: candlesByDate[dateStr].length + 1,
                     date: dateStr,
                     time: timeStr,
                     timestamp: ts,
@@ -339,12 +341,17 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
                 });
             }
 
-            if (downloadedCandles.length > 0) {
-                const cachePath = path.join('C:\\candle data', `nifty_5min_dhan_${sDate}.json`);
-                fs.writeFileSync(cachePath, JSON.stringify(downloadedCandles, null, 2));
-                console.log(`💾 Saved ${downloadedCandles.length} candles to ${cachePath}`);
-                return downloadedCandles;
+            const allDownloaded = [];
+            for (const dStr in candlesByDate) {
+                const dayCandles = candlesByDate[dStr];
+                if (dayCandles.length > 0) {
+                    const cachePath = path.join('C:\\candle data', `nifty_5min_dhan_${dStr}.json`);
+                    fs.writeFileSync(cachePath, JSON.stringify(dayCandles, null, 2));
+                    console.log(`💾 Saved ${dayCandles.length} Dhan API candles for date ${dStr} to ${cachePath}`);
+                    allDownloaded.push(...dayCandles);
+                }
             }
+            if (allDownloaded.length > 0) return allDownloaded;
         }
     } catch (e) {
         console.warn(`⚠️ Dhan API Intraday fetch warning: ${e.message}`);
@@ -447,9 +454,32 @@ app.post('/api/custom-backtest', async (req, res) => {
             filteredCandles = allCandles.filter(c => c.date === startDate);
         }
 
-        // If date missing in local storage, automatically download from Dhan API & save!
-        if (filteredCandles.length === 0 && startDate) {
-            console.log(`⚠️ Missing local candle data for date range: ${startDate} to ${endDate || startDate}. Triggering Auto-Downloader...`);
+        const localDatesSet = new Set(filteredCandles.map(c => c.date));
+        let missingDaysCount = 0;
+        if (startDate) {
+            const startObj = new Date(startDate);
+            const endObj = new Date(endDate || startDate);
+            let curr = new Date(startObj);
+            while (curr <= endObj) {
+                const dayOfWeek = curr.getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                    const yyyy = curr.getFullYear();
+                    const mm = String(curr.getMonth() + 1).padStart(2, '0');
+                    const dd = String(curr.getDate()).padStart(2, '0');
+                    const dateStr = `${yyyy}-${mm}-${dd}`;
+                    if (!localDatesSet.has(dateStr)) missingDaysCount++;
+                }
+                curr.setDate(curr.getDate() + 1);
+            }
+        }
+
+        // Check if today's date or missing date in range is requested
+        const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const isTodayRequested = (startDate === todayKolkata || endDate === todayKolkata || (startDate <= todayKolkata && endDate >= todayKolkata));
+
+        // If any date in requested range is missing or today is requested, automatically download from Dhan API & save!
+        if ((missingDaysCount > 0 || isTodayRequested) && startDate) {
+            console.log(`📡 Date range ${startDate} to ${endDate || startDate} has ${missingDaysCount} missing trading days. Fetching from Dhan API...`);
             await fetchAndCacheDhanCandles(startDate, endDate);
             allCandles = loadAllCandlesFromDir(candlesDir);
             if (startDate && endDate) {
@@ -459,7 +489,7 @@ app.post('/api/custom-backtest', async (req, res) => {
             }
         }
 
-        const stratConfig = strategies.find(s => s.id === strategyId) || strategies[0];
+        const stratConfig = strategies.find(s => s.id === strategyId || s.configFile === strategyId || s.configFile === req.body.strategyFile) || strategies[0];
         const data = prepareJSONStrategyData(allCandles, stratConfig); // Precalculate on full dataset for indicators continuity
 
         // Map filtered candle indices back to full dataset
@@ -473,31 +503,82 @@ app.post('/api/custom-backtest', async (req, res) => {
         let peakBalance = currentBalance;
         let maxDrawdownPct = 0;
 
+        let activePositionUntilIndex = -1;
+
         filteredCandles.forEach(c => {
             const idx = candleIndexMap.get(`${c.date}_${c.time}`);
-            if (idx !== undefined && idx >= 2) {
+            if (idx !== undefined && idx >= 2 && idx > activePositionUntilIndex) {
                 const signal = evaluateJSONStrategy(allCandles, idx, stratConfig, data, dailyCounts);
                 if (signal && signal.type !== "NONE") {
                     const spotPrice = signal.entryPrice;
                     const atmStrike = Math.round(spotPrice / 50) * 50;
                     const optionType = signal.type === "BUY" ? "CE" : "PE";
-                    const optionSymbol = `NIFTY_${atmStrike}_${optionType}`;
-                    const estimatedOptionPremium = 180;
+                    const NIFTY_LOT_SIZE = 65;
 
-                    // Quantity calculation based on allocated capital
+                    // Quantity calculation based on allocated capital & Dhan 2026 Lot Size 65
                     const allocatedCap = (currentBalance * capitalUsagePct) / 100;
-                    const numLots = Math.max(1, Math.floor(allocatedCap / (estimatedOptionPremium * 50)));
-                    const qty = numLots * 50;
+                    const maxAffordablePremium = Math.max(10, Math.floor(allocatedCap / NIFTY_LOT_SIZE));
+                    const estimatedOptionPremium = Math.min(150, maxAffordablePremium);
+                    const numLots = Math.max(1, Math.floor(allocatedCap / (estimatedOptionPremium * NIFTY_LOT_SIZE)));
+                    const qty = numLots * NIFTY_LOT_SIZE;
 
-                    // Risk & Target based on custom Risk:Reward Ratio
-                    const riskPoints = 20; // 20 pts Option SL
-                    const optionSL = Math.max(1, estimatedOptionPremium - riskPoints);
-                    const optionTarget = estimatedOptionPremium + (riskRewardRatio * riskPoints);
+                    // Option Premium Risk & Target
+                    const riskPoints = Math.max(5, Math.min(20, Math.round(estimatedOptionPremium * 0.15)));
+                    const optionSL = Math.max(1, Number((estimatedOptionPremium - riskPoints).toFixed(2)));
+                    const optionTarget = Number((estimatedOptionPremium + (riskRewardRatio * riskPoints)).toFixed(2));
 
-                    // Win / Loss simulation
-                    const isWin = Math.random() < 0.45; // 45% strategy win rate
-                    const riskAmt = (allocatedCap * 0.02);
-                    const pnl = isWin ? (riskAmt * riskRewardRatio) : (-riskAmt);
+                    // Option Symbol
+                    const optionSymbol = `NIFTY_${atmStrike}_${optionType}`;
+
+                    // Real Price-Action Trade Outcome Simulation (High/Low exit evaluation on subsequent candles)
+                    const spotRisk = signal.stopLoss ? Math.abs(spotPrice - signal.stopLoss) : 20;
+                    const spotTargetDist = spotRisk * riskRewardRatio;
+                    const spotSL = signal.stopLoss || (signal.type === "BUY" ? (spotPrice - spotRisk) : (spotPrice + spotRisk));
+                    const spotTP = signal.targetPrice || (signal.type === "BUY" ? (spotPrice + spotTargetDist) : (spotPrice - spotTargetDist));
+
+                    let isWin = false;
+                    let exitIndex = idx + 1;
+
+                    // Look ahead in subsequent candles on the same date to check Target vs SL hit
+                    for (let j = idx + 1; j < allCandles.length; j++) {
+                        const futCandle = allCandles[j];
+                        if (futCandle.date !== c.date) {
+                            exitIndex = j - 1;
+                            const lastSpot = allCandles[j - 1].close;
+                            isWin = signal.type === "BUY" ? (lastSpot > spotPrice) : (lastSpot < spotPrice);
+                            break;
+                        }
+
+                        if (signal.type === "BUY") {
+                            if (futCandle.high >= spotTP) {
+                                isWin = true;
+                                exitIndex = j;
+                                break;
+                            }
+                            if (futCandle.low <= spotSL) {
+                                isWin = false;
+                                exitIndex = j;
+                                break;
+                            }
+                        } else {
+                            if (futCandle.low <= spotTP) {
+                                isWin = true;
+                                exitIndex = j;
+                                break;
+                            }
+                            if (futCandle.high >= spotSL) {
+                                isWin = false;
+                                exitIndex = j;
+                                break;
+                            }
+                        }
+                    }
+
+                    activePositionUntilIndex = exitIndex;
+
+                    // PnL Calculation
+                    const pnlPerUnit = isWin ? (optionTarget - estimatedOptionPremium) : (optionSL - estimatedOptionPremium);
+                    const pnl = Number((pnlPerUnit * qty).toFixed(2));
 
                     currentBalance += pnl;
                     if (currentBalance > peakBalance) peakBalance = currentBalance;
@@ -520,7 +601,7 @@ app.post('/api/custom-backtest', async (req, res) => {
                         optionTarget: optionTarget,
                         riskRewardRatio: riskRewardRatio,
                         result: isWin ? "WIN" : "LOSS",
-                        pnl: Number(pnl.toFixed(2)),
+                        pnl: pnl,
                         balanceAfter: Number(currentBalance.toFixed(2))
                     });
 
@@ -579,7 +660,7 @@ app.get('/api/live-status', async (req, res) => {
             activeStrategyId: liveState.activeStrategyId,
             activeStrategyName: activeStrat ? activeStrat.name : "Active Strategy",
             capitalUsagePct: config.capitalUsagePct || 100,
-            riskRewardRatio: config.riskRewardRatio || 1.5,
+            riskRewardRatio: config.riskRewardRatio || 3.0,
             accountBalance: liveCapital,
             activeOrder: orderManager.activeOrder,
             recentSignals: liveState.liveSignals.slice(-10),
@@ -628,7 +709,7 @@ app.post('/api/update-config', (req, res) => {
         if (riskRewardRatio !== undefined) updates.riskRewardRatio = Number(riskRewardRatio);
 
         const currentCfg = saveAppConfig(updates) || orderManager.loadConfig();
-        res.json({ status: 'success', capitalUsagePct: currentCfg.capitalUsagePct, riskRewardRatio: currentCfg.riskRewardRatio || 1.5 });
+        res.json({ status: 'success', capitalUsagePct: currentCfg.capitalUsagePct, riskRewardRatio: currentCfg.riskRewardRatio || 3.0 });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }
