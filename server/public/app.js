@@ -41,11 +41,11 @@ async function runFullBacktest() {
 
 // 1b. Run Custom Date & Capital Analysis
 async function runCustomAnalysis() {
-    const strategyId = document.getElementById('custom-strategy-select').value;
+    const strategyId = 'consensus_master_head';
     const startDate = document.getElementById('custom-start-date').value;
     const endDate = document.getElementById('custom-end-date').value;
     const initialCapital = document.getElementById('custom-capital').value || 10000;
-    const riskRewardRatio = parseFloat(document.getElementById('custom-rr-ratio').value) || 1.5;
+    const riskRewardRatio = 3.0;
 
     const btn = document.querySelector('button[onclick="runCustomAnalysis()"]');
     if (btn) {

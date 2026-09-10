@@ -1,0 +1,32 @@
+{
+  "id": "consensus_master_head",
+  "name": "👑 Master Head Multi-Strategy Consensus Engine (15-Engine Voting)",
+  "enabled": true,
+  "description": "Advanced Quantitative Master Engine. Aggregates 15 Sub-Strategy Engines (ORB, Volume Surge, RSI, EMA50, PCR, ATR, Rangebox Fader, VWAP, Supertrend, Price Action, MACD, Bollinger Bands, Prev Day Levels, OBV Volume Flow, Candle Momentum) with High-Conviction Majority Voting Consensus (>= 11/15 YES Votes).",
+  "author": "AlgoTrade Institutional Engine",
+  "timeframe": "5",
+  "maxTradesPerDay": 4,
+  "riskRewardRatio": 3.0,
+  "consensusThreshold": 11,
+  "indicators": {
+    "orbMinutes": 15,
+    "rsiPeriod": 14,
+    "emaTrendPeriod": 50
+  },
+  "rules": {
+    "buy": [
+      { "field": "consensus", "operator": ">=", "target": 11 }
+    ],
+    "sell": [
+      { "field": "consensus", "operator": ">=", "target": 11 }
+    ]
+  },
+  "stopLoss": {
+    "type": "ORB_LEVEL",
+    "fallbackATRMultiplier": 1.2
+  },
+  "target": {
+    "type": "RISK_REWARD",
+    "multiplier": 3.0
+  }
+}

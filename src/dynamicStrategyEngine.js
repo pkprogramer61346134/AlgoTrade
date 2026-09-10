@@ -1,4 +1,5 @@
 const indicators = require('../indicators');
+const { evaluateConsensusEngine } = require('./consensusEngine');
 
 /**
  * Precalculates required indicators for a JSON strategy config across full candle array
@@ -12,10 +13,17 @@ function prepareJSONStrategyData(candles, strategyConfig) {
     const rvol = indicators.volume.calculateRelativeVolume(candles, 20);
     const rsi = cfg.rsiPeriod ? indicators.momentum.calculateRSI(candles, cfg.rsiPeriod) : null;
     const atr = indicators.volatility.calculateATR(candles, 14);
-    const supertrend = cfg.supertrendPeriod ? indicators.trend.calculateSupertrend(candles, cfg.supertrendPeriod, cfg.supertrendMultiplier || 3) : null;
+    const adx = indicators.trend.calculateADX(candles, 14);
+    const vwap = indicators.trend.calculateVWAP(candles);
+    const supertrend = indicators.trend.calculateSupertrend(candles, cfg.supertrendPeriod || 10, cfg.supertrendMultiplier || 3);
+    const macd = indicators.momentum.calculateMACD(candles, 12, 26, 9);
+    const bollinger = indicators.volatility.calculateBollingerBands(candles, 20, 2);
+    const obv = indicators.volume.calculateOBV(candles);
 
-    // Day ORB
+    // Day ORB & Previous Day High/Low
     const dayORB = {};
+    const dayHighLow = {};
+    const dateList = [];
     for (let i = 0; i < candles.length; i++) {
         const c = candles[i];
         if (!c.date) continue;
@@ -25,9 +33,24 @@ function prepareJSONStrategyData(candles, strategyConfig) {
             if (c.low < dayORB[c.date].low) dayORB[c.date].low = c.low;
             dayORB[c.date].count++;
         }
+
+        if (!dayHighLow[c.date]) {
+            dayHighLow[c.date] = { high: c.high, low: c.low };
+            dateList.push(c.date);
+        } else {
+            if (c.high > dayHighLow[c.date].high) dayHighLow[c.date].high = c.high;
+            if (c.low < dayHighLow[c.date].low) dayHighLow[c.date].low = c.low;
+        }
     }
 
-    return { emaTrend, emaFast, emaSlow, rvol, rsi, atr, supertrend, dayORB };
+    const prevDayMap = {};
+    for (let d = 1; d < dateList.length; d++) {
+        const prevDate = dateList[d - 1];
+        const currDate = dateList[d];
+        prevDayMap[currDate] = dayHighLow[prevDate];
+    }
+
+    return { emaTrend, emaFast, emaSlow, rvol, rsi, atr, adx, vwap, supertrend, macd, bollinger, obv, dayORB, prevDayMap };
 }
 
 /**
@@ -38,6 +61,10 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
 
     const c = candles[i];
     if (!c.date) return { type: "NONE" };
+
+    if (strategyConfig.id === "consensus_master_head" || strategyConfig.consensusThreshold) {
+        return evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCounts);
+    }
 
     // Max Trades Cap
     const maxTrades = strategyConfig.maxTradesPerDay || 3;

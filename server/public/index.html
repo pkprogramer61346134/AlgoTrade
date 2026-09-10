@@ -55,17 +55,9 @@
             <!-- Custom Date & Capital Tester Controls Panel -->
             <div class="card" style="margin-bottom: 2rem; background: rgba(18, 26, 43, 0.9); border: 1px solid var(--border-accent);">
                 <h3 style="margin-bottom: 1.25rem; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
-                    <span>🎛️</span> Custom Date, Capital & Risk-Reward Controls
+                    <span>🎛️</span> Custom Date & Initial Capital Controls (Target R:R 1:3.0 Fixed)
                 </h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; align-items: end;">
-                    <div>
-                        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Select Strategy</label>
-                        <select id="custom-strategy-select" style="width: 100%; padding: 0.65rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff; border-radius: 8px; font-family: var(--font-main);">
-                            <option value="orb_breakout_best">15-Min ORB Breakout 80% Confirmed</option>
-                            <option value="orb_optionchain_best">15-Min ORB + Option Chain PCR</option>
-                        </select>
-                    </div>
-
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; align-items: end;">
                     <div>
                         <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Start Date (From)</label>
                         <input type="date" id="custom-start-date" value="2026-09-01" style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff; border-radius: 8px; font-family: var(--font-mono);">
@@ -79,17 +71,6 @@
                     <div>
                         <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Initial Capital (₹)</label>
                         <input type="number" id="custom-capital" placeholder="Enter initial capital (e.g. 10000)" value="10000" step="1000" style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff; border-radius: 8px; font-family: var(--font-mono);">
-                    </div>
-
-                    <div>
-                        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Risk : Reward Ratio</label>
-                        <select id="custom-rr-ratio" style="width: 100%; padding: 0.65rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff; border-radius: 8px; font-family: var(--font-main);">
-                            <option value="1.0">1 : 1.0 (Conservative Target)</option>
-                            <option value="1.5" selected>1 : 1.5 (Recommended Best R:R)</option>
-                            <option value="2.0">1 : 2.0 (Aggressive Target)</option>
-                            <option value="2.5">1 : 2.5 (High Target)</option>
-                            <option value="3.0">1 : 3.0 (Maximum Target)</option>
-                        </select>
                     </div>
 
                     <div>
@@ -185,31 +166,7 @@
                 </div>
             </div>
 
-            <!-- Live Controls & Capital Config -->
-            <div class="action-bar" style="flex-wrap: wrap; gap: 1rem;">
-                <div>
-                    <h3>⚙️ Active Strategy, Capital Sizing & Target R:R Controls</h3>
-                    <p style="color: var(--text-muted); font-size: 0.85rem;">Select active live strategy, customize capital usage % and Target Profit R:R Multiplier.</p>
-                </div>
-                <div style="display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;">
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted);">Strategy:</span>
-                        <select id="live-strategy-select" onchange="changeLiveStrategy(this.value)" style="padding: 0.45rem 0.85rem; background: rgba(0,0,0,0.5); border: 1px solid var(--border-accent); color: #fff; border-radius: 6px; font-weight: 600;">
-                        </select>
-                    </div>
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted);">Capital:</span>
-                        <button class="btn-primary" id="btn-cap-50" style="padding: 0.45rem 0.85rem; font-size: 0.85rem; background: rgba(255, 255, 255, 0.05);" onclick="updateCapitalConfig(50)">50% Capital</button>
-                        <button class="btn-primary" id="btn-cap-100" style="padding: 0.45rem 0.85rem; font-size: 0.85rem; background: rgba(255, 255, 255, 0.05);" onclick="updateCapitalConfig(100)">100% Capital</button>
-                    </div>
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted);">Target R:R:</span>
-                        <button class="btn-primary" id="btn-rr-15" style="padding: 0.45rem 0.85rem; font-size: 0.85rem; background: rgba(255, 255, 255, 0.05);" onclick="updateRRConfig(1.5)">1:1.5 Target</button>
-                        <button class="btn-primary" id="btn-rr-20" style="padding: 0.45rem 0.85rem; font-size: 0.85rem; background: rgba(255, 255, 255, 0.05);" onclick="updateRRConfig(2.0)">1:2.0 Target</button>
-                        <button class="btn-primary" id="btn-rr-30" style="padding: 0.45rem 0.85rem; font-size: 0.85rem; background: rgba(255, 255, 255, 0.05);" onclick="updateRRConfig(3.0)">1:3.0 Target</button>
-                    </div>
-                </div>
-            </div>
+
 
             <!-- Active Position & Trailing SL Status -->
             <div class="table-container">
