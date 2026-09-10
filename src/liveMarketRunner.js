@@ -130,7 +130,7 @@ function runLiveMarketMode(autoPlaceOrders = true) {
 
                                 if (autoPlaceOrders) {
                                     console.log(`⚡ [ORDER SWITCH: ON] Placing Automatic Order via Order Execution Manager...`);
-                                    orderManager.executeOrder(signal, ltp, 100000);
+                                    orderManager.executeOrder(signal, ltp, null);
                                 } else {
                                     console.log(`ℹ️ [ORDER SWITCH: OFF] Trade Signal Alert Generated! (No Broker Order Placed)`);
                                 }

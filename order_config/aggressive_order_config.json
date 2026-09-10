@@ -10,12 +10,14 @@
     "enabled": true,
     "algoTrailing": true,
     "lockAtTarget": true,
-    "costOffsetPoints": 1.0,
-    "trailingJumpStep": 5.0,
-    "stepMoveRequirement": 10.0
+    "costOffsetPoints": 1,
+    "trailingJumpStep": 5,
+    "stepMoveRequirement": 10
   },
   "riskManagement": {
     "maxOpenPositions": 1,
     "maxLossPerDay": 5000
-  }
+  },
+  "riskRewardRatio": 3,
+  "orderSwitchOn": false
 }

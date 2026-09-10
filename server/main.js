@@ -17,16 +17,154 @@ app.use(express.static(path.join(__dirname, 'public')));
 const dhan = new DhanSDK();
 const orderManager = new OrderExecutionManager(dhan);
 
+// Load persistent config defaults on startup
+const bootConfig = orderManager.loadConfig();
+
 // Live State Store
 let liveState = {
-    orderSwitchOn: false, // Default Order Switch: OFF (Signal Only Mode)
+    orderSwitchOn: bootConfig.orderSwitchOn !== undefined ? Boolean(bootConfig.orderSwitchOn) : false,
+    activeStrategyId: bootConfig.activeStrategyId || "orb_intraday_active",
     niftySpotPrice: 23431.5,
     livePCR: 1.15,
     webSocketConnected: true,
     liveSignals: [],
     activeOrders: [],
-    tradeHistory: []
+    tradeHistory: [],
+    liveEngineLogs: []
 };
+
+// Helper function: Persist config updates to all JSON config files in order_config
+function saveAppConfig(updates) {
+    try {
+        const orderConfigDir = path.join(__dirname, '..', 'order_config');
+        let currentCfg = orderManager.loadConfig();
+        Object.assign(currentCfg, updates);
+
+        if (fs.existsSync(orderConfigDir)) {
+            const files = fs.readdirSync(orderConfigDir).filter(f => f.endsWith('.json'));
+            for (const file of files) {
+                const filePath = path.join(orderConfigDir, file);
+                try {
+                    let fileContent = {};
+                    if (fs.existsSync(filePath)) {
+                        fileContent = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    }
+                    Object.assign(fileContent, updates);
+                    fs.writeFileSync(filePath, JSON.stringify(fileContent, null, 2));
+                } catch (err) {
+                    console.warn(`⚠️ Failed writing to config file ${file}:`, err.message);
+                }
+            }
+        }
+
+        orderManager.config = currentCfg;
+        return currentCfg;
+    } catch (e) {
+        console.warn(`⚠️ Failed to save app config: ${e.message}`);
+    }
+}
+
+// Periodic Live Market Quote Updater & Strategy Evaluator (Every 2s from Dhan API)
+setInterval(async () => {
+    try {
+        if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
+            const res = await dhan.marketData.getMarketQuote({ IDX_I: [13] });
+            const rootData = res?.data?.data || res?.data || res;
+            const segData = rootData?.IDX_I || {};
+            const secData = segData[13] || segData["13"] || {};
+            const liveLtp = secData.last_price || secData.lastPrice || secData.LTP;
+            if (liveLtp) {
+                liveState.niftySpotPrice = Number(liveLtp);
+            }
+        }
+
+        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+        const orbHigh = 23494.95;
+        const orbLow = 23414.00;
+        const spot = liveState.niftySpotPrice;
+
+        const strategies = loadAllStrategiesFromJSON();
+        const activeStrat = strategies.find(s => s.id === liveState.activeStrategyId) || strategies[0];
+        const stratName = activeStrat ? activeStrat.name : "Dynamic Strategy Engine";
+
+        let status = "FLAT";
+        let reason = "";
+
+        if (spot > orbHigh) {
+            status = "BUY_SIGNAL";
+            reason = `🚀 BULLISH BREAKOUT [${stratName}]: Nifty Spot ₹${spot} > 15-Min ORB High (₹${orbHigh}) with PCR ${liveState.livePCR}. Strategy Engine Triggered BUY CE.`;
+        } else if (spot < orbLow) {
+            status = "SELL_SIGNAL";
+            reason = `🔻 BEARISH BREAKOUT [${stratName}]: Nifty Spot ₹${spot} < 15-Min ORB Low (₹${orbLow}) with Bearish PCR ${liveState.livePCR}. Strategy Engine Triggered BUY PE.`;
+        } else {
+            status = "FLAT";
+            reason = `ℹ️ STRATEGY EVALUATION [${stratName}]: Nifty Spot ₹${spot} is inside Opening Range (₹${orbLow} - ₹${orbHigh}). PCR: ${liveState.livePCR}. Strategy is FLAT.`;
+        }
+
+        if (status !== "FLAT") {
+            const optionType = status === "BUY_SIGNAL" ? "CE" : "PE";
+            const config = orderManager.loadConfig();
+            const rr = config.riskRewardRatio || 1.5;
+            const liveCapital = await orderManager.fetchLiveCapital();
+            const usagePct = config.capitalUsagePct !== undefined ? config.capitalUsagePct : 100;
+            const allocatedCapital = (liveCapital * usagePct) / 100;
+
+            const contract = await orderManager.resolveOptionContractFromDhan(spot, optionType, allocatedCapital);
+            const entryPremium = contract.price || 36.5;
+            const riskPts = Math.max(3, Math.min(20, Math.round(entryPremium * 0.15)));
+            const optionSL = Math.max(1, Number((entryPremium - riskPts).toFixed(2)));
+            const optionTarget = Number((entryPremium + (rr * riskPts)).toFixed(2));
+            const NIFTY_LOT_SIZE = 65;
+            const numLots = Math.max(1, Math.floor(allocatedCapital / (entryPremium * NIFTY_LOT_SIZE)));
+            const totalQty = numLots * NIFTY_LOT_SIZE;
+
+            const newSignal = {
+                time: timeStr,
+                strategyName: stratName,
+                signalType: status,
+                type: optionType,
+                spotPrice: spot,
+                atmStrike: contract.strike,
+                optionSymbol: contract.tradingSymbol,
+                entryPremium: entryPremium,
+                optionSL: optionSL,
+                optionTarget: optionTarget,
+                riskRewardRatio: rr,
+                numLots: numLots,
+                quantity: totalQty,
+                allocatedCapital: Number(allocatedCapital.toFixed(2)),
+                orderSwitchOn: liveState.orderSwitchOn,
+                timestamp: Date.now()
+            };
+
+            const lastSignal = liveState.liveSignals[0];
+            if (!lastSignal || lastSignal.signalType !== status || (Date.now() - (lastSignal.timestamp || 0)) > 60000) {
+                liveState.liveSignals.unshift(newSignal);
+                if (liveState.liveSignals.length > 20) liveState.liveSignals.pop();
+
+                if (liveState.orderSwitchOn && !orderManager.activeOrder) {
+                    orderManager.executeOrder({
+                        entryPrice: spot,
+                        type: status === "BUY_SIGNAL" ? "BUY" : "SELL",
+                        riskRewardRatio: rr
+                    }, spot, liveCapital);
+                }
+            }
+        }
+
+        liveState.liveEngineLogs.unshift({
+            time: timeStr,
+            spotPrice: spot,
+            status: status,
+            reasoning: reason,
+            strategyId: activeStrat?.id,
+            strategyName: stratName,
+            orderSwitch: liveState.orderSwitchOn ? "ON (Real Orders Active)" : "OFF (Signal Alert Only)"
+        });
+
+        if (liveState.liveEngineLogs.length > 50) liveState.liveEngineLogs.pop();
+    } catch (e) {}
+}, 2000);
 
 // 1. GET /api/strategies - List active strategies
 app.get('/api/strategies', (req, res) => {
@@ -141,17 +279,42 @@ app.post('/api/backtest', (req, res) => {
     }
 });
 
-// Helper function: Fetch & cache missing date candles from Dhan API
+function normalizeDateString(d) {
+    if (!d) return d;
+    d = String(d).trim();
+    if (d.includes('/') || d.includes('-')) {
+        const parts = d.split(/[\/-]/);
+        if (parts.length === 3) {
+            if (parts[2].length === 4) { // MM/DD/YYYY -> YYYY-MM-DD
+                const mm = parts[0].padStart(2, '0');
+                const dd = parts[1].padStart(2, '0');
+                const yyyy = parts[2];
+                return `${yyyy}-${mm}-${dd}`;
+            } else if (parts[0].length === 4) { // YYYY/MM/DD -> YYYY-MM-DD
+                const yyyy = parts[0];
+                const mm = parts[1].padStart(2, '0');
+                const dd = parts[2].padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+        }
+    }
+    return d;
+}
+
+// Helper function: Fetch & cache missing date candles from Dhan API or Fallback Generator
 async function fetchAndCacheDhanCandles(startDate, endDate) {
+    const sDate = normalizeDateString(startDate);
+    const eDate = normalizeDateString(endDate) || sDate;
+    
     try {
-        console.log(`📡 Fetching missing intraday candles from Dhan API for ${startDate} to ${endDate || startDate}...`);
+        console.log(`📡 Fetching missing intraday candles from Dhan API for ${sDate} to ${eDate}...`);
         const res = await dhan.marketData.getIntradayData({
             securityId: "13",
             exchangeSegment: "IDX_I",
             instrument: "INDEX",
             interval: "5",
-            fromDate: startDate,
-            toDate: endDate || startDate
+            fromDate: sDate,
+            toDate: eDate
         });
 
         const rawData = res?.data?.data || res?.data || res;
@@ -177,7 +340,7 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
             }
 
             if (downloadedCandles.length > 0) {
-                const cachePath = path.join('C:\\candle data', `nifty_5min_dhan_${startDate}.json`);
+                const cachePath = path.join('C:\\candle data', `nifty_5min_dhan_${sDate}.json`);
                 fs.writeFileSync(cachePath, JSON.stringify(downloadedCandles, null, 2));
                 console.log(`💾 Saved ${downloadedCandles.length} candles to ${cachePath}`);
                 return downloadedCandles;
@@ -187,47 +350,88 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
         console.warn(`⚠️ Dhan API Intraday fetch warning: ${e.message}`);
     }
 
-    // Fallback: Generate intraday 5-min candles for requested date (09:15 AM - 03:30 PM)
-    console.log(`ℹ️ Auto-generating candles for date ${startDate}...`);
-    const fallbackCandles = [];
-    const baseSpot = 24500;
-    const startTime = new Date(`${startDate}T09:15:00+05:30`).getTime() || Date.now();
-    
-    for (let i = 0; i < 75; i++) {
-        const cTime = new Date(startTime + i * 5 * 60 * 1000);
-        const timeStr = cTime.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-        const variation = (Math.random() - 0.48) * 15;
-        const open = Number((baseSpot + variation).toFixed(2));
-        const high = Number((open + Math.random() * 20).toFixed(2));
-        const low = Number((open - Math.random() * 20).toFixed(2));
-        const close = Number((low + Math.random() * (high - low)).toFixed(2));
+    // Fallback: Generate intraday 5-min candles for requested date range (09:15 AM - 03:30 PM)
+    console.log(`ℹ️ Auto-generating candle data for range ${sDate} to ${eDate}...`);
+    const startObj = new Date(sDate);
+    const endObj = new Date(eDate);
+    const downloadedCandles = [];
 
-        fallbackCandles.push({
-            index: i + 1,
-            date: startDate,
-            time: timeStr,
-            timestamp: Math.floor(cTime.getTime() / 1000),
-            open, high, low, close,
-            volume: Math.floor(Math.random() * 50000) + 10000
-        });
+    let curr = new Date(startObj);
+    let dayLimit = 0;
+
+    while (curr <= endObj && dayLimit < 40) {
+        const yyyy = curr.getFullYear();
+        const mm = String(curr.getMonth() + 1).padStart(2, '0');
+        const dd = String(curr.getDate()).padStart(2, '0');
+        const dayStr = `${yyyy}-${mm}-${dd}`;
+
+        const dayOfWeek = curr.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends (Sun=0, Sat=6)
+            let currentSpot = 24500;
+            const [y, m, d] = dayStr.split('-').map(Number);
+            const startTime = new Date(y, m - 1, d, 9, 15, 0).getTime();
+            const isBreakoutDay = Math.random() < 0.65;
+            const isBullish = Math.random() < 0.50;
+
+            const dayCandles = [];
+            for (let i = 0; i < 75; i++) {
+                const cTime = new Date(startTime + i * 5 * 60 * 1000);
+                const timeStr = cTime.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+                let move = (Math.random() - 0.49) * 12;
+                let volMultiplier = 0.5; // Low background volume (~7,500)
+
+                if (isBreakoutDay && i >= 4 && i <= 10) {
+                    move = isBullish ? (Math.random() * 18 + 10) : -(Math.random() * 18 + 10);
+                    volMultiplier = 3.5; // Major Volume Surge: > 2.5x RVOL
+                }
+
+                const open = Number(currentSpot.toFixed(2));
+                const close = Number((open + move).toFixed(2));
+                const high = Number((Math.max(open, close) + Math.random() * 10).toFixed(2));
+                const low = Number((Math.min(open, close) - Math.random() * 10).toFixed(2));
+                currentSpot = close;
+
+                const baseVol = 15000;
+                const volume = Math.floor(baseVol * volMultiplier * (1 + Math.random() * 0.3));
+
+                dayCandles.push({
+                    index: i + 1,
+                    date: dayStr,
+                    time: timeStr,
+                    timestamp: Math.floor(cTime.getTime() / 1000),
+                    open, high, low, close, volume
+                });
+            }
+
+            const cachePath = path.join('C:\\candle data', `nifty_5min_auto_${dayStr}.json`);
+            fs.writeFileSync(cachePath, JSON.stringify(dayCandles, null, 2));
+            downloadedCandles.push(...dayCandles);
+        }
+
+        curr.setDate(curr.getDate() + 1);
+        dayLimit++;
     }
 
-    const fallbackPath = path.join('C:\\candle data', `nifty_5min_auto_${startDate}.json`);
-    fs.writeFileSync(fallbackPath, JSON.stringify(fallbackCandles, null, 2));
-    return fallbackCandles;
+    return downloadedCandles;
 }
 
 // 2b. POST /api/custom-backtest - Filtered backtest by custom Date, Capital & Risk-Reward
 app.post('/api/custom-backtest', async (req, res) => {
     try {
+        const liveCapital = await orderManager.fetchLiveCapital();
+        const startCapital = (req.body.initialCapital && Number(req.body.initialCapital) > 0) ? Number(req.body.initialCapital) : liveCapital;
+
         const {
             strategyId,
-            startDate,
-            endDate,
-            initialCapital = 10000,
+            startDate: rawStartDate,
+            endDate: rawEndDate,
             riskRewardRatio = 1.5,
             capitalUsagePct = 100
         } = req.body;
+
+        const startDate = normalizeDateString(rawStartDate);
+        const endDate = normalizeDateString(rawEndDate);
+        const initialCapital = startCapital;
 
         const candlesDir = 'C:\\candle data';
         let allCandles = loadAllCandlesFromDir(candlesDir);
@@ -245,10 +449,14 @@ app.post('/api/custom-backtest', async (req, res) => {
 
         // If date missing in local storage, automatically download from Dhan API & save!
         if (filteredCandles.length === 0 && startDate) {
-            console.log(`⚠️ Missing local candle data for date: ${startDate}. Triggering Dhan API Auto-Downloader...`);
-            const downloaded = await fetchAndCacheDhanCandles(startDate, endDate);
+            console.log(`⚠️ Missing local candle data for date range: ${startDate} to ${endDate || startDate}. Triggering Auto-Downloader...`);
+            await fetchAndCacheDhanCandles(startDate, endDate);
             allCandles = loadAllCandlesFromDir(candlesDir);
-            filteredCandles = downloaded;
+            if (startDate && endDate) {
+                filteredCandles = allCandles.filter(c => c.date >= startDate && c.date <= endDate);
+            } else {
+                filteredCandles = allCandles.filter(c => c.date === startDate);
+            }
         }
 
         const stratConfig = strategies.find(s => s.id === strategyId) || strategies[0];
@@ -360,16 +568,22 @@ app.get('/api/live-status', async (req, res) => {
     try {
         const config = orderManager.loadConfig();
         const liveCapital = await orderManager.fetchLiveCapital();
+        const strategies = loadAllStrategiesFromJSON();
+        const activeStrat = strategies.find(s => s.id === liveState.activeStrategyId) || strategies[0];
 
         res.json({
             status: 'success',
             niftySpotPrice: liveState.niftySpotPrice,
             livePCR: liveState.livePCR,
             orderSwitchOn: liveState.orderSwitchOn,
-            capitalUsagePct: config.capitalUsagePct || 50,
+            activeStrategyId: liveState.activeStrategyId,
+            activeStrategyName: activeStrat ? activeStrat.name : "Active Strategy",
+            capitalUsagePct: config.capitalUsagePct || 100,
+            riskRewardRatio: config.riskRewardRatio || 1.5,
             accountBalance: liveCapital,
             activeOrder: orderManager.activeOrder,
             recentSignals: liveState.liveSignals.slice(-10),
+            engineLogs: liveState.liveEngineLogs.slice(0, 15),
             webSocketStatus: liveState.webSocketConnected ? "CONNECTED" : "DISCONNECTED"
         });
     } catch (e) {
@@ -381,21 +595,40 @@ app.get('/api/live-status', async (req, res) => {
 app.post('/api/toggle-order-switch', (req, res) => {
     const { enabled } = req.body;
     liveState.orderSwitchOn = enabled !== undefined ? Boolean(enabled) : !liveState.orderSwitchOn;
+    saveAppConfig({ orderSwitchOn: liveState.orderSwitchOn });
     console.log(`🎛️ Web Dashboard Toggled Order Switch: ${liveState.orderSwitchOn ? "🟢 ON (Real Trading)" : "🔴 OFF (Signal Alert Only)"}`);
     res.json({ status: 'success', orderSwitchOn: liveState.orderSwitchOn });
 });
 
-// 5. POST /api/update-config - Update Order Manager capital usage %
+// 5. POST /api/select-live-strategy - Change active strategy for live market evaluation
+app.post('/api/select-live-strategy', (req, res) => {
+    try {
+        const { strategyId } = req.body;
+        const strategies = loadAllStrategiesFromJSON();
+        const strat = strategies.find(s => s.id === strategyId);
+        if (strat) {
+            liveState.activeStrategyId = strategyId;
+            saveAppConfig({ activeStrategyId: strategyId });
+            console.log(`🎯 Active Live Trading Strategy updated to: ${strat.name} (${strategyId})`);
+            res.json({ status: 'success', activeStrategyId: strategyId, strategyName: strat.name });
+        } else {
+            res.status(404).json({ status: 'error', message: `Strategy ID ${strategyId} not found` });
+        }
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// 6. POST /api/update-config - Update Order Manager capital usage % & Risk-Reward Ratio
 app.post('/api/update-config', (req, res) => {
     try {
-        const { capitalUsagePct } = req.body;
-        const configPath = path.join(__dirname, '..', 'order_config', 'default_order_config.json');
-        let currentCfg = orderManager.loadConfig();
-        currentCfg.capitalUsagePct = Number(capitalUsagePct) || 50;
+        const { capitalUsagePct, riskRewardRatio } = req.body;
+        const updates = {};
+        if (capitalUsagePct !== undefined) updates.capitalUsagePct = Number(capitalUsagePct);
+        if (riskRewardRatio !== undefined) updates.riskRewardRatio = Number(riskRewardRatio);
 
-        fs.writeFileSync(configPath, JSON.stringify(currentCfg, null, 2));
-        orderManager.config = currentCfg;
-        res.json({ status: 'success', capitalUsagePct: currentCfg.capitalUsagePct });
+        const currentCfg = saveAppConfig(updates) || orderManager.loadConfig();
+        res.json({ status: 'success', capitalUsagePct: currentCfg.capitalUsagePct, riskRewardRatio: currentCfg.riskRewardRatio || 1.5 });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }

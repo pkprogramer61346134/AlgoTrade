@@ -30,7 +30,8 @@ function loadCandleFile(symbol = "NIFTY_50", interval = "5", fromDate = null, to
  */
 function loadAllCandlesFromDir(dirPath = DEFAULT_CACHE_DIR) {
     if (!fs.existsSync(dirPath)) return [];
-    const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.json'));
+    // Only load 5-minute interval files to avoid mixing 15-min or 1-min timeframe candles
+    const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.json') && !f.includes('_15_') && !f.includes('_1_'));
     let allCandles = [];
 
     for (const file of files) {
@@ -47,7 +48,20 @@ function loadAllCandlesFromDir(dirPath = DEFAULT_CACHE_DIR) {
 
     // Sort by timestamp
     allCandles.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    return allCandles;
+
+    // Deduplicate by date + time
+    const seen = new Set();
+    const uniqueCandles = [];
+    for (const c of allCandles) {
+        if (!c.date || !c.time) continue;
+        const key = `${c.date}_${c.time}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniqueCandles.push(c);
+        }
+    }
+
+    return uniqueCandles;
 }
 
 module.exports = {

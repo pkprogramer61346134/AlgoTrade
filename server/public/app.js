@@ -206,6 +206,45 @@ function renderEquityChart(equityData) {
     });
 }
 
+function updateLiveControlsUI(data) {
+    // 1. Order Switch Toggle
+    const toggle = document.getElementById('order-switch-toggle');
+    if (toggle) {
+        toggle.checked = data.orderSwitchOn;
+        updateSwitchUI(data.orderSwitchOn);
+    }
+
+    // 2. Live Strategy Select Dropdown
+    const liveSelect = document.getElementById('live-strategy-select');
+    if (liveSelect && data.activeStrategyId && liveSelect.value !== data.activeStrategyId) {
+        liveSelect.value = data.activeStrategyId;
+    }
+
+    // 3. Capital Usage Buttons (50% vs 100%)
+    const btnCap50 = document.getElementById('btn-cap-50');
+    const btnCap100 = document.getElementById('btn-cap-100');
+    if (btnCap50 && btnCap100 && data.capitalUsagePct) {
+        if (data.capitalUsagePct === 50) {
+            btnCap50.style.background = 'var(--secondary-gradient)';
+            btnCap100.style.background = 'var(--primary-gradient)';
+        } else {
+            btnCap50.style.background = 'var(--primary-gradient)';
+            btnCap100.style.background = 'var(--secondary-gradient)';
+        }
+    }
+
+    // 4. Target R:R Buttons (1:1.5 vs 1:2.0 vs 1:3.0)
+    const btnRr15 = document.getElementById('btn-rr-15');
+    const btnRr20 = document.getElementById('btn-rr-20');
+    const btnRr30 = document.getElementById('btn-rr-30');
+    if (btnRr15 && btnRr20 && btnRr30 && data.riskRewardRatio) {
+        [btnRr15, btnRr20, btnRr30].forEach(b => b.style.background = 'rgba(255,255,255,0.05)');
+        if (data.riskRewardRatio === 1.5) btnRr15.style.background = 'var(--secondary-gradient)';
+        else if (data.riskRewardRatio === 2.0) btnRr20.style.background = 'var(--secondary-gradient)';
+        else if (data.riskRewardRatio === 3.0) btnRr30.style.background = 'var(--secondary-gradient)';
+    }
+}
+
 // 2. Fetch Live Status & Auto-refresh
 async function fetchLiveStatus() {
     try {
@@ -217,28 +256,101 @@ async function fetchLiveStatus() {
             document.getElementById('live-pcr').innerText = data.livePCR;
             document.getElementById('live-account-capital').innerText = `₹${data.accountBalance.toLocaleString()}`;
 
-            // Sync Toggle Switch State
-            const toggle = document.getElementById('order-switch-toggle');
-            toggle.checked = data.orderSwitchOn;
-            updateSwitchUI(data.orderSwitchOn);
+            // Auto-sync Custom Capital Input in Backtest & Strategy Lab with Live Dhan Balance
+            const capitalInput = document.getElementById('custom-capital');
+            if (capitalInput && (capitalInput.value === '' || capitalInput.value === '10000' || capitalInput.getAttribute('data-auto-synced') !== 'user_edited')) {
+                capitalInput.value = Math.floor(data.accountBalance);
+                capitalInput.setAttribute('data-auto-synced', 'true');
+            }
+
+            // Sync all control settings with persistent defaults
+            updateLiveControlsUI(data);
 
             // Active Position Update
+            const activeOrderTbody = document.getElementById('active-order-tbody');
             if (data.activeOrder) {
                 document.getElementById('active-position-badge').innerText = '1 Active Order';
                 document.getElementById('active-position-badge').className = 'badge badge-win';
                 
-                const tbody = document.getElementById('active-order-tbody');
-                tbody.innerHTML = `
-                    <tr>
-                        <td>#${data.activeOrder.orderId}</td>
-                        <td style="color: var(--primary); font-weight: 700;">${data.activeOrder.type} Contract</td>
-                        <td>₹${data.activeOrder.entryPrice}</td>
-                        <td style="color: var(--danger);">₹${data.activeOrder.stopLoss}</td>
-                        <td style="color: var(--warning); font-weight: 800;">₹${data.activeOrder.currentSL}</td>
-                        <td style="color: var(--success);">₹${data.activeOrder.initialTarget}</td>
-                        <td><span class="badge ${data.activeOrder.targetReached ? 'badge-win' : 'badge-info'}">${data.activeOrder.targetReached ? 'TARGET HIT - SL LOCKED' : 'IN PROGRESS'}</span></td>
-                    </tr>
-                `;
+                if (activeOrderTbody) {
+                    activeOrderTbody.innerHTML = `
+                        <tr>
+                            <td>#${data.activeOrder.orderId}</td>
+                            <td style="color: var(--primary); font-weight: 700;">${data.activeOrder.type} Contract</td>
+                            <td>₹${data.activeOrder.entryPrice}</td>
+                            <td style="color: var(--danger);">₹${data.activeOrder.stopLoss}</td>
+                            <td style="color: var(--warning); font-weight: 800;">₹${data.activeOrder.currentSL}</td>
+                            <td style="color: var(--success);">₹${data.activeOrder.initialTarget}</td>
+                            <td><span class="badge ${data.activeOrder.targetReached ? 'badge-win' : 'badge-info'}">${data.activeOrder.targetReached ? 'TARGET HIT - SL LOCKED' : 'IN PROGRESS'}</span></td>
+                        </tr>
+                    `;
+                }
+            } else {
+                document.getElementById('active-position-badge').innerText = 'No Active Position';
+                document.getElementById('active-position-badge').className = 'badge badge-info';
+                if (activeOrderTbody) {
+                    activeOrderTbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No open intraday option positions currently active.</td>
+                        </tr>
+                    `;
+                }
+            }
+
+            // Real-Time Trade Signals Stream Render
+            const signalsTbody = document.getElementById('live-signals-tbody');
+            if (signalsTbody) {
+                if (data.recentSignals && data.recentSignals.length > 0) {
+                    signalsTbody.innerHTML = data.recentSignals.map(sig => {
+                        const sigBadgeClass = (sig.signalType === 'BUY_SIGNAL' || sig.type === 'BUY' || sig.type === 'CE') ? 'badge-win' : 'badge-loss';
+                        const premInfo = sig.entryPremium ? `<div style="font-size:0.75rem; color:#00f2fe; margin-top: 2px;">Prem: ₹${sig.entryPremium} (${sig.numLots || 1} Lot / ${sig.quantity || 65} Qty)</div>` : '';
+                        return `
+                            <tr>
+                                <td>${sig.time}</td>
+                                <td style="font-weight: 700; color: #fff;">${sig.strategyName}</td>
+                                <td><span class="badge ${sigBadgeClass}">${sig.signalType || sig.type}</span></td>
+                                <td>₹${sig.spotPrice}</td>
+                                <td style="color: var(--primary); font-weight: 700;">${sig.atmStrike} (${sig.optionSymbol || 'NIFTY ATM'}) ${premInfo}</td>
+                                <td style="color: var(--danger); font-weight: 700;">₹${sig.optionSL}</td>
+                                <td style="color: var(--success); font-weight: 700;">₹${sig.optionTarget} <span style="font-size:0.75rem; color:#a7f3d0;">(R:R 1:${sig.riskRewardRatio || 1.5})</span></td>
+                                <td><span class="badge ${sig.orderSwitchOn ? 'badge-win' : 'badge-info'}">${sig.orderSwitchOn ? '🟢 BROKER ORDER' : '🟡 SIGNAL ALERT ONLY'}</span></td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    signalsTbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                                📡 Listening for live 15-Min ORB Breakout signals on Dhan WebSocket stream...
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+
+            // Live Engine Reasoning Logs Render
+            if (data.engineLogs && data.engineLogs.length > 0) {
+                const consoleDiv = document.getElementById('live-reasoning-console');
+                if (consoleDiv) {
+                    consoleDiv.innerHTML = data.engineLogs.map(log => {
+                        let badgeColor = '#94a3b8'; // gray
+                        let textColor = '#cbd5e1';
+                        if (log.status === 'BUY_SIGNAL') { badgeColor = '#10b981'; textColor = '#6ee7b7'; }
+                        else if (log.status === 'SELL_SIGNAL') { badgeColor = '#ef4444'; textColor = '#fca5a5'; }
+                        else if (log.status === 'FLAT') { badgeColor = '#3b82f6'; textColor = '#93c5fd'; }
+
+                        return `
+                            <div style="margin-bottom: 0.65rem; border-bottom: 1px dashed rgba(255,255,255,0.07); padding-bottom: 0.5rem;">
+                                <span style="color: #64748b; font-weight: 600;">[${log.time}]</span>
+                                <span style="background: ${badgeColor}; color: #000; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 800; font-size: 0.75rem; margin: 0 0.4rem;">${log.status}</span>
+                                <span style="color: #94a3b8;">Order Mode: <b style="color: #f59e0b;">${log.orderSwitch}</b></span>
+                                <div style="margin-top: 0.25rem; color: ${textColor}; font-weight: 500; padding-left: 0.5rem; border-left: 2px solid ${badgeColor};">
+                                    ${log.reasoning}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
             }
         }
     } catch (e) {}
@@ -284,6 +396,7 @@ function updateSwitchUI(isOn) {
 
 // Update Capital Config
 async function updateCapitalConfig(pct) {
+    updateLiveControlsUI({ capitalUsagePct: pct });
     try {
         const res = await fetch('/api/update-config', {
             method: 'POST',
@@ -291,14 +404,86 @@ async function updateCapitalConfig(pct) {
             body: JSON.stringify({ capitalUsagePct: pct })
         });
         const data = await res.json();
-        alert(`✅ Capital Usage updated to ${data.capitalUsagePct}%`);
+        updateLiveControlsUI({ capitalUsagePct: data.capitalUsagePct });
     } catch (e) {
         alert('Failed to update config: ' + e.message);
     }
 }
 
+// Update Live Risk:Reward Target Config
+async function updateRRConfig(rrVal) {
+    updateLiveControlsUI({ riskRewardRatio: rrVal });
+    try {
+        const res = await fetch('/api/update-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ riskRewardRatio: rrVal })
+        });
+        const data = await res.json();
+        updateLiveControlsUI({ riskRewardRatio: data.riskRewardRatio });
+    } catch (e) {
+        alert('Failed to update Risk:Reward: ' + e.message);
+    }
+}
+
+// Fetch & Populate Strategies dynamically from /api/strategies
+async function fetchStrategies() {
+    try {
+        const res = await fetch('/api/strategies');
+        const data = await res.json();
+        if (data.status === 'success' && data.strategies) {
+            populateStrategyDropdowns(data.strategies);
+        }
+    } catch (e) {
+        console.warn('Failed to fetch strategies:', e.message);
+    }
+}
+
+function populateStrategyDropdowns(strategies) {
+    const customSelect = document.getElementById('custom-strategy-select');
+    const liveSelect = document.getElementById('live-strategy-select');
+
+    if (customSelect) {
+        const curVal = customSelect.value;
+        customSelect.innerHTML = strategies.map(s => `
+            <option value="${s.id}" ${s.id === curVal ? 'selected' : ''}>${s.name}</option>
+        `).join('');
+    }
+
+    if (liveSelect) {
+        const curVal = liveSelect.value;
+        liveSelect.innerHTML = strategies.map(s => `
+            <option value="${s.id}" ${s.id === curVal ? 'selected' : ''}>${s.name}</option>
+        `).join('');
+    }
+}
+
+// Change Active Live Strategy
+async function changeLiveStrategy(strategyId) {
+    try {
+        const res = await fetch('/api/select-live-strategy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ strategyId })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            alert(`🎯 Live Trading Strategy updated to: ${data.strategyName}`);
+        }
+    } catch (e) {
+        alert('Failed to switch live strategy: ' + e.message);
+    }
+}
+
 // Initial Load
 window.onload = () => {
+    const capitalInput = document.getElementById('custom-capital');
+    if (capitalInput) {
+        capitalInput.addEventListener('input', () => {
+            capitalInput.setAttribute('data-auto-synced', 'user_edited');
+        });
+    }
+    fetchStrategies();
     runFullBacktest();
     fetchLiveStatus();
     setInterval(fetchLiveStatus, 2000); // Polling every 2s

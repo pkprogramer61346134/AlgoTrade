@@ -1,0 +1,38 @@
+{
+  "id": "orb_intraday_active",
+  "name": "15-Min ORB Active Intraday Strategy (Daily Quality Trades)",
+  "enabled": true,
+  "description": "High-activity intraday strategy designed for daily trade opportunities. Uses 15-Min ORB Breakout, 1.25x Moderate Volume Surge, 50 EMA Micro-Trend, and 2 Max Trades/Day limit.",
+  "author": "AlgoTrade Engine",
+  "timeframe": "5",
+  "maxTradesPerDay": 2,
+  "riskRewardRatio": 1.5,
+  "indicators": {
+    "orbMinutes": 15,
+    "emaTrendPeriod": 50,
+    "minRVOL": 1.25,
+    "rsiPeriod": 14
+  },
+  "rules": {
+    "buy": [
+      { "field": "close", "operator": ">", "target": "orbHigh" },
+      { "field": "close", "operator": ">", "target": "ema50" },
+      { "field": "rvol", "operator": ">=", "target": 1.25 },
+      { "field": "rsi", "operator": ">", "target": 50 }
+    ],
+    "sell": [
+      { "field": "close", "operator": "<", "target": "orbLow" },
+      { "field": "close", "operator": "<", "target": "ema50" },
+      { "field": "rvol", "operator": ">=", "target": 1.25 },
+      { "field": "rsi", "operator": "<", "target": 50 }
+    ]
+  },
+  "stopLoss": {
+    "type": "ORB_LEVEL",
+    "fallbackATRMultiplier": 1.2
+  },
+  "target": {
+    "type": "RISK_REWARD",
+    "multiplier": 1.5
+  }
+}

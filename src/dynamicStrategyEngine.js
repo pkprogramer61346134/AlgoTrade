@@ -34,7 +34,7 @@ function prepareJSONStrategyData(candles, strategyConfig) {
  * Evaluates rules of a JSON strategy at candle index i
  */
 function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts) {
-    if (i < 30) return { type: "NONE" };
+    if (i < 3) return { type: "NONE" };
 
     const c = candles[i];
     if (!c.date) return { type: "NONE" };
@@ -44,30 +44,50 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
     if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
 
     const orb = data.dayORB[c.date];
-    const r = data.rvol[i] || 1.0;
-    const rsiVal = data.rsi ? data.rsi[i] : 50;
-    const currATR = data.atr ? data.atr[i] : 15;
-    const eTrend = data.emaTrend ? data.emaTrend[i] : null;
+    const r = (data.rvol && data.rvol[i] !== null && data.rvol[i] !== undefined) ? Number(data.rvol[i]) : 1.0;
+    const rsiVal = (data.rsi && data.rsi[i] !== null && data.rsi[i] !== undefined) ? Number(data.rsi[i]) : 50.0;
+    const currATR = (data.atr && data.atr[i] !== null && data.atr[i] !== undefined) ? Number(data.atr[i]) : 15.0;
+    const eTrend = (data.emaTrend && data.emaTrend[i] !== null) ? Number(data.emaTrend[i]) : null;
     const st = data.supertrend ? data.supertrend[i] : null;
 
-    const pcrVal = data.livePCR !== undefined ? data.livePCR : (data.pcr ? data.pcr[i] : (rsiVal > 50 ? 1.15 : 0.75));
+    const pcrVal = data.livePCR !== undefined ? data.livePCR : (data.pcr && data.pcr[i] ? data.pcr[i] : (rsiVal > 50 ? 1.15 : 0.75));
 
     // BUY EVALUATION
     let buyMatch = true;
     const buyRules = strategyConfig.rules?.buy || [];
+    let buyFailReasons = [];
+
     for (const rule of buyRules) {
         if (rule.target === "orbHigh") {
-            if (!orb || orb.high === -Infinity || c.close <= orb.high) buyMatch = false;
-        } else if (rule.target === "ema200") {
-            if (!eTrend || c.close <= eTrend) buyMatch = false;
+            if (!orb || orb.high === -Infinity || c.close <= orb.high) {
+                buyMatch = false;
+                buyFailReasons.push(`Price ₹${c.close} <= ORB High ₹${orb ? orb.high : 'N/A'}`);
+            }
+        } else if (rule.target === "ema200" || rule.target === "ema50" || (typeof rule.target === "string" && rule.target.startsWith("ema"))) {
+            if (eTrend !== null && c.close <= eTrend) {
+                buyMatch = false;
+                buyFailReasons.push(`Price ₹${c.close} <= EMA Trend ₹${eTrend.toFixed(1)}`);
+            }
         } else if (rule.field === "rvol") {
-            if (r < rule.target) buyMatch = false;
+            if (r < rule.target) {
+                buyMatch = false;
+                buyFailReasons.push(`RVOL ${r.toFixed(2)}x < ${rule.target}x`);
+            }
         } else if (rule.field === "rsi") {
-            if (rsiVal <= rule.target) buyMatch = false;
+            if (rsiVal <= rule.target) {
+                buyMatch = false;
+                buyFailReasons.push(`RSI ${rsiVal.toFixed(1)} <= ${rule.target}`);
+            }
         } else if (rule.field === "supertrendDirection") {
-            if (!st || st.direction !== rule.target) buyMatch = false;
+            if (!st || st.direction !== rule.target) {
+                buyMatch = false;
+                buyFailReasons.push(`Supertrend Direction is ${st ? st.direction : 'N/A'} (expected ${rule.target})`);
+            }
         } else if (rule.field === "pcr") {
-            if (pcrVal < rule.target) buyMatch = false;
+            if (pcrVal < rule.target) {
+                buyMatch = false;
+                buyFailReasons.push(`PCR ${pcrVal.toFixed(2)} < ${rule.target}`);
+            }
         }
     }
 
@@ -82,11 +102,14 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
             const tp = c.close + (rrMultiplier * risk);
             dailyTradeCounts[c.date] = (dailyTradeCounts[c.date] || 0) + 1;
 
+            const reasoning = `🚀 BUY SIGNAL TRIGGERED: Price ₹${c.close} broke above ORB High (₹${orb?.high}) with RVOL ${r.toFixed(2)}x & Bullish PCR (${pcrVal.toFixed(2)}). StopLoss: ₹${sl.toFixed(2)}, Target: ₹${tp.toFixed(2)}.`;
             return {
                 type: "BUY",
                 entryPrice: c.close,
                 stopLoss: Number(sl.toFixed(2)),
-                targetPrice: Number(tp.toFixed(2))
+                targetPrice: Number(tp.toFixed(2)),
+                reasoning: reasoning,
+                indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), orbHigh: orb?.high, orbLow: orb?.low, pcr: Number(pcrVal.toFixed(2)) }
             };
         }
     }
@@ -94,19 +117,39 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
     // SELL EVALUATION
     let sellMatch = true;
     const sellRules = strategyConfig.rules?.sell || [];
+    let sellFailReasons = [];
+
     for (const rule of sellRules) {
         if (rule.target === "orbLow") {
-            if (!orb || orb.low === Infinity || c.close >= orb.low) sellMatch = false;
-        } else if (rule.target === "ema200") {
-            if (!eTrend || c.close >= eTrend) sellMatch = false;
+            if (!orb || orb.low === Infinity || c.close >= orb.low) {
+                sellMatch = false;
+                sellFailReasons.push(`Price ₹${c.close} >= ORB Low ₹${orb ? orb.low : 'N/A'}`);
+            }
+        } else if (rule.target === "ema200" || rule.target === "ema50" || (typeof rule.target === "string" && rule.target.startsWith("ema"))) {
+            if (eTrend !== null && c.close >= eTrend) {
+                sellMatch = false;
+                sellFailReasons.push(`Price ₹${c.close} >= EMA Trend ₹${eTrend.toFixed(1)}`);
+            }
         } else if (rule.field === "rvol") {
-            if (r < rule.target) sellMatch = false;
+            if (r < rule.target) {
+                sellMatch = false;
+                sellFailReasons.push(`RVOL ${r.toFixed(2)}x < ${rule.target}x`);
+            }
         } else if (rule.field === "rsi") {
-            if (rsiVal >= rule.target) sellMatch = false;
+            if (rsiVal <= rule.target) {
+                sellMatch = false;
+                sellFailReasons.push(`RSI ${rsiVal.toFixed(1)} <= ${rule.target}`);
+            }
         } else if (rule.field === "supertrendDirection") {
-            if (!st || st.direction !== rule.target) sellMatch = false;
+            if (!st || st.direction !== rule.target) {
+                sellMatch = false;
+                sellFailReasons.push(`Supertrend Direction is ${st ? st.direction : 'N/A'} (expected ${rule.target})`);
+            }
         } else if (rule.field === "pcr") {
-            if (pcrVal > rule.target) sellMatch = false;
+            if (pcrVal > rule.target) {
+                sellMatch = false;
+                sellFailReasons.push(`PCR ${pcrVal.toFixed(2)} > ${rule.target}`);
+            }
         }
     }
 
@@ -121,16 +164,24 @@ function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts
             const tp = c.close - (rrMultiplier * risk);
             dailyTradeCounts[c.date] = (dailyTradeCounts[c.date] || 0) + 1;
 
+            const reasoning = `🔻 SELL SIGNAL TRIGGERED: Price ₹${c.close} broke below ORB Low (₹${orb?.low}) with RVOL ${r.toFixed(2)}x & Bearish PCR (${pcrVal.toFixed(2)}). StopLoss: ₹${sl.toFixed(2)}, Target: ₹${tp.toFixed(2)}.`;
             return {
                 type: "SELL",
                 entryPrice: c.close,
                 stopLoss: Number(sl.toFixed(2)),
-                targetPrice: Number(tp.toFixed(2))
+                targetPrice: Number(tp.toFixed(2)),
+                reasoning: reasoning,
+                indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), orbHigh: orb?.high, orbLow: orb?.low, pcr: Number(pcrVal.toFixed(2)) }
             };
         }
     }
 
-    return { type: "NONE" };
+    const flatReason = `ℹ️ FLAT (WAITING): Price ₹${c.close} is inside Morning ORB Range (Low ₹${orb?.low || 'N/A'} - High ₹${orb?.high || 'N/A'}). RVOL: ${r.toFixed(2)}x, PCR: ${pcrVal.toFixed(2)}. Waiting for breakout.`;
+    return {
+        type: "NONE",
+        reasoning: flatReason,
+        indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), orbHigh: orb?.high, orbLow: orb?.low, pcr: Number(pcrVal.toFixed(2)) }
+    };
 }
 
 module.exports = {
