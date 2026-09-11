@@ -172,15 +172,81 @@ module.exports = {
     }
 }
 
+/**
+ * Checks if current Dhan Access Token in config.js is valid and active.
+ * If expired, missing, or forceRefresh = true, automatically generates a new token using TOTP.
+ */
+async function ensureValidDhanToken(forceRefresh = false) {
+    let config = null;
+
+    if (!forceRefresh) {
+        try {
+            if (fs.existsSync(CONFIG_PATH)) {
+                delete require.cache[require.resolve('./config')];
+                config = require('./config');
+            }
+        } catch (e) {
+            console.warn(`⚠️ Could not load config.js: ${e.message}`);
+        }
+
+        if (config && config.ACCESS_TOKEN && config.CLIENT_ID) {
+            try {
+                const testUrl = `${config.BASE_URL || 'https://api.dhan.co/v2'}/fundlimit`;
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'access-token': config.ACCESS_TOKEN,
+                        'client-id': config.CLIENT_ID,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'success' || response.status === 200) {
+                        console.log("✅ [DHAN AUTH] Access Token is VALID & ACTIVE. No refresh needed.");
+                        return {
+                            status: "valid",
+                            accessToken: config.ACCESS_TOKEN,
+                            clientId: config.CLIENT_ID
+                        };
+                    }
+                } else {
+                    console.warn(`⚠️ [DHAN AUTH] Token check failed with HTTP ${response.status}. Token is expired.`);
+                }
+            } catch (e) {
+                console.warn(`⚠️ [DHAN AUTH] Error checking token online: ${e.message}`);
+            }
+        }
+    }
+
+    console.log("🔄 [DHAN AUTH] Token missing or expired. Automatically generating new Dhan Access Token via TOTP...");
+    const refreshRes = await autoRefreshDhanToken();
+    if (refreshRes.status === "success") {
+        try {
+            delete require.cache[require.resolve('./config')];
+            const freshConfig = require('./config');
+            return {
+                status: "refreshed",
+                accessToken: freshConfig.ACCESS_TOKEN,
+                clientId: freshConfig.CLIENT_ID,
+                expiryTime: refreshRes.expiryTime
+            };
+        } catch (e) {}
+    }
+    return refreshRes;
+}
+
 module.exports = {
-    autoRefreshDhanToken
+    autoRefreshDhanToken,
+    ensureValidDhanToken
 };
 
 // Run directly
 if (require.main === module) {
-    autoRefreshDhanToken()
+    ensureValidDhanToken()
         .then((result) => {
-            if (result.status !== "success") {
+            if (result.status !== "success" && result.status !== "valid" && result.status !== "refreshed") {
                 process.exitCode = 1;
             }
         })

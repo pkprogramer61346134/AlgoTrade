@@ -6,7 +6,7 @@ const { loadAllStrategiesFromJSON, CONFIG_DIR } = require('../src/strategyLoader
 const { loadAllCandlesFromDir } = require('../indicators/utils/dataLoader');
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('../src/dynamicStrategyEngine');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
-const { DhanSDK } = require('../dhanAPI/index');
+const { DhanSDK, ensureValidDhanToken } = require('../dhanAPI/index');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,9 +37,15 @@ let liveState = {
     liveEngineLogs: []
 };
 
-// Immediate Dhan Live Quote Boot-Sync
+// Immediate Dhan Live Quote & Token Verification Boot-Sync
 (async () => {
     try {
+        console.log("🔑 [SERVER BOOT] Verifying Dhan API Access Token...");
+        const authRes = await ensureValidDhanToken();
+        if (authRes && authRes.accessToken) {
+            dhan.setCredentials(authRes.clientId, authRes.accessToken);
+        }
+
         if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
             const res = await dhan.marketData.getMarketQuote({ IDX_I: [13, 25] });
             const segData = res?.data?.data?.IDX_I || res?.data?.data?.data?.IDX_I || res?.data?.IDX_I || {};
@@ -52,7 +58,9 @@ let liveState = {
             if (sec25.net_change !== undefined) liveState.bankNiftyNetChange = Number(sec25.net_change);
             console.log(`📌 Immediate Dhan Live Quote Boot Synced: Nifty Spot ₹${liveState.niftySpotPrice}, Bank Nifty ₹${liveState.bankNiftySpotPrice}`);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.warn(`⚠️ Warning in Dhan boot-sync: ${e.message}`);
+    }
 })();
 
 // Helper function: Persist config updates to all JSON config files in order_config

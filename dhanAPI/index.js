@@ -58,6 +58,21 @@ class DhanClient {
             const data = await response.json();
 
             if (!response.ok) {
+                if (response.status === 401 && !options.isRetry) {
+                    console.warn(`⚠️ [DHAN API] HTTP 401 Unauthorized detected for ${endpoint}. Triggering auto token refresh...`);
+                    try {
+                        const { ensureValidDhanToken } = require('./autoTokenRefresh');
+                        const refreshRes = await ensureValidDhanToken(true);
+                        if (refreshRes && refreshRes.accessToken) {
+                            this.setCredentials(refreshRes.clientId, refreshRes.accessToken);
+                            console.log("🔄 [DHAN API] Retrying request with fresh access token...");
+                            return await this.request(endpoint, { ...options, isRetry: true });
+                        }
+                    } catch (refErr) {
+                        console.error(`❌ Auto token refresh retry failed: ${refErr.message}`);
+                    }
+                }
+
                 return {
                     status: 'error',
                     statusCode: response.status,
@@ -449,6 +464,7 @@ class DhanSDK {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
+    const { autoRefreshDhanToken, ensureValidDhanToken } = require('./autoTokenRefresh');
     module.exports = {
         DhanSDK,
         DhanClient,
@@ -457,7 +473,9 @@ if (typeof module !== 'undefined' && module.exports) {
         DhanPortfolio,
         DhanMarketData,
         DhanUser,
-        DhanLiveFeed
+        DhanLiveFeed,
+        autoRefreshDhanToken,
+        ensureValidDhanToken
     };
 } else {
     window.DhanSDK = DhanSDK;
