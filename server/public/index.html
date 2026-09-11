@@ -143,11 +143,16 @@
         <!-- TAB 2: LIVE MARKET & REAL-TIME TRADING ROOM -->
         <section id="tab-live" class="tab-content">
             <!-- Live Status Grid -->
-            <div class="grid-4">
+            <div class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
                 <div class="card">
                     <div class="card-title">NIFTY 50 Live Spot <span class="status-dot active"></span></div>
                     <div class="card-value cyan" id="live-nifty-spot">₹23,431.50</div>
                     <div class="card-subtitle">Dhan API Real-Time Feed</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">BANK NIFTY Live Spot <span class="status-dot active"></span></div>
+                    <div class="card-value purple" id="live-banknifty-spot" style="color: #c084fc;">₹51,200.00</div>
+                    <div class="card-subtitle">12 Heavyweight Banks Monitored</div>
                 </div>
                 <div class="card">
                     <div class="card-title">Option Chain PCR</div>
@@ -161,12 +166,10 @@
                 </div>
                 <div class="card">
                     <div class="card-title">Live Account Capital</div>
-                    <div class="card-value green" id="live-account-capital">₹3,093.04</div>
+                    <div class="card-value green" id="live-account-capital">₹2,207.09</div>
                     <div class="card-subtitle">Dhan Available Balance</div>
                 </div>
             </div>
-
-
 
             <!-- Active Position & Trailing SL Status -->
             <div class="table-container">

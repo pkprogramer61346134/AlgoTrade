@@ -197,7 +197,64 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         }
     }
 
-    const minConsensusVotes = strategyConfig.consensusThreshold || 11; // Default 11 out of 15 High Conviction Vote
+    // Sub-Engine 16: Bank Nifty Index & Heavyweight Sectorial Alignment Engine (~34% Nifty Weight)
+    const bnSpot = data.bankNiftySpot !== undefined ? data.bankNiftySpot : (data.bankNiftyCandles && data.bankNiftyCandles[i] ? data.bankNiftyCandles[i].close : null);
+    const bnEma = data.bankNiftyEma && data.bankNiftyEma[i] ? data.bankNiftyEma[i] : null;
+    const bnOrb = data.bankNiftyOrb ? data.bankNiftyOrb[c.date] : null;
+    const bnPrevClose = data.bankNiftyPrevClose;
+    const bnOpen = data.bankNiftyOpen;
+    const bnNetChange = data.bankNiftyNetChange;
+
+    if (bnSpot !== null && bnSpot !== undefined) {
+        let bnBullish = false;
+        let bnBearish = false;
+
+        if (bnEma !== null && bnSpot > bnEma) bnBullish = true;
+        else if (bnEma !== null && bnSpot < bnEma) bnBearish = true;
+
+        if (bnOrb && bnOrb.high && bnSpot >= bnOrb.high) bnBullish = true;
+        if (bnOrb && bnOrb.low && bnSpot <= bnOrb.low) bnBearish = true;
+
+        if (bnPrevClose && bnSpot > bnPrevClose) bnBullish = true;
+        else if (bnPrevClose && bnSpot < bnPrevClose) bnBearish = true;
+
+        if (bnOpen && bnSpot > bnOpen) bnBullish = true;
+        else if (bnOpen && bnSpot < bnOpen) bnBearish = true;
+
+        if (bnNetChange !== undefined) {
+            if (bnNetChange > 0) bnBullish = true;
+            else if (bnNetChange < 0) bnBearish = true;
+        }
+
+        const chgStr = bnNetChange !== undefined ? ` (${bnNetChange >= 0 ? '+' : ''}${bnNetChange.toFixed(1)} pts)` : '';
+
+        if (bnBullish && !bnBearish) {
+            buyVotes++;
+            voteDetails.push(`Engine 16 [Bank Nifty Alignment ₹${bnSpot.toFixed(1)}${chgStr}]: BULLISH ALIGNED (+1)`);
+        } else if (bnBearish && !bnBullish) {
+            sellVotes++;
+            voteDetails.push(`Engine 16 [Bank Nifty Alignment ₹${bnSpot.toFixed(1)}${chgStr}]: BEARISH ALIGNED (+1)`);
+        } else if (bnBearish && bnBullish) {
+            if (bnNetChange < 0 || (bnPrevClose && bnSpot < bnPrevClose)) {
+                sellVotes++;
+                voteDetails.push(`Engine 16 [Bank Nifty Alignment ₹${bnSpot.toFixed(1)}${chgStr}]: BEARISH ALIGNED (+1)`);
+            } else {
+                buyVotes++;
+                voteDetails.push(`Engine 16 [Bank Nifty Alignment ₹${bnSpot.toFixed(1)}${chgStr}]: BULLISH ALIGNED (+1)`);
+            }
+        }
+    } else {
+        // Sectorial alignment check based on trend & sentiment
+        if (emaVal !== null && c.close > emaVal && pcrVal >= 1.0) {
+            buyVotes++;
+            voteDetails.push("Engine 16 [Bank Nifty Heavyweight Sectorial Alignment]: BULLISH (+1)");
+        } else if (emaVal !== null && c.close < emaVal && pcrVal <= 0.9) {
+            sellVotes++;
+            voteDetails.push("Engine 16 [Bank Nifty Heavyweight Sectorial Alignment]: BEARISH (+1)");
+        }
+    }
+
+    const minConsensusVotes = strategyConfig.consensusThreshold || 11; // Default 11 out of 16 High Conviction Vote
     let signalType = "NONE";
 
     if (buyVotes >= minConsensusVotes && buyVotes > sellVotes) {
@@ -223,7 +280,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         dailyTradeCounts[c.date] = (dailyTradeCounts[c.date] || 0) + 1;
 
         const totalVotes = signalType === "BUY" ? buyVotes : sellVotes;
-        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/15 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. SL: ₹${sl.toFixed(2)}, Target (1:${rrMultiplier}): ₹${tp.toFixed(2)}. ${voteDetails.join(" | ")}`;
+        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/16 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. SL: ₹${sl.toFixed(2)}, Target (1:${rrMultiplier}): ₹${tp.toFixed(2)}. ${voteDetails.join(" | ")}`;
 
         return {
             type: signalType,
@@ -239,7 +296,10 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
 
     return {
         type: "NONE",
-        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/15). Waiting for Sub-Strategy Majority.`,
+        buyVotes: buyVotes,
+        sellVotes: sellVotes,
+        voteDetails: voteDetails,
+        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/16). Waiting for Sub-Strategy Majority.`,
         indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), orbHigh: orb?.high, orbLow: orb?.low, pcr: Number(pcrVal.toFixed(2)) }
     };
 }

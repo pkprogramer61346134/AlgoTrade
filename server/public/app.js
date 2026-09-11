@@ -6,11 +6,17 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
     if (tabId === 'backtest') {
-        document.querySelectorAll('.tab-btn')[0].classList.add('active');
-        document.getElementById('tab-backtest').classList.add('active');
+        const btBtn = document.querySelectorAll('.tab-btn')[0];
+        if (btBtn) btBtn.classList.add('active');
+        const btContent = document.getElementById('tab-backtest');
+        if (btContent) btContent.classList.add('active');
+        window.location.hash = 'backtest';
     } else {
-        document.querySelectorAll('.tab-btn')[1].classList.add('active');
-        document.getElementById('tab-live').classList.add('active');
+        const liveBtn = document.querySelectorAll('.tab-btn')[1];
+        if (liveBtn) liveBtn.classList.add('active');
+        const liveContent = document.getElementById('tab-live');
+        if (liveContent) liveContent.classList.add('active');
+        window.location.hash = 'live';
     }
 }
 
@@ -252,9 +258,19 @@ async function fetchLiveStatus() {
         const data = await res.json();
 
         if (data.status === 'success') {
-            document.getElementById('live-nifty-spot').innerText = `₹${data.niftySpotPrice.toLocaleString()}`;
-            document.getElementById('live-pcr').innerText = data.livePCR;
-            document.getElementById('live-account-capital').innerText = `₹${data.accountBalance.toLocaleString()}`;
+            if (document.getElementById('live-nifty-spot')) {
+                document.getElementById('live-nifty-spot').innerText = `₹${data.niftySpotPrice.toLocaleString()}`;
+            }
+            if (document.getElementById('live-banknifty-spot')) {
+                const bnPrice = data.bankNiftySpotPrice || 51200.0;
+                document.getElementById('live-banknifty-spot').innerText = `₹${bnPrice.toLocaleString()}`;
+            }
+            if (document.getElementById('live-pcr')) {
+                document.getElementById('live-pcr').innerText = data.livePCR;
+            }
+            if (document.getElementById('live-account-capital')) {
+                document.getElementById('live-account-capital').innerText = `₹${data.accountBalance.toLocaleString()}`;
+            }
 
             // Sync all control settings with persistent defaults
             updateLiveControlsUI(data);
@@ -476,6 +492,13 @@ window.onload = () => {
             capitalInput.setAttribute('data-auto-synced', 'user_edited');
         });
     }
+
+    if (window.location.hash === '#live') {
+        switchTab('live');
+    } else if (window.location.hash === '#backtest') {
+        switchTab('backtest');
+    }
+
     fetchStrategies();
     runFullBacktest();
     fetchLiveStatus();

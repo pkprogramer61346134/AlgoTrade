@@ -25,6 +25,7 @@ let liveState = {
     orderSwitchOn: bootConfig.orderSwitchOn !== undefined ? Boolean(bootConfig.orderSwitchOn) : false,
     activeStrategyId: bootConfig.activeStrategyId || "orb_intraday_active",
     niftySpotPrice: 23431.5,
+    bankNiftySpotPrice: 51200.0,
     livePCR: 1.15,
     webSocketConnected: true,
     liveSignals: [],
@@ -68,37 +69,84 @@ function saveAppConfig(updates) {
 setInterval(async () => {
     try {
         if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
-            const res = await dhan.marketData.getMarketQuote({ IDX_I: [13] });
+            const res = await dhan.marketData.getMarketQuote({ IDX_I: [13, 25] });
             const rootData = res?.data?.data || res?.data || res;
             const segData = rootData?.IDX_I || {};
-            const secData = segData[13] || segData["13"] || {};
-            const liveLtp = secData.last_price || secData.lastPrice || secData.LTP;
-            if (liveLtp) {
-                liveState.niftySpotPrice = Number(liveLtp);
-            }
+            const sec13 = segData[13] || segData["13"] || {};
+            const sec25 = segData[25] || segData["25"] || {};
+            const liveLtp = sec13.last_price || sec13.lastPrice || sec13.LTP;
+            const bankLtp = sec25.last_price || sec25.lastPrice || sec25.LTP;
+            const bankPrevClose = sec25.ohlc?.close || sec25.close;
+            const bankOpen = sec25.ohlc?.open || sec25.open;
+            const bankChange = sec25.net_change !== undefined ? sec25.net_change : (bankLtp && bankPrevClose ? bankLtp - bankPrevClose : 0);
+
+            if (liveLtp) liveState.niftySpotPrice = Number(liveLtp);
+            if (bankLtp) liveState.bankNiftySpotPrice = Number(bankLtp);
+            if (bankPrevClose) liveState.bankNiftyPrevClose = Number(bankPrevClose);
+            if (bankOpen) liveState.bankNiftyOpen = Number(bankOpen);
+            if (bankChange !== undefined) liveState.bankNiftyNetChange = Number(bankChange);
         }
 
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-        const orbHigh = 23494.95;
-        const orbLow = 23414.00;
         const spot = liveState.niftySpotPrice;
 
-        const strategies = loadAllStrategiesFromJSON();
-        const activeStrat = strategies.find(s => s.id === liveState.activeStrategyId) || strategies[0];
-        const stratName = activeStrat ? activeStrat.name : "Dynamic Strategy Engine";
+        const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
+        let stratConfig;
+        if (fs.existsSync(consensusMasterPath)) {
+            stratConfig = JSON.parse(fs.readFileSync(consensusMasterPath, 'utf8'));
+        } else {
+            const strategies = loadAllStrategiesFromJSON();
+            stratConfig = strategies.find(s => s.id === liveState.activeStrategyId) || strategies[0];
+        }
+        const stratName = stratConfig ? stratConfig.name : "👑 Master Head Multi-Strategy Consensus Engine (16-Engine Voting)";
 
+        const allCandles = loadAllCandlesFromDir('C:\\candle data') || [];
         let status = "FLAT";
         let reason = "";
 
-        if (spot > orbHigh) {
-            status = "BUY_SIGNAL";
-            reason = `🚀 BULLISH BREAKOUT [${stratName}]: Nifty Spot ₹${spot} > 15-Min ORB High (₹${orbHigh}) with PCR ${liveState.livePCR}. Strategy Engine Triggered BUY CE.`;
-        } else if (spot < orbLow) {
-            status = "SELL_SIGNAL";
-            reason = `🔻 BEARISH BREAKOUT [${stratName}]: Nifty Spot ₹${spot} < 15-Min ORB Low (₹${orbLow}) with Bearish PCR ${liveState.livePCR}. Strategy Engine Triggered BUY PE.`;
+        if (allCandles.length > 5 && spot > 0) {
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            const lastC = allCandles[allCandles.length - 1];
+
+            if (lastC && lastC.date === todayStr) {
+                lastC.close = spot;
+                if (spot > lastC.high) lastC.high = spot;
+                if (spot < lastC.low) lastC.low = spot;
+            } else {
+                allCandles.push({
+                    date: todayStr,
+                    time: timeStr,
+                    open: spot,
+                    high: spot,
+                    low: spot,
+                    close: spot,
+                    volume: 5000
+                });
+            }
+
+            const data = prepareJSONStrategyData(allCandles, stratConfig);
+            if (liveState.bankNiftySpotPrice) {
+                data.bankNiftySpot = liveState.bankNiftySpotPrice;
+                data.bankNiftyPrevClose = liveState.bankNiftyPrevClose;
+                data.bankNiftyOpen = liveState.bankNiftyOpen;
+                data.bankNiftyNetChange = liveState.bankNiftyNetChange;
+            }
+            const lastIdx = allCandles.length - 1;
+            const signal = evaluateJSONStrategy(allCandles, lastIdx, stratConfig, data, {});
+
+            if (signal && signal.type === "BUY") {
+                status = "BUY_SIGNAL";
+                reason = signal.reasoning || `🚀 BULLISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 16-Engine Consensus Triggered BUY CE.`;
+            } else if (signal && signal.type === "SELL") {
+                status = "SELL_SIGNAL";
+                reason = signal.reasoning || `🔻 BEARISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 16-Engine Consensus Triggered BUY PE.`;
+            } else {
+                status = "FLAT";
+                reason = signal?.reasoning || `ℹ️ MASTER HEAD CONSENSUS EVALUATION [${stratName}]: Nifty Spot ₹${spot}. Waiting for >= 11/16 Majority Vote. Strategy is FLAT.`;
+            }
         } else {
             status = "FLAT";
-            reason = `ℹ️ STRATEGY EVALUATION [${stratName}]: Nifty Spot ₹${spot} is inside Opening Range (₹${orbLow} - ₹${orbHigh}). PCR: ${liveState.livePCR}. Strategy is FLAT.`;
+            reason = `ℹ️ STRATEGY EVALUATION [${stratName}]: Nifty Spot ₹${spot}. Waiting for market data candles stream. Strategy is FLAT.`;
         }
 
         if (status !== "FLAT") {
@@ -157,7 +205,7 @@ setInterval(async () => {
             spotPrice: spot,
             status: status,
             reasoning: reason,
-            strategyId: activeStrat?.id,
+            strategyId: stratConfig?.id || "consensus_master_head",
             strategyName: stratName,
             orderSwitch: liveState.orderSwitchOn ? "ON (Real Orders Active)" : "OFF (Signal Alert Only)"
         });
@@ -659,6 +707,7 @@ app.get('/api/live-status', async (req, res) => {
         res.json({
             status: 'success',
             niftySpotPrice: liveState.niftySpotPrice,
+            bankNiftySpotPrice: liveState.bankNiftySpotPrice || 51200.0,
             livePCR: liveState.livePCR,
             orderSwitchOn: liveState.orderSwitchOn,
             activeStrategyId: liveState.activeStrategyId,
