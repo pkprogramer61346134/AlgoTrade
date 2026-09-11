@@ -4,12 +4,29 @@ const { DhanSDK } = require('../dhanAPI/index');
 
 const CONFIG_DIR = __dirname;
 const FALLBACK_CONFIG_PATH = path.join(__dirname, '..', 'order_config.json');
+const JOURNAL_DIR = path.join(__dirname, '..', 'server', 'data');
+const JOURNAL_FILE = path.join(JOURNAL_DIR, 'trade_journal.json');
 
 class OrderExecutionManager {
     constructor(dhanSdk = null) {
         this.dhan = dhanSdk || new DhanSDK();
         this.config = this.loadConfig();
         this.activeOrder = null;
+        this.paperBalance = this.config.paperTrading?.initialCapital || this.config.paperCapital || 10000;
+        this.ensureJournalStorage();
+    }
+
+    ensureJournalStorage() {
+        try {
+            if (!fs.existsSync(JOURNAL_DIR)) {
+                fs.mkdirSync(JOURNAL_DIR, { recursive: true });
+            }
+            if (!fs.existsSync(JOURNAL_FILE)) {
+                fs.writeFileSync(JOURNAL_FILE, JSON.stringify([], null, 2));
+            }
+        } catch (e) {
+            console.warn(`⚠️ Warning: Could not initialize trade journal storage: ${e.message}`);
+        }
     }
 
     loadConfig() {
@@ -31,20 +48,33 @@ class OrderExecutionManager {
             console.warn(`⚠️ Warning: Could not read order configuration: ${e.message}`);
         }
         return {
-            capitalUsagePct: 50,
+            executionMode: "PAPER", // Default: PAPER (Dummy Money) Mode
+            capitalUsagePct: 100,
+            riskRewardRatio: 3.0,
             productType: "INTRADAY",
             trailingSL: { enabled: true, costOffsetPoints: 1.0, trailingJumpStep: 5.0, stepMoveRequirement: 10.0 },
-            riskManagement: { defaultQuantity: 50 }
+            riskManagement: { defaultQuantity: 65 }
         };
     }
 
+    isPositionActive() {
+        return this.activeOrder !== null && this.activeOrder.status === "ACTIVE";
+    }
+
     async fetchLiveCapital() {
+        this.config = this.loadConfig();
+        const mode = this.config.executionMode || "PAPER";
+        
+        if (mode === "PAPER") {
+            return this.paperBalance;
+        }
+
         try {
             if (this.dhan && this.dhan.funds && typeof this.dhan.funds.getFundLimits === 'function') {
                 const res = await this.dhan.funds.getFundLimits();
                 const d = res?.data?.data || res?.data || {};
                 const balance = d.availabelBalance || d.withdrawableBalance || d.availbleBalance || d.sodLimit;
-                if (balance !== undefined && balance !== null) {
+                if (balance !== undefined && balance !== null && Number(balance) > 0) {
                     console.log(`📌 Live Dhan Account Balance Fetched: ₹${balance}`);
                     return Number(balance);
                 }
@@ -52,49 +82,39 @@ class OrderExecutionManager {
         } catch (e) {
             console.warn(`⚠️ Warning: Could not fetch live Dhan balance: ${e.message}`);
         }
-        return 100000;
+        return 10000;
     }
 
-    calculateQuantity(totalCapital = 100000, optionPrice = 180) {
+    calculateQuantity(totalCapital = 10000, optionPrice = 36.5) {
         this.config = this.loadConfig();
         const usagePct = this.config.capitalUsagePct || 100;
         const allocatedCapital = (totalCapital * usagePct) / 100;
-        const NIFTY_LOT_SIZE = 65; // Dhan 2026 Nifty Option Lot Size = 65 units
+        const NIFTY_LOT_SIZE = 65; // Dhan Nifty Option Lot Size = 65 units
         const costPerLot = (optionPrice || 36.5) * NIFTY_LOT_SIZE;
+        const MAX_FREEZE_LOTS = 27; // NSE Nifty Option Freeze Limit
 
         if (costPerLot > 0) {
-            // Calculate exact number of 65-qty Option Lots affordable with allocated capital
-            const numLots = Math.max(1, Math.floor(allocatedCapital / costPerLot));
-            const totalQty = numLots * NIFTY_LOT_SIZE;
-            return totalQty;
+            const rawLots = Math.max(1, Math.floor(allocatedCapital / costPerLot));
+            const numLots = Math.min(MAX_FREEZE_LOTS, rawLots);
+            return numLots * NIFTY_LOT_SIZE;
         }
         return NIFTY_LOT_SIZE;
     }
 
-    getATMStrike(spotPrice = 24500) {
-        return Math.round(spotPrice / 50) * 50; // Round to nearest 50 points Nifty strike
+    getATMStrike(spotPrice = 23400) {
+        return Math.round(spotPrice / 50) * 50;
     }
 
-    async resolveOptionContractFromDhan(spotPrice = 23400, optionType = "CE", availableCapital = 100000) {
+    async resolveOptionContractFromDhan(spotPrice = 23400, optionType = "CE", availableCapital = 10000) {
         const atmStrike = this.getATMStrike(spotPrice);
-        const maxAffordablePremium = Math.max(10, Math.floor(availableCapital / 65)); // Max affordable premium per unit (65 lot size)
-
-        let resolvedContract = {
-            securityId: optionType === "CE" ? "47305" : "47286",
-            tradingSymbol: optionType === "CE" ? "NIFTY-Sep2026-23700-CE" : "NIFTY-Sep2026-23200-PE",
-            strike: optionType === "CE" ? 23700 : 23200,
-            price: Math.min(36.5, maxAffordablePremium),
-            source: "dhan_master_fallback"
-        };
+        const maxAffordablePremium = Math.max(10, Math.floor(availableCapital / 65));
 
         try {
             if (this.dhan && this.dhan.marketData && typeof this.dhan.marketData.getOptionChain === 'function') {
-                // 1. Fetch live Expiry list from Dhan Option Chain API
                 const expRes = await this.dhan.marketData.getOptionChainExpiries(13, 'IDX_I');
                 const expiries = expRes?.data?.data || expRes?.data || [];
                 const nearestExpiry = expiries.length > 0 ? expiries[0] : '2026-09-15';
 
-                // 2. Fetch full live Option Chain matrix directly from Dhan API
                 const ocRes = await this.dhan.marketData.getOptionChain(13, 'IDX_I', nearestExpiry);
                 const ocData = ocRes?.data?.data?.oc || ocRes?.data?.oc || {};
 
@@ -117,21 +137,21 @@ class OrderExecutionManager {
                     }
                 }
 
-                // Filter candidates that fit inside user's available capital budget
                 const affordableCandidates = candidates.filter(c => c.price <= maxAffordablePremium);
-                if (affordableCandidates.length > 0) {
-                    // Sort candidates by closeness to ATM strike
-                    affordableCandidates.sort((a, b) => Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike));
-                    const best = affordableCandidates[0];
+                const searchList = affordableCandidates.length > 0 ? affordableCandidates : candidates;
 
-                    resolvedContract = {
+                if (searchList.length > 0) {
+                    searchList.sort((a, b) => Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike));
+                    const best = searchList[0];
+
+                    const resolvedContract = {
                         securityId: best.securityId,
                         tradingSymbol: best.tradingSymbol,
                         strike: best.strike,
                         price: best.price,
                         source: "dhan_option_chain_api"
                     };
-                    console.log(`📌 Dynamic Dhan Option Chain Resolved [${optionType}]: ${best.tradingSymbol} (SecID: ${best.securityId}, Live Premium: ₹${best.price}, Lot Cost: ₹${(best.price * 65).toFixed(2)})`);
+                    console.log(`📌 Dynamic Dhan Option Chain Resolved [${optionType}]: ${best.tradingSymbol} (SecID: ${best.securityId}, Live Premium: ₹${best.price})`);
                     return resolvedContract;
                 }
             }
@@ -139,306 +159,386 @@ class OrderExecutionManager {
             console.warn(`⚠️ Dhan Option Chain API lookup warning: ${e.message}`);
         }
 
-        return resolvedContract;
+        // Dynamic fallback built purely from ATM strike and live spot price
+        return {
+            securityId: optionType === "CE" ? "47291" : "47286",
+            tradingSymbol: `NIFTY-2026-09-15-${atmStrike}-${optionType}`,
+            strike: atmStrike,
+            price: Math.min(100, maxAffordablePremium),
+            source: "dhan_dynamic_strike_resolution"
+        };
     }
 
-    async executeFuturesOrder(signal, currentPrice = 24500, totalCapital = null) {
+    async executeOrder(signal, currentSpotPrice = 23400, totalCapital = null) {
         this.config = this.loadConfig();
+        const mode = this.config.executionMode || "PAPER";
         const liveCapital = totalCapital || await this.fetchLiveCapital();
 
-        const spotPrice = signal.entryPrice || currentPrice;
-        const transactionType = signal.type; // "BUY" for Long Futures, "SELL" for Short Futures
-        const futuresSymbol = `NIFTY_FUT`;
-        const futuresSecurityId = `510000`; // Dhan Nifty Index Futures Security ID
-        const qty = 50; // 1 Nifty Futures Lot = 50 units
-
-        const stopLossPrice = signal.stopLoss;
-        const targetPrice = signal.targetPrice;
-
-        console.log(`\n🚀 [ORDER MANAGER] Processing F&O FUTURES Order: ${transactionType}`);
-        console.log(`   - Spot Price: ₹${spotPrice} | Futures Symbol: ${futuresSymbol}`);
-        console.log(`   - Transaction Type: ${transactionType} | Security ID: ${futuresSecurityId}`);
-        console.log(`   - Capital Allocation: ${this.config.capitalUsagePct}% of ₹${liveCapital}`);
-        console.log(`   - Calculated Quantity: ${qty} units (1 Lot)`);
-        console.log(`   - Futures StopLoss: ₹${stopLossPrice} | Futures Target: ₹${targetPrice}`);
-
-        // Order Payload for Dhan F&O Futures Contract
-        const orderPayload = {
-            transactionType: transactionType, // "BUY" or "SELL"
-            exchangeSegment: "NSE_FNO",
-            productType: this.config.productType || "INTRADAY",
-            orderType: this.config.orderType || "MARKET",
-            tradingSymbol: futuresSymbol,
-            securityId: futuresSecurityId,
-            quantity: qty,
-            price: (this.config.orderType === "LIMIT") ? spotPrice : 0,
-            stopLoss: stopLossPrice,
-            targetPrice: targetPrice
-        };
-
-        let response = { status: "simulated_success", orderId: `FUT_${Date.now()}` };
-        try {
-            let apiRes = null;
-            if (this.dhan.orders && typeof this.dhan.orders.placeOrder === 'function') {
-                apiRes = await this.dhan.orders.placeOrder(orderPayload);
-            }
-
-            if (apiRes) {
-                if (apiRes.status === "success") {
-                    response = apiRes;
-                } else if (apiRes.status === "error") {
-                    console.log(`\n❌ [DHAN API FUTURES RESPONSE]: Order Rejected / Market Closed!`);
-                    console.log(`   - Error Code: ${apiRes.errorData?.errorCode || apiRes.statusCode}`);
-                    console.log(`   - Message: ${apiRes.message || apiRes.errorData?.errorMessage}`);
-                    response = apiRes;
-                }
-            }
-        } catch (e) {
-            console.log(`ℹ️ Dhan Futures Payload Prepared: ${JSON.stringify(orderPayload)}`);
+        if (this.isPositionActive()) {
+            console.log(`⚠️ Handshake Lock: Position #${this.activeOrder.orderId} is currently ACTIVE. Order Manager rejected duplicate signal.`);
+            return { status: "rejected", message: "Active position currently open. Handshake lock engaged." };
         }
 
-        this.activeOrder = {
-            orderId: response.orderId || `FUT_${Date.now()}`,
-            type: signal.type,
-            instrument: "FUTURES",
-            entryPrice: spotPrice,
-            stopLoss: stopLossPrice,
-            initialTarget: targetPrice,
-            currentSL: stopLossPrice,
-            quantity: qty,
-            targetReached: false,
-            highestPrice: currentPrice,
-            lowestPrice: currentPrice
-        };
-
-        return { status: "success", order: this.activeOrder, payload: orderPayload };
-    }
-
-    async executeOrder(signal, currentPrice = 24500, totalCapital = null) {
-        this.config = this.loadConfig();
-
-        // Check if Futures order requested via config or signal
-        if (this.config.tradingInstrument === "FUTURES" || signal.instrument === "FUTURES") {
-            return await this.executeFuturesOrder(signal, currentPrice, totalCapital);
-        }
-
-        const liveCapital = totalCapital || await this.fetchLiveCapital();
-
-        // 1. Resolve ATM Strike & Option Type (CE for BUY, PE for SELL) from Dhan Option Chain API
-        const spotPrice = signal.entryPrice || currentPrice;
-        const optionType = signal.type === "BUY" ? "CE" : "PE";
+        const spotPrice = signal.entryPrice || currentSpotPrice;
+        const optionType = signal.type === "BUY_SIGNAL" || signal.type === "BUY" ? "CE" : "PE";
         
-        // Fetch exact securityId and live option premium from Dhan Option Chain
         const contractDetails = await this.resolveOptionContractFromDhan(spotPrice, optionType, liveCapital);
         const atmStrike = contractDetails.strike;
         const optionSymbol = contractDetails.tradingSymbol;
         const optionSecurityId = contractDetails.securityId;
-        const optionPremiumPrice = contractDetails.price || 180;
+        const optionPremiumPrice = contractDetails.price || 36.5;
 
-        // 2. Calculate dynamic quantity based on live capital & option premium price
         const qty = this.calculateQuantity(liveCapital, optionPremiumPrice);
+        const numLots = Math.max(1, Math.floor(qty / 65));
 
-        // 3. Option Premium SL & Target (Scaled to Premium & Risk-Reward)
-        const premiumRiskPoints = Math.max(3, Math.min(20, Math.round(optionPremiumPrice * 0.15)));
+        // Risk & Target Calculation: Default 1:3 Target 1, 1:4.5 Target 2
+        const premiumRiskPoints = Math.max(3, Math.min(25, Math.round(optionPremiumPrice * 0.15)));
         const optionSL = Math.max(1, Number((optionPremiumPrice - premiumRiskPoints).toFixed(2)));
-        const rrMultiplier = this.config.riskRewardRatio || signal.riskRewardRatio || 1.5;
-        const optionTarget = Number((optionPremiumPrice + (rrMultiplier * premiumRiskPoints)).toFixed(2));
+        
+        const rrRatio = this.config.riskRewardRatio || signal.riskRewardRatio || 3.0;
+        const target1 = Number((optionPremiumPrice + (rrRatio * premiumRiskPoints)).toFixed(2));
+        const target2 = Number((optionPremiumPrice + ((rrRatio * 1.5) * premiumRiskPoints)).toFixed(2)); // T2 Extended Target (1:4.5 R:R)
 
-        console.log(`\n🚀 [ORDER MANAGER] Processing F&O Option Order: ${signal.type}`);
-        console.log(`   - Spot Price: ₹${spotPrice} -> ATM Strike: ${atmStrike}`);
-        console.log(`   - Selected Contract: ${optionSymbol} (SecurityId: ${optionSecurityId})`);
-        console.log(`   - Data Source: ${contractDetails.source}`);
-        console.log(`   - Capital Allocation: ${this.config.capitalUsagePct}% of ₹${liveCapital}`);
-        console.log(`   - Calculated Quantity: ${qty} units | Premium Entry: ₹${optionPremiumPrice}`);
-        console.log(`   - Option SL: ₹${optionSL} | Option Target: ₹${optionTarget}`);
+        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+        const dateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-        // Order Payload for Dhan F&O Option Contract
-        const isLimit = this.config.orderType === "LIMIT";
-        const entryPriceVal = isLimit ? (signal.limitPrice || optionPremiumPrice) : optionPremiumPrice;
+        if (mode === "PAPER") {
+            // ==================== DUMMY MONEY / PAPER TRADING EXECUTION ====================
+            const paperOrderId = `PAPER_${Date.now()}`;
+            console.log(`\n📄 [ORDER MANAGER - DUMMY MONEY MODE] Paper Trade Placed!`);
+            console.log(`   - Order ID: #${paperOrderId} | Instrument: ${optionSymbol}`);
+            console.log(`   - Option Type: ${optionType} | Qty: ${qty} units (${numLots} Lots)`);
+            console.log(`   - Option Entry Premium: ₹${optionPremiumPrice} | Spot: ₹${spotPrice}`);
+            console.log(`   - Initial SL: ₹${optionSL} | Target 1 (1:3): ₹${target1} | Target 2 (Extended): ₹${target2}`);
 
-        const superPayload = {
-            transactionType: "BUY", // Always BUY Option (CE for Bullish, PE for Bearish)
-            exchangeSegment: "NSE_FNO",
-            productType: this.config.productType || "INTRADAY",
-            orderType: isLimit ? "LIMIT" : "LIMIT", // Dhan Super Order requires price parameter
-            tradingSymbol: optionSymbol,
-            securityId: optionSecurityId,
-            quantity: qty,
-            price: Number(entryPriceVal.toFixed(2)),
-            targetPrice: Number(optionTarget.toFixed(2)),
-            stopLossPrice: Number(optionSL.toFixed(2))
-        };
+            this.activeOrder = {
+                orderId: paperOrderId,
+                mode: "PAPER",
+                status: "ACTIVE",
+                date: dateStr,
+                entryTime: timeStr,
+                startTimestamp: Date.now(),
+                type: signal.type,
+                optionType: optionType,
+                spotEntryPrice: spotPrice,
+                atmStrike: atmStrike,
+                optionSymbol: optionSymbol,
+                securityId: optionSecurityId,
+                quantity: qty,
+                numLots: numLots,
+                optionPremiumPrice: optionPremiumPrice,
+                initialSL: optionSL,
+                currentSL: optionSL,
+                target1: target1,
+                target2: target2,
+                currentTarget: target1,
+                t1Reached: false,
+                highestPremium: optionPremiumPrice,
+                lowestPremium: optionPremiumPrice,
+                allocatedCapital: Number((optionPremiumPrice * qty).toFixed(2))
+            };
 
-        let response = { status: "simulated_success", orderId: `SUPER_${Date.now()}` };
-        let slOrderId = null;
-        let targetOrderId = null;
+            return {
+                status: "success",
+                handshake: "CONFIRMED_PAPER",
+                mode: "PAPER",
+                order: this.activeOrder
+            };
+        } else {
+            // ==================== REAL MONEY / DHAN BROKER EXECUTION ====================
+            console.log(`\n⚡ [ORDER MANAGER - REAL BROKER MODE] Processing Real Dhan Order: ${optionType}`);
+            console.log(`   - Contract: ${optionSymbol} | Qty: ${qty} units`);
+            console.log(`   - Entry Premium: ₹${optionPremiumPrice} | SL: ₹${optionSL} | T1: ₹${target1}`);
 
-        try {
-            let apiRes = null;
-            if (this.dhan.orders && typeof this.dhan.orders.placeSuperOrder === 'function') {
-                // 1. Try Dhan Super Order Endpoint (/super/orders)
-                apiRes = await this.dhan.orders.placeSuperOrder(superPayload);
-            }
+            const superPayload = {
+                transactionType: "BUY",
+                exchangeSegment: "NSE_FNO",
+                productType: this.config.productType || "INTRADAY",
+                orderType: "LIMIT",
+                tradingSymbol: optionSymbol,
+                securityId: optionSecurityId,
+                quantity: qty,
+                price: Number(optionPremiumPrice.toFixed(2)),
+                targetPrice: Number(target1.toFixed(2)),
+                stopLossPrice: Number(optionSL.toFixed(2))
+            };
 
-            if (apiRes && apiRes.status === "success") {
-                response = apiRes;
-                const superId = apiRes.data?.orderId || apiRes.orderId;
-                console.log(`✅ [DHAN API]: Super Order (Entry + SL + Target) Placed Successfully! Order #${superId}`);
-            } else {
-                // Fallback to standard order placement + separate SL/Target orders
-                const orderPayload = {
-                    transactionType: "BUY",
-                    exchangeSegment: "NSE_FNO",
-                    productType: this.config.productType || "INTRADAY",
-                    orderType: this.config.orderType || "MARKET",
-                    tradingSymbol: optionSymbol,
-                    securityId: optionSecurityId,
-                    quantity: qty,
-                    price: isLimit ? entryPriceVal : 0,
-                    stopLoss: optionSL,
-                    targetPrice: optionTarget
-                };
-
-                apiRes = await this.dhan.orders.placeOrder(orderPayload);
-                if (apiRes && apiRes.status === "success") {
-                    response = apiRes;
-                    const entryId = apiRes.data?.orderId || apiRes.orderId;
-                    console.log(`✅ [DHAN API]: Standard Entry Order Placed! Order #${entryId}`);
-
-                    // Place Real Stop-Loss Order
-                    try {
-                        const slRes = await this.dhan.orders.placeOrder({
-                            transactionType: "SELL",
-                            exchangeSegment: "NSE_FNO",
-                            productType: this.config.productType || "INTRADAY",
-                            orderType: "STOP_LOSS_MARKET",
-                            tradingSymbol: optionSymbol,
-                            securityId: optionSecurityId,
-                            quantity: qty,
-                            price: 0,
-                            triggerPrice: Number(optionSL.toFixed(2))
-                        });
-                        if (slRes && slRes.status === "success") {
-                            slOrderId = slRes.data?.orderId || slRes.orderId;
-                            console.log(`🛡️ [DHAN API]: Real Stop-Loss Order Placed! SL Order #${slOrderId} @ Trigger ₹${optionSL}`);
-                        }
-                    } catch (slErr) {}
-
-                    // Place Real Target Order
-                    try {
-                        const targetRes = await this.dhan.orders.placeOrder({
-                            transactionType: "SELL",
-                            exchangeSegment: "NSE_FNO",
-                            productType: this.config.productType || "INTRADAY",
-                            orderType: "LIMIT",
-                            tradingSymbol: optionSymbol,
-                            securityId: optionSecurityId,
-                            quantity: qty,
-                            price: Number(optionTarget.toFixed(2))
-                        });
-                        if (targetRes && targetRes.status === "success") {
-                            targetOrderId = targetRes.data?.orderId || targetRes.orderId;
-                            console.log(`🎯 [DHAN API]: Real Target Order Placed! Target Order #${targetOrderId} @ Price ₹${optionTarget}`);
-                        }
-                    } catch (tErr) {}
-                } else if (apiRes && apiRes.status === "error") {
-                    console.log(`❌ [DHAN API RESPONSE]: Order Rejected / Market Closed! Message: ${apiRes.message || apiRes.errorData?.errorMessage}`);
-                    response = apiRes;
-                }
-            }
-        } catch (e) {
-            console.log(`ℹ️ Dhan Order Execution Exception: ${e.message}`);
-        }
-
-        this.activeOrder = {
-            orderId: response.data?.orderId || response.orderId || `ORD_${Date.now()}`,
-            slOrderId: slOrderId,
-            targetOrderId: targetOrderId,
-            type: signal.type,
-            instrument: "OPTIONS",
-            entryPrice: signal.entryPrice || currentPrice,
-            optionPremiumPrice: optionPremiumPrice,
-            stopLoss: optionSL,
-            initialTarget: optionTarget,
-            currentSL: optionSL,
-            quantity: qty,
-            targetReached: false,
-            highestPrice: currentPrice,
-            lowestPrice: currentPrice
-        };
-
-        return { status: "success", order: this.activeOrder, payload: superPayload, slOrderId, targetOrderId };
-    }
-
-    processTickTrailingSL(currentPrice) {
-        if (!this.activeOrder || !this.config.trailingSL?.enabled) return null;
-
-        const pos = this.activeOrder;
-        const cfg = this.config.trailingSL;
-        const offset = cfg.costOffsetPoints || 1.0;
-        const jumpStep = cfg.trailingJumpStep || 5.0;
-        const moveReq = cfg.stepMoveRequirement || 10.0;
-
-        let slUpdated = false;
-        let updateReason = "";
-
-        if (pos.type === "BUY") {
-            if (currentPrice > pos.highestPrice) pos.highestPrice = currentPrice;
-
-            // 1. Target Reached: Lock StopLoss to Target Price - Offset (e.g. ₹114 if target 115)
-            if (!pos.targetReached && currentPrice >= pos.initialTarget) {
-                pos.targetReached = true;
-                const lockedSL = Number((pos.initialTarget - offset).toFixed(2));
-                if (lockedSL > pos.currentSL) {
-                    pos.currentSL = lockedSL;
-                    slUpdated = true;
-                    updateReason = `TARGET REACHED (₹${currentPrice}) -> SL Locked to Target - ${offset}pt (₹${pos.currentSL})`;
-                }
-            }
-
-            // 2. Dynamic Trailing Jumps as price moves by jump step (e.g. 5 or 10 pts)
-            if (pos.targetReached || currentPrice > (pos.entryPrice + moveReq)) {
-                const newTrailingSL = Number((currentPrice - jumpStep).toFixed(2));
-                if (newTrailingSL > pos.currentSL) {
-                    pos.currentSL = newTrailingSL;
-                    slUpdated = true;
-                    updateReason = `PRICE JUMP (₹${currentPrice}) -> SL Trailed Up by ${jumpStep}pts (New SL: ₹${pos.currentSL})`;
-                }
-            }
-        }
-
-        if (slUpdated) {
-            console.log(`\n⚡ [TRAILING SL UPDATE] Order #${pos.orderId}`);
-            console.log(`   - Reason: ${updateReason}`);
+            let response = { status: "simulated_success", orderId: `REAL_${Date.now()}` };
+            let slOrderId = null;
+            let targetOrderId = null;
 
             try {
-                const slId = pos.slOrderId || pos.orderId;
-                if (this.dhan.orders && typeof this.dhan.orders.modifyOrder === 'function') {
-                    this.dhan.orders.modifyOrder(slId, {
-                        orderType: "STOP_LOSS_MARKET",
-                        triggerPrice: pos.currentSL,
-                        quantity: pos.quantity
-                    });
-                    console.log(`🔄 [DHAN API]: Modified SL Order #${slId} to New Trigger Price ₹${pos.currentSL}`);
+                let apiRes = null;
+                if (this.dhan.orders && typeof this.dhan.orders.placeSuperOrder === 'function') {
+                    apiRes = await this.dhan.orders.placeSuperOrder(superPayload);
+                }
+
+                if (apiRes && apiRes.status === "success") {
+                    response = apiRes;
+                } else {
+                    const orderPayload = {
+                        transactionType: "BUY",
+                        exchangeSegment: "NSE_FNO",
+                        productType: this.config.productType || "INTRADAY",
+                        orderType: this.config.orderType || "MARKET",
+                        tradingSymbol: optionSymbol,
+                        securityId: optionSecurityId,
+                        quantity: qty,
+                        price: optionPremiumPrice,
+                        stopLoss: optionSL,
+                        targetPrice: target1
+                    };
+                    apiRes = await this.dhan.orders.placeOrder(orderPayload);
+                    if (apiRes && apiRes.status === "success") {
+                        response = apiRes;
+                        try {
+                            const slRes = await this.dhan.orders.placeOrder({
+                                transactionType: "SELL",
+                                exchangeSegment: "NSE_FNO",
+                                productType: this.config.productType || "INTRADAY",
+                                orderType: "STOP_LOSS_MARKET",
+                                tradingSymbol: optionSymbol,
+                                securityId: optionSecurityId,
+                                quantity: qty,
+                                price: 0,
+                                triggerPrice: Number(optionSL.toFixed(2))
+                            });
+                            if (slRes && slRes.status === "success") slOrderId = slRes.data?.orderId || slRes.orderId;
+                        } catch (slErr) {}
+                    }
                 }
             } catch (e) {
-                console.warn(`⚠️ Warning modifying Dhan SL order: ${e.message}`);
+                console.warn(`⚠️ Dhan Order Placement Exception: ${e.message}`);
             }
 
-            return { updated: true, orderId: pos.orderId, slOrderId: pos.slOrderId, newSL: pos.currentSL, reason: updateReason };
+            const realOrderId = response.data?.orderId || response.orderId || `REAL_${Date.now()}`;
+
+            this.activeOrder = {
+                orderId: realOrderId,
+                slOrderId: slOrderId,
+                targetOrderId: targetOrderId,
+                mode: "REAL",
+                status: "ACTIVE",
+                date: dateStr,
+                entryTime: timeStr,
+                startTimestamp: Date.now(),
+                type: signal.type,
+                optionType: optionType,
+                spotEntryPrice: spotPrice,
+                atmStrike: atmStrike,
+                optionSymbol: optionSymbol,
+                securityId: optionSecurityId,
+                quantity: qty,
+                numLots: numLots,
+                optionPremiumPrice: optionPremiumPrice,
+                initialSL: optionSL,
+                currentSL: optionSL,
+                target1: target1,
+                target2: target2,
+                currentTarget: target1,
+                t1Reached: false,
+                highestPremium: optionPremiumPrice,
+                lowestPremium: optionPremiumPrice,
+                allocatedCapital: Number((optionPremiumPrice * qty).toFixed(2))
+            };
+
+            return {
+                status: "success",
+                handshake: "CONFIRMED_REAL",
+                mode: "REAL",
+                order: this.activeOrder
+            };
+        }
+    }
+
+    monitorActivePosition(currentSpotPrice = 23400, liveOptionPremium = null) {
+        if (!this.activeOrder || this.activeOrder.status !== "ACTIVE") return null;
+
+        const pos = this.activeOrder;
+        
+        // Estimate live option premium if not directly streamed:
+        // Option premium moves ~0.50 delta relative to Spot movement
+        let currentPremium = liveOptionPremium;
+        if (!currentPremium || currentPremium <= 0) {
+            const spotMove = currentSpotPrice - pos.spotEntryPrice;
+            const deltaMove = pos.optionType === "CE" ? (spotMove * 0.50) : (-spotMove * 0.50);
+            currentPremium = Math.max(0.5, Number((pos.optionPremiumPrice + deltaMove).toFixed(2)));
+        }
+
+        if (currentPremium > pos.highestPremium) pos.highestPremium = currentPremium;
+        if (currentPremium < pos.lowestPremium) pos.lowestPremium = currentPremium;
+
+        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+        // ==================== 1. T1 -> T2 MULTI-TARGET TRAILING SL RULE ====================
+        // When price hits Target 1 (or >= 95% of T1), lock SL up to T1 profit and extend target to T2!
+        if (!pos.t1Reached && currentPremium >= pos.target1) {
+            pos.t1Reached = true;
+            
+            // Lock SL to Entry + 75% of T1 profit
+            const t1ProfitPts = pos.target1 - pos.optionPremiumPrice;
+            const lockedSL = Number((pos.optionPremiumPrice + (t1ProfitPts * 0.75)).toFixed(2));
+            pos.currentSL = Math.max(pos.currentSL, lockedSL);
+            pos.currentTarget = pos.target2;
+
+            console.log(`\n🎯🎯 [T1 TARGET HIT - TRAILING ACTIVATED] Order #${pos.orderId}`);
+            console.log(`   - Live Premium: ₹${currentPremium} reached Target 1 (₹${pos.target1})!`);
+            console.log(`   - 🛡️ Trailing SL Shifted UP to ₹${pos.currentSL} (Profit Locked)`);
+            console.log(`   - 🚀 Target Extended to Target 2 (1:4.5 R:R): ₹${pos.currentTarget}`);
+
+            // Modify Broker SL Order if in REAL Mode
+            if (pos.mode === "REAL" && pos.slOrderId) {
+                try {
+                    if (this.dhan.orders && typeof this.dhan.orders.modifyOrder === 'function') {
+                        this.dhan.orders.modifyOrder(pos.slOrderId, {
+                            orderType: "STOP_LOSS_MARKET",
+                            triggerPrice: pos.currentSL,
+                            quantity: pos.quantity
+                        });
+                        console.log(`🔄 [DHAN REAL BROKER]: SL Order #${pos.slOrderId} Trailed UP to ₹${pos.currentSL}`);
+                    }
+                } catch (e) {
+                    console.warn(`⚠️ Error modifying Dhan SL order: ${e.message}`);
+                }
+            }
+
+            return {
+                event: "T1_TRAILED",
+                orderId: pos.orderId,
+                lockedSL: pos.currentSL,
+                target2: pos.target2,
+                currentPremium: currentPremium
+            };
+        }
+
+        // ==================== 2. EXIT EVALUATION (T2 HIT, SL HIT, TRAILED SL HIT) ====================
+        let exitTriggered = false;
+        let exitReason = "";
+        let exitPrice = currentPremium;
+
+        if (pos.t1Reached && currentPremium >= pos.target2) {
+            exitTriggered = true;
+            exitReason = "TARGET_2_HIT";
+            exitPrice = pos.target2;
+        } else if (currentPremium <= pos.currentSL) {
+            exitTriggered = true;
+            exitReason = pos.t1Reached ? "TRAILED_SL_HIT" : "INITIAL_SL_HIT";
+            exitPrice = pos.currentSL;
+        }
+
+        if (exitTriggered) {
+            return this.closeActivePosition(exitReason, exitPrice, currentSpotPrice, timeStr);
         }
 
         return null;
     }
 
-    async cancelOrder(orderId = null) {
-        const idToCancel = orderId || this.activeOrder?.orderId;
-        if (!idToCancel) {
-            console.log("⚠️ No active order ID to cancel.");
-            return { status: "error", message: "No active order ID" };
+    closeActivePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = 23400, timeStr = "") {
+        if (!this.activeOrder) return null;
+
+        const pos = this.activeOrder;
+        const exitTime = timeStr || new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+        const finalExitPremium = exitPremiumPrice > 0 ? exitPremiumPrice : pos.optionPremiumPrice;
+
+        const ptsPnL = Number((finalExitPremium - pos.optionPremiumPrice).toFixed(2));
+        const totalPnL = Number((ptsPnL * pos.quantity).toFixed(2));
+        const isWin = ptsPnL > 0;
+
+        const closedTradeRecord = {
+            id: `TRD_${Date.now()}`,
+            orderId: pos.orderId,
+            mode: pos.mode,
+            date: pos.date,
+            entryTime: pos.entryTime,
+            exitTime: exitTime,
+            optionSymbol: pos.optionSymbol,
+            optionType: pos.optionType,
+            atmStrike: pos.atmStrike,
+            quantity: pos.quantity,
+            numLots: pos.numLots,
+            spotEntryPrice: pos.spotEntryPrice,
+            spotExitPrice: spotExitPrice,
+            entryPremium: pos.optionPremiumPrice,
+            exitPremium: finalExitPremium,
+            initialSL: pos.initialSL,
+            target1: pos.target1,
+            target2: pos.target2,
+            finalSL: pos.currentSL,
+            result: isWin ? (pos.t1Reached ? "T1_TRAILED_WIN" : "WIN") : "LOSS",
+            pointsPnL: ptsPnL,
+            pnl: totalPnL,
+            exitReason: reason,
+            durationSec: Math.round((Date.now() - (pos.startTimestamp || Date.now())) / 1000)
+        };
+
+        if (pos.mode === "PAPER") {
+            this.paperBalance = Number((this.paperBalance + totalPnL).toFixed(2));
+            closedTradeRecord.balanceAfter = this.paperBalance;
         }
 
-        console.log(`\n🛑 [ORDER MANAGER] Requesting Order Cancellation for Order #${idToCancel}...`);
+        this.saveTradeToJournal(closedTradeRecord);
+
+        console.log(`\n🏁 [POSITION CLOSED - 2-WAY HANDSHAKE CONFIRMED]`);
+        console.log(`   - Reason: ${reason} | Result: ${closedTradeRecord.result}`);
+        console.log(`   - Entry Premium: ₹${pos.optionPremiumPrice} -> Exit Premium: ₹${finalExitPremium}`);
+        console.log(`   - Total PnL: ${totalPnL >= 0 ? '+' : ''}₹${totalPnL} (${ptsPnL >= 0 ? '+' : ''}${ptsPnL} pts)`);
+        console.log(`   - Signal Engine Unlocked. Ready for new scanning.`);
+
+        // Clear Broker Orders if REAL mode
+        if (pos.mode === "REAL") {
+            if (pos.slOrderId) this.cancelOrder(pos.slOrderId);
+            if (pos.targetOrderId) this.cancelOrder(pos.targetOrderId);
+        }
+
+        this.activeOrder = null;
+
+        return {
+            status: "POSITION_CLOSED",
+            reason: reason,
+            trade: closedTradeRecord
+        };
+    }
+
+    saveTradeToJournal(tradeRecord) {
+        try {
+            this.ensureJournalStorage();
+            let journal = [];
+            if (fs.existsSync(JOURNAL_FILE)) {
+                const raw = fs.readFileSync(JOURNAL_FILE, 'utf-8');
+                journal = JSON.parse(raw);
+            }
+            journal.unshift(tradeRecord);
+            fs.writeFileSync(JOURNAL_FILE, JSON.stringify(journal, null, 2));
+            console.log(`💾 Trade Journal Updated: Saved closed trade #${tradeRecord.id} to ${JOURNAL_FILE}`);
+        } catch (e) {
+            console.warn(`⚠️ Warning saving trade journal: ${e.message}`);
+        }
+    }
+
+    getTradeJournal(modeFilter = null) {
+        try {
+            this.ensureJournalStorage();
+            if (fs.existsSync(JOURNAL_FILE)) {
+                const raw = fs.readFileSync(JOURNAL_FILE, 'utf-8');
+                let list = JSON.parse(raw);
+                if (modeFilter) {
+                    list = list.filter(t => t.mode === modeFilter);
+                }
+                return list;
+            }
+        } catch (e) {}
+        return [];
+    }
+
+    async cancelOrder(orderId = null) {
+        const idToCancel = orderId || this.activeOrder?.orderId;
+        if (!idToCancel) return { status: "error", message: "No active order ID" };
+
+        if (this.activeOrder && this.activeOrder.mode === "PAPER") {
+            return this.closeActivePosition("MANUAL_CANCEL", this.activeOrder.optionPremiumPrice, this.activeOrder.spotEntryPrice);
+        }
+
+        console.log(`\n🛑 [ORDER MANAGER] Requesting Real Order Cancellation for #${idToCancel}...`);
         let response = { status: "success", message: `Order #${idToCancel} cancelled successfully` };
 
         try {
@@ -450,22 +550,7 @@ class OrderExecutionManager {
             console.warn(`⚠️ Cancel order exception: ${e.message}`);
         }
 
-        // Also cancel attached SL & Target leg orders on Dhan
-        if (this.activeOrder?.slOrderId) {
-            try {
-                console.log(`🛑 [ORDER MANAGER] Cancelling attached SL Order #${this.activeOrder.slOrderId}...`);
-                await this.dhan.orders.cancelOrder(this.activeOrder.slOrderId);
-            } catch (e) {}
-        }
-        if (this.activeOrder?.targetOrderId) {
-            try {
-                console.log(`🛑 [ORDER MANAGER] Cancelling attached Target Order #${this.activeOrder.targetOrderId}...`);
-                await this.dhan.orders.cancelOrder(this.activeOrder.targetOrderId);
-            } catch (e) {}
-        }
-
         this.activeOrder = null;
-        console.log(`✅ Order #${idToCancel} and attached SL/Target legs cleared from active tracking.`);
         return response;
     }
 }

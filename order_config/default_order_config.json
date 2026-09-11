@@ -1,11 +1,17 @@
 {
-  "id": "aggressive_order_config",
-  "name": "Aggressive 100% Capital Usage + Algo Internal Trailing SL Config",
+  "id": "default_order_config",
+  "name": "Default 100% Capital Usage + Paper/Real Order Execution Config",
+  "executionMode": "PAPER",
+  "paperTrading": {
+    "initialCapital": 10000,
+    "riskRewardRatio": 3,
+    "maxTradesPerDay": 4
+  },
   "capitalUsagePct": 100,
   "productType": "INTRADAY",
   "exchangeSegment": "NSE_FNO",
   "tradingSymbol": "NIFTY_OPTION",
-  "defaultQuantity": 50,
+  "defaultQuantity": 65,
   "trailingSL": {
     "enabled": true,
     "algoTrailing": true,
@@ -16,8 +22,9 @@
   },
   "riskManagement": {
     "maxOpenPositions": 1,
+    "maxTradesPerDay": 4,
     "maxLossPerDay": 5000
   },
   "riskRewardRatio": 3,
-  "orderSwitchOn": false
+  "orderSwitchOn": true
 }

@@ -24,8 +24,11 @@ const bootConfig = orderManager.loadConfig();
 let liveState = {
     orderSwitchOn: bootConfig.orderSwitchOn !== undefined ? Boolean(bootConfig.orderSwitchOn) : false,
     activeStrategyId: bootConfig.activeStrategyId || "orb_intraday_active",
-    niftySpotPrice: 23431.5,
-    bankNiftySpotPrice: 51200.0,
+    niftySpotPrice: 0,
+    bankNiftySpotPrice: 0,
+    bankNiftyPrevClose: 0,
+    bankNiftyOpen: 0,
+    bankNiftyNetChange: 0,
     livePCR: 1.15,
     webSocketConnected: true,
     liveSignals: [],
@@ -33,6 +36,24 @@ let liveState = {
     tradeHistory: [],
     liveEngineLogs: []
 };
+
+// Immediate Dhan Live Quote Boot-Sync
+(async () => {
+    try {
+        if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
+            const res = await dhan.marketData.getMarketQuote({ IDX_I: [13, 25] });
+            const segData = res?.data?.data?.IDX_I || res?.data?.data?.data?.IDX_I || res?.data?.IDX_I || {};
+            const sec13 = segData[13] || segData["13"] || {};
+            const sec25 = segData[25] || segData["25"] || {};
+            if (sec13.last_price) liveState.niftySpotPrice = Number(sec13.last_price);
+            if (sec25.last_price) liveState.bankNiftySpotPrice = Number(sec25.last_price);
+            if (sec25.ohlc?.close) liveState.bankNiftyPrevClose = Number(sec25.ohlc.close);
+            if (sec25.ohlc?.open) liveState.bankNiftyOpen = Number(sec25.ohlc.open);
+            if (sec25.net_change !== undefined) liveState.bankNiftyNetChange = Number(sec25.net_change);
+            console.log(`📌 Immediate Dhan Live Quote Boot Synced: Nifty Spot ₹${liveState.niftySpotPrice}, Bank Nifty ₹${liveState.bankNiftySpotPrice}`);
+        }
+    } catch (e) {}
+})();
 
 // Helper function: Persist config updates to all JSON config files in order_config
 function saveAppConfig(updates) {
@@ -65,13 +86,56 @@ function saveAppConfig(updates) {
     }
 }
 
+let todayCandlesCache = [];
+let lastDhanCandleSyncTime = 0;
+
+async function syncTodayCandlesFromDhan() {
+    const now = Date.now();
+    if (now - lastDhanCandleSyncTime < 30000 && todayCandlesCache.length > 0) {
+        return todayCandlesCache;
+    }
+
+    try {
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const res = await dhan.marketData.getIntradayData({
+            securityId: "13",
+            exchangeSegment: "IDX_I",
+            instrument: "INDEX",
+            interval: "5",
+            fromDate: todayStr,
+            toDate: todayStr
+        });
+        const rootData = res?.data?.data || res?.data || res;
+        if (rootData.open && Array.isArray(rootData.open) && rootData.open.length > 0) {
+            const list = [];
+            for (let i = 0; i < rootData.open.length; i++) {
+                const ts = rootData.timestamp[i];
+                const dateObj = new Date(ts * 1000);
+                const tStr = dateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+                list.push({
+                    date: todayStr,
+                    time: tStr,
+                    timestamp: ts,
+                    open: rootData.open[i],
+                    high: rootData.high[i],
+                    low: rootData.low[i],
+                    close: rootData.close[i],
+                    volume: rootData.volume ? rootData.volume[i] : 5000
+                });
+            }
+            todayCandlesCache = list;
+            lastDhanCandleSyncTime = now;
+        }
+    } catch (e) {}
+    return todayCandlesCache;
+}
+
 // Periodic Live Market Quote Updater & Strategy Evaluator (Every 2s from Dhan API)
 setInterval(async () => {
     try {
         if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
             const res = await dhan.marketData.getMarketQuote({ IDX_I: [13, 25] });
-            const rootData = res?.data?.data || res?.data || res;
-            const segData = rootData?.IDX_I || {};
+            const segData = res?.data?.data?.IDX_I || res?.data?.data?.data?.IDX_I || res?.data?.IDX_I || {};
             const sec13 = segData[13] || segData["13"] || {};
             const sec25 = segData[25] || segData["25"] || {};
             const liveLtp = sec13.last_price || sec13.lastPrice || sec13.LTP;
@@ -88,7 +152,44 @@ setInterval(async () => {
         }
 
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+        const liveTodayCandles = await syncTodayCandlesFromDhan();
+
+        // If live quote API rate-limited, use latest Dhan intraday candle close
+        if ((!liveState.niftySpotPrice || liveState.niftySpotPrice === 0) && liveTodayCandles.length > 0) {
+            liveState.niftySpotPrice = liveTodayCandles[liveTodayCandles.length - 1].close;
+        }
+
         const spot = liveState.niftySpotPrice;
+
+        // ==================== 1. STRICT 2-WAY HANDSHAKE POSITION MONITORING ====================
+        // If an active position exists in Order Manager, SCANNING IS LOCKED! Monitor active position live.
+        if (orderManager.isPositionActive()) {
+            const posUpdate = orderManager.monitorActivePosition(spot);
+            if (posUpdate && posUpdate.status === "POSITION_CLOSED") {
+                liveState.liveEngineLogs.unshift({
+                    time: timeStr,
+                    spotPrice: spot,
+                    status: "POSITION_CLOSED",
+                    reasoning: `🏁 2-WAY HANDSHAKE CONFIRMED: Position #${posUpdate.trade.orderId} closed (${posUpdate.reason}). PnL: ₹${posUpdate.trade.pnl}. Signal Scanning UNLOCKED.`,
+                    strategyId: "consensus_master_head",
+                    strategyName: "Order Execution Manager",
+                    orderSwitch: liveState.orderSwitchOn ? "ON (Real Orders Active)" : "OFF (Signal Alert Only)"
+                });
+            } else if (posUpdate && posUpdate.event === "T1_TRAILED") {
+                liveState.liveEngineLogs.unshift({
+                    time: timeStr,
+                    spotPrice: spot,
+                    status: "T1_TRAILED",
+                    reasoning: `🎯 TARGET 1 HIT (₹${posUpdate.currentPremium}): Trailing SL Shifted UP to ₹${posUpdate.lockedSL} (Profit Locked). Waiting for Target 2 (₹${posUpdate.target2}).`,
+                    strategyId: "consensus_master_head",
+                    strategyName: "Order Execution Manager",
+                    orderSwitch: liveState.orderSwitchOn ? "ON (Real Orders Active)" : "OFF (Signal Alert Only)"
+                });
+            }
+            return; // EXIT LOOP EARLY - NO NEW SIGNALS PROCESSED WHILE POSITION IS OPEN!
+        }
 
         const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
         let stratConfig;
@@ -100,12 +201,14 @@ setInterval(async () => {
         }
         const stratName = stratConfig ? stratConfig.name : "👑 Master Head Multi-Strategy Consensus Engine (16-Engine Voting)";
 
-        const allCandles = loadAllCandlesFromDir('C:\\candle data') || [];
+        const rawHist = loadAllCandlesFromDir('C:\\candle data') || [];
+        const histCandles = rawHist.filter(c => c.date !== todayStr);
+
+        let allCandles = [...histCandles, ...liveTodayCandles];
         let status = "FLAT";
         let reason = "";
 
         if (allCandles.length > 5 && spot > 0) {
-            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             const lastC = allCandles[allCandles.length - 1];
 
             if (lastC && lastC.date === todayStr) {
@@ -182,6 +285,7 @@ setInterval(async () => {
                 quantity: totalQty,
                 allocatedCapital: Number(allocatedCapital.toFixed(2)),
                 orderSwitchOn: liveState.orderSwitchOn,
+                executionMode: config.executionMode || "PAPER",
                 timestamp: Date.now()
             };
 
@@ -190,12 +294,15 @@ setInterval(async () => {
                 liveState.liveSignals.unshift(newSignal);
                 if (liveState.liveSignals.length > 20) liveState.liveSignals.pop();
 
-                if (liveState.orderSwitchOn && !orderManager.activeOrder) {
-                    orderManager.executeOrder({
+                // Submit signal to Order Manager (Handshake verification)
+                if (liveState.orderSwitchOn && !orderManager.isPositionActive()) {
+                    const execRes = await orderManager.executeOrder({
                         entryPrice: spot,
-                        type: status === "BUY_SIGNAL" ? "BUY" : "SELL",
+                        type: status,
                         riskRewardRatio: rr
                     }, spot, liveCapital);
+                    
+                    console.log(`🤝 2-Way Handshake Confirmation: Signal Engine -> Order Manager (${execRes.mode} Mode). Status: ${execRes.status}`);
                 }
             }
         }
@@ -207,7 +314,7 @@ setInterval(async () => {
             reasoning: reason,
             strategyId: stratConfig?.id || "consensus_master_head",
             strategyName: stratName,
-            orderSwitch: liveState.orderSwitchOn ? "ON (Real Orders Active)" : "OFF (Signal Alert Only)"
+            orderSwitch: liveState.orderSwitchOn ? `ON (${(orderManager.loadConfig().executionMode || "PAPER")} Mode Active)` : "OFF (Signal Alert Only)"
         });
 
         if (liveState.liveEngineLogs.length > 50) liveState.liveEngineLogs.pop();
@@ -707,7 +814,7 @@ app.get('/api/live-status', async (req, res) => {
         res.json({
             status: 'success',
             niftySpotPrice: liveState.niftySpotPrice,
-            bankNiftySpotPrice: liveState.bankNiftySpotPrice || 51200.0,
+            bankNiftySpotPrice: liveState.bankNiftySpotPrice,
             livePCR: liveState.livePCR,
             orderSwitchOn: liveState.orderSwitchOn,
             activeStrategyId: liveState.activeStrategyId,
@@ -763,6 +870,127 @@ app.post('/api/update-config', (req, res) => {
 
         const currentCfg = saveAppConfig(updates) || orderManager.loadConfig();
         res.json({ status: 'success', capitalUsagePct: currentCfg.capitalUsagePct, riskRewardRatio: currentCfg.riskRewardRatio || 3.0 });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// 7. POST /api/toggle-execution-mode - Toggle between PAPER (Dummy Money) and REAL (Dhan Broker)
+app.post('/api/toggle-execution-mode', (req, res) => {
+    try {
+        const { mode } = req.body; // "PAPER" or "REAL"
+        const validMode = (mode === "REAL") ? "REAL" : "PAPER";
+        const currentCfg = saveAppConfig({ executionMode: validMode }) || orderManager.loadConfig();
+        console.log(`🎛️ Order Execution Mode Switched to: ${validMode === "REAL" ? "⚡ REAL MONEY (Dhan Broker)" : "📄 DUMMY MONEY (Paper Trade)"}`);
+        res.json({ status: 'success', executionMode: validMode });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// 8. POST /api/close-position - Manual Square Off Active Position
+app.post('/api/close-position', (req, res) => {
+    try {
+        if (!orderManager.isPositionActive()) {
+            return res.json({ status: 'warning', message: 'No active position open to close.' });
+        }
+        const result = orderManager.closeActivePosition("MANUAL_USER_SQUAREOFF", 0, liveState.niftySpotPrice);
+        res.json({ status: 'success', result });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// 9. GET /api/reports/journal - Fetch completed trade journal with mode filtering
+app.get('/api/reports/journal', (req, res) => {
+    try {
+        const mode = req.query.mode || null; // "PAPER", "REAL", or null for all
+        const journal = orderManager.getTradeJournal(mode);
+        res.json({ status: 'success', count: journal.length, journal });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// 10. GET /api/reports/summary - Daily & Monthly Performance Analytics
+app.get('/api/reports/summary', (req, res) => {
+    try {
+        const journal = orderManager.getTradeJournal();
+        
+        // Group by Daily
+        const dailyMap = {};
+        // Group by Monthly
+        const monthlyMap = {};
+
+        let totalWins = 0;
+        let totalLosses = 0;
+        let totalPnL = 0;
+        let grossWin = 0;
+        let grossLoss = 0;
+
+        journal.forEach(t => {
+            const dateStr = t.date || "2026-09-11";
+            const monthStr = dateStr.substring(0, 7); // "2026-09"
+
+            if (!dailyMap[dateStr]) {
+                dailyMap[dateStr] = { date: dateStr, trades: 0, wins: 0, losses: 0, pnl: 0 };
+            }
+            if (!monthlyMap[monthStr]) {
+                monthlyMap[monthStr] = { month: monthStr, trades: 0, wins: 0, losses: 0, pnl: 0 };
+            }
+
+            const pnl = Number(t.pnl || 0);
+            const isWin = t.pnl > 0;
+
+            dailyMap[dateStr].trades++;
+            monthlyMap[monthStr].trades++;
+            dailyMap[dateStr].pnl += pnl;
+            monthlyMap[monthStr].pnl += pnl;
+
+            if (isWin) {
+                dailyMap[dateStr].wins++;
+                monthlyMap[monthStr].wins++;
+                totalWins++;
+                grossWin += pnl;
+            } else {
+                dailyMap[dateStr].losses++;
+                monthlyMap[monthStr].losses++;
+                totalLosses++;
+                grossLoss += Math.abs(pnl);
+            }
+            totalPnL += pnl;
+        });
+
+        const totalTrades = journal.length;
+        const winRatePct = totalTrades > 0 ? Number(((totalWins / totalTrades) * 100).toFixed(2)) : 0;
+        const profitFactor = grossLoss > 0 ? Number((grossWin / grossLoss).toFixed(2)) : Number(grossWin.toFixed(2));
+
+        const dailyList = Object.values(dailyMap).map(d => ({
+            ...d,
+            pnl: Number(d.pnl.toFixed(2)),
+            winRatePct: d.trades > 0 ? Number(((d.wins / d.trades) * 100).toFixed(2)) : 0
+        })).sort((a, b) => b.date.localeCompare(a.date));
+
+        const monthlyList = Object.values(monthlyMap).map(m => ({
+            ...m,
+            pnl: Number(m.pnl.toFixed(2)),
+            winRatePct: m.trades > 0 ? Number(((m.wins / m.trades) * 100).toFixed(2)) : 0
+        })).sort((a, b) => b.month.localeCompare(a.month));
+
+        res.json({
+            status: 'success',
+            overall: {
+                totalTrades,
+                totalWins,
+                totalLosses,
+                winRatePct,
+                totalPnL: Number(totalPnL.toFixed(2)),
+                profitFactor,
+                paperBalance: orderManager.paperBalance
+            },
+            dailySummary: dailyList,
+            monthlySummary: monthlyList
+        });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }
