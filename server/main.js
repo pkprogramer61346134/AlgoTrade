@@ -296,11 +296,7 @@ setInterval(async () => {
 
                 // Submit signal to Order Manager (Handshake verification)
                 if (liveState.orderSwitchOn && !orderManager.isPositionActive()) {
-                    const execRes = await orderManager.executeOrder({
-                        entryPrice: spot,
-                        type: status,
-                        riskRewardRatio: rr
-                    }, spot, liveCapital);
+                    const execRes = await orderManager.executeOrder(newSignal, spot, liveCapital);
                     
                     console.log(`🤝 2-Way Handshake Confirmation: Signal Engine -> Order Manager (${execRes.mode} Mode). Status: ${execRes.status}`);
                 }
@@ -816,6 +812,8 @@ app.get('/api/live-status', async (req, res) => {
             niftySpotPrice: liveState.niftySpotPrice,
             bankNiftySpotPrice: liveState.bankNiftySpotPrice,
             livePCR: liveState.livePCR,
+            executionMode: config.executionMode || "PAPER",
+            paperBalance: orderManager.paperBalance,
             orderSwitchOn: liveState.orderSwitchOn,
             activeStrategyId: liveState.activeStrategyId,
             activeStrategyName: activeStrat ? activeStrat.name : "Active Strategy",
@@ -827,6 +825,18 @@ app.get('/api/live-status', async (req, res) => {
             engineLogs: liveState.liveEngineLogs.slice(0, 15),
             webSocketStatus: liveState.webSocketConnected ? "CONNECTED" : "DISCONNECTED"
         });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// 3b. POST /api/reset-paper-balance - Reset paper account capital back to initial capital
+app.post('/api/reset-paper-balance', (req, res) => {
+    try {
+        const newCap = req.body?.initialCapital || 10000;
+        const updatedBalance = orderManager.resetPaperBalance(newCap);
+        console.log(`🧹 Paper Trading Capital Reset to ₹${updatedBalance}`);
+        res.json({ status: 'success', paperBalance: updatedBalance });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }

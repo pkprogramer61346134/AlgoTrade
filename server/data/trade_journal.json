@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "id": "TRD_1789137872797",
+    "orderId": "PAPER_1789137872796",
+    "mode": "PAPER",
+    "date": "2026-09-11",
+    "entryTime": "8:14:32 pm",
+    "exitTime": "1:16:00 pm",
+    "optionSymbol": "NIFTY-2026-09-15-23350-CE",
+    "optionType": "CE",
+    "atmStrike": 23350,
+    "quantity": 585,
+    "numLots": 9,
+    "spotEntryPrice": 23335,
+    "spotExitPrice": 23380,
+    "entryPremium": 170.55,
+    "exitPremium": 130,
+    "initialSL": 145.55,
+    "target1": 245.55,
+    "target2": 283.05,
+    "finalSL": 145.55,
+    "result": "LOSS",
+    "pointsPnL": -40.55,
+    "pnl": -23721.75,
+    "exitReason": "TARGET_HIT",
+    "durationSec": 0,
+    "balanceAfter": -13721.75
+  }
+]

@@ -292,7 +292,29 @@ async function fetchLiveStatus() {
                 document.getElementById('live-pcr').innerText = data.livePCR;
             }
             if (document.getElementById('live-account-capital')) {
-                document.getElementById('live-account-capital').innerText = `₹${data.accountBalance.toLocaleString()}`;
+                const isReal = data.executionMode === 'REAL';
+                const bal = data.accountBalance !== undefined ? data.accountBalance : 10000;
+                const activePnL = data.activeOrder ? (data.activeOrder.pnlRupees || 0) : 0;
+                
+                let pnlTag = '';
+                if (data.activeOrder && activePnL !== 0) {
+                    const color = activePnL >= 0 ? 'var(--success)' : 'var(--danger)';
+                    const sign = activePnL >= 0 ? '+' : '';
+                    pnlTag = ` <span style="font-size:0.75rem; color:${color}; font-weight:700;">(${sign}₹${activePnL.toLocaleString()})</span>`;
+                }
+
+                document.getElementById('live-account-capital').innerHTML = `₹${bal.toLocaleString()}${pnlTag}`;
+                
+                const subtext = document.getElementById('live-capital-subtext');
+                if (subtext) {
+                    if (isReal) {
+                        subtext.innerText = 'Dhan API Real Account Capital';
+                        subtext.style.color = '#38bdf8';
+                    } else {
+                        subtext.innerText = data.activeOrder ? 'Paper Capital (Live Unrealized PnL)' : 'Paper Trading Capital (Dynamic PnL Enabled)';
+                        subtext.style.color = 'var(--text-muted)';
+                    }
+                }
             }
 
             updateLiveControlsUI(data);
@@ -313,20 +335,33 @@ async function fetchLiveStatus() {
                 if (activeOrderTbody) {
                     const modeClass = pos.mode === 'REAL' ? 'mode-selector-badge real' : 'mode-selector-badge paper';
                     const modeLabel = pos.mode === 'REAL' ? '⚡ REAL' : '📄 PAPER';
-                    const targetBadge = pos.t1Reached ? '🎯 T1 HIT - SL TRAILED TO PROFIT (WAITING T2)' : '⏳ IN PROGRESS (1:3 T1)';
+                    const targetBadge = pos.t1Reached ? '🎯 T1 HIT - SL TRAILED' : '⏳ IN PROGRESS';
                     const targetBadgeClass = pos.t1Reached ? 'badge-win' : 'badge-info';
+
+                    const curPrem = pos.currentPremium || pos.optionPremiumPrice;
+                    const premDiff = Number((curPrem - pos.optionPremiumPrice).toFixed(2));
+                    const premSign = premDiff >= 0 ? '▲ +' : '▼ ';
+                    const premColor = premDiff >= 0 ? 'var(--success)' : 'var(--danger)';
+
+                    const pnlVal = pos.pnlRupees !== undefined ? pos.pnlRupees : 0;
+                    const pnlPct = pos.pnlPct !== undefined ? pos.pnlPct : 0;
+                    const pnlColor = pnlVal >= 0 ? 'var(--success)' : 'var(--danger)';
+                    const pnlSign = pnlVal >= 0 ? '+' : '';
 
                     activeOrderTbody.innerHTML = `
                         <tr>
                             <td><span class="${modeClass}">${modeLabel}</span></td>
                             <td style="font-family: var(--font-mono); font-size: 0.8rem;">#${pos.orderId}</td>
                             <td style="color: var(--primary); font-weight: 700;">${pos.optionSymbol} (${pos.numLots || 1} Lot / ${pos.quantity} Qty)</td>
-                            <td>₹${pos.optionPremiumPrice}</td>
-                            <td style="color: var(--danger);">₹${pos.initialSL}</td>
+                            <td style="font-weight: 700;">₹${pos.optionPremiumPrice}</td>
+                            <td style="font-weight: 800; color: ${premColor};">₹${curPrem} <span style="font-size: 0.75rem; font-weight: 600;">(${premSign}₹${Math.abs(premDiff)})</span></td>
                             <td style="color: var(--warning); font-weight: 800;">₹${pos.currentSL} ${pos.t1Reached ? '🔒' : ''}</td>
                             <td style="color: var(--success);">₹${pos.target1} (1:3)</td>
                             <td style="color: #c084fc; font-weight: 700;">₹${pos.target2} (1:4.5)</td>
-                            <td><span class="badge ${targetBadgeClass}">${targetBadge}</span></td>
+                            <td>
+                                <div style="font-weight: 800; font-size: 0.95rem; color: ${pnlColor}; margin-bottom: 2px;">${pnlSign}₹${pnlVal.toLocaleString()} (${pnlSign}${pnlPct}%)</div>
+                                <span class="badge ${targetBadgeClass}" style="font-size: 0.7rem;">${targetBadge}</span>
+                            </td>
                         </tr>
                     `;
                 }

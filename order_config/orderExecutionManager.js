@@ -12,8 +12,8 @@ class OrderExecutionManager {
         this.dhan = dhanSdk || new DhanSDK();
         this.config = this.loadConfig();
         this.activeOrder = null;
-        this.paperBalance = this.config.paperTrading?.initialCapital || this.config.paperCapital || 10000;
         this.ensureJournalStorage();
+        this.paperBalance = this.loadPaperBalance();
     }
 
     ensureJournalStorage() {
@@ -27,6 +27,36 @@ class OrderExecutionManager {
         } catch (e) {
             console.warn(`⚠️ Warning: Could not initialize trade journal storage: ${e.message}`);
         }
+    }
+
+    loadPaperBalance() {
+        const initialCap = this.config.paperTrading?.initialCapital || this.config.paperCapital || 10000;
+        try {
+            this.ensureJournalStorage();
+            if (fs.existsSync(JOURNAL_FILE)) {
+                const raw = fs.readFileSync(JOURNAL_FILE, 'utf-8');
+                const journal = JSON.parse(raw);
+                const paperTrades = Array.isArray(journal) ? journal.filter(t => t.mode === "PAPER") : [];
+                if (paperTrades.length > 0) {
+                    const lastTrade = paperTrades[0];
+                    if (lastTrade && lastTrade.balanceAfter !== undefined && !isNaN(lastTrade.balanceAfter)) {
+                        const bal = Number(lastTrade.balanceAfter);
+                        return bal > 0 ? bal : initialCap;
+                    }
+                    const totalPaperPnL = paperTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
+                    const calculated = Number((initialCap + totalPaperPnL).toFixed(2));
+                    return calculated > 0 ? calculated : initialCap;
+                }
+            }
+        } catch (e) {
+            console.warn(`⚠️ Error reading paper balance from journal: ${e.message}`);
+        }
+        return initialCap;
+    }
+
+    resetPaperBalance(newCapital = 10000) {
+        this.paperBalance = Number(newCapital);
+        return this.paperBalance;
     }
 
     loadConfig() {
@@ -66,7 +96,8 @@ class OrderExecutionManager {
         const mode = this.config.executionMode || "PAPER";
         
         if (mode === "PAPER") {
-            return this.paperBalance;
+            const floatingPnL = (this.activeOrder && this.activeOrder.mode === "PAPER") ? (Number(this.activeOrder.pnlRupees) || 0) : 0;
+            return Number((this.paperBalance + floatingPnL).toFixed(2));
         }
 
         try {
@@ -164,7 +195,7 @@ class OrderExecutionManager {
             securityId: optionType === "CE" ? "47291" : "47286",
             tradingSymbol: `NIFTY-2026-09-15-${atmStrike}-${optionType}`,
             strike: atmStrike,
-            price: Math.min(100, maxAffordablePremium),
+            price: Math.max(15, Math.round(spotPrice * 0.005)),
             source: "dhan_dynamic_strike_resolution"
         };
     }
@@ -179,24 +210,37 @@ class OrderExecutionManager {
             return { status: "rejected", message: "Active position currently open. Handshake lock engaged." };
         }
 
-        const spotPrice = signal.entryPrice || currentSpotPrice;
-        const optionType = signal.type === "BUY_SIGNAL" || signal.type === "BUY" ? "CE" : "PE";
+        const spotPrice = signal.spotPrice || signal.entryPrice || currentSpotPrice;
+        const optionType = (signal.type === "BUY_SIGNAL" || signal.type === "BUY" || signal.signalType === "BUY_SIGNAL") ? "CE" : "PE";
         
-        const contractDetails = await this.resolveOptionContractFromDhan(spotPrice, optionType, liveCapital);
+        let contractDetails;
+        if (signal.entryPremium || signal.optionPremium || signal.price) {
+            const premVal = Number(signal.entryPremium || signal.optionPremium || signal.price);
+            const atmStrike = signal.atmStrike || this.getATMStrike(spotPrice);
+            contractDetails = {
+                strike: atmStrike,
+                tradingSymbol: signal.optionSymbol || `NIFTY-2026-09-15-${atmStrike}-${optionType}`,
+                securityId: signal.securityId || (optionType === "CE" ? "47291" : "47286"),
+                price: premVal
+            };
+        } else {
+            contractDetails = await this.resolveOptionContractFromDhan(spotPrice, optionType, liveCapital);
+        }
+
         const atmStrike = contractDetails.strike;
         const optionSymbol = contractDetails.tradingSymbol;
         const optionSecurityId = contractDetails.securityId;
         const optionPremiumPrice = contractDetails.price || 36.5;
 
-        const qty = this.calculateQuantity(liveCapital, optionPremiumPrice);
-        const numLots = Math.max(1, Math.floor(qty / 65));
+        const qty = signal.quantity || this.calculateQuantity(liveCapital, optionPremiumPrice);
+        const numLots = signal.numLots || Math.max(1, Math.floor(qty / 65));
 
         // Risk & Target Calculation: Default 1:3 Target 1, 1:4.5 Target 2
         const premiumRiskPoints = Math.max(3, Math.min(25, Math.round(optionPremiumPrice * 0.15)));
-        const optionSL = Math.max(1, Number((optionPremiumPrice - premiumRiskPoints).toFixed(2)));
+        const optionSL = signal.optionSL ? Number(signal.optionSL) : Math.max(1, Number((optionPremiumPrice - premiumRiskPoints).toFixed(2)));
         
         const rrRatio = this.config.riskRewardRatio || signal.riskRewardRatio || 3.0;
-        const target1 = Number((optionPremiumPrice + (rrRatio * premiumRiskPoints)).toFixed(2));
+        const target1 = signal.optionTarget ? Number(signal.optionTarget) : Number((optionPremiumPrice + (rrRatio * premiumRiskPoints)).toFixed(2));
         const target2 = Number((optionPremiumPrice + ((rrRatio * 1.5) * premiumRiskPoints)).toFixed(2)); // T2 Extended Target (1:4.5 R:R)
 
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
@@ -218,7 +262,7 @@ class OrderExecutionManager {
                 date: dateStr,
                 entryTime: timeStr,
                 startTimestamp: Date.now(),
-                type: signal.type,
+                type: signal.type || signal.signalType || "BUY_SIGNAL",
                 optionType: optionType,
                 spotEntryPrice: spotPrice,
                 atmStrike: atmStrike,
@@ -227,6 +271,7 @@ class OrderExecutionManager {
                 quantity: qty,
                 numLots: numLots,
                 optionPremiumPrice: optionPremiumPrice,
+                currentPremium: optionPremiumPrice,
                 initialSL: optionSL,
                 currentSL: optionSL,
                 target1: target1,
@@ -235,6 +280,8 @@ class OrderExecutionManager {
                 t1Reached: false,
                 highestPremium: optionPremiumPrice,
                 lowestPremium: optionPremiumPrice,
+                pnlRupees: 0.0,
+                pnlPct: 0.0,
                 allocatedCapital: Number((optionPremiumPrice * qty).toFixed(2))
             };
 
@@ -364,6 +411,11 @@ class OrderExecutionManager {
             const deltaMove = pos.optionType === "CE" ? (spotMove * 0.50) : (-spotMove * 0.50);
             currentPremium = Math.max(0.5, Number((pos.optionPremiumPrice + deltaMove).toFixed(2)));
         }
+
+        pos.currentPremium = currentPremium;
+        const ptsDiff = Number((currentPremium - pos.optionPremiumPrice).toFixed(2));
+        pos.pnlRupees = Number((ptsDiff * pos.quantity).toFixed(2));
+        pos.pnlPct = pos.optionPremiumPrice > 0 ? Number(((ptsDiff / pos.optionPremiumPrice) * 100).toFixed(2)) : 0.0;
 
         if (currentPremium > pos.highestPremium) pos.highestPremium = currentPremium;
         if (currentPremium < pos.lowestPremium) pos.lowestPremium = currentPremium;
