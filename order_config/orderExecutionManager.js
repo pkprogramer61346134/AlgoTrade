@@ -627,10 +627,18 @@ class OrderExecutionManager {
             let journal = [];
             if (fs.existsSync(JOURNAL_FILE)) {
                 const raw = fs.readFileSync(JOURNAL_FILE, 'utf-8');
-                journal = JSON.parse(raw);
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) journal = parsed;
+                } catch (parseErr) {
+                    console.error(`⚠️ Corrupt trade_journal.json detected. Backing up before update: ${parseErr.message}`);
+                    try { fs.copyFileSync(JOURNAL_FILE, `${JOURNAL_FILE}.corrupt_${Date.now()}`); } catch (bakErr) {}
+                }
             }
             journal.unshift(tradeRecord);
-            fs.writeFileSync(JOURNAL_FILE, JSON.stringify(journal, null, 2));
+            const tmpFile = `${JOURNAL_FILE}.tmp`;
+            fs.writeFileSync(tmpFile, JSON.stringify(journal, null, 2), 'utf-8');
+            fs.renameSync(tmpFile, JOURNAL_FILE);
             console.log(`💾 Trade Journal Updated: Saved closed trade #${tradeRecord.id} to ${JOURNAL_FILE}`);
         } catch (e) {
             console.warn(`⚠️ Warning saving trade journal: ${e.message}`);

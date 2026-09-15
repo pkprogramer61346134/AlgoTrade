@@ -5,10 +5,21 @@ const { generateTOTP } = require('./totpGenerator');
 const CONFIG_PATH = path.join(__dirname, 'config.js');
 const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
 
+let lastTokenGenerationAttempt = 0;
+
 async function autoRefreshDhanToken() {
     console.log("=================================================================================");
     console.log("🔑 AUTOMATED DHAN TOTP TOKEN REFRESH SERVICE");
     console.log("=================================================================================\n");
+
+    const timeSinceLastAttempt = Date.now() - lastTokenGenerationAttempt;
+    if (timeSinceLastAttempt < 120000) {
+        const remainingSec = Math.ceil((120000 - timeSinceLastAttempt) / 1000);
+        console.warn(`⏳ [DHAN AUTH COOLDOWN] Dhan API limits token generation to once every 2 minutes. Waiting ${remainingSec}s before retrying.`);
+        return { status: "cooldown", remainingSeconds: remainingSec };
+    }
+
+    lastTokenGenerationAttempt = Date.now();
 
     // Check credentials file
     if (!fs.existsSync(CREDENTIALS_PATH)) {
