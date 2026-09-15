@@ -12,6 +12,7 @@ class OrderExecutionManager {
         this.dhan = dhanSdk || new DhanSDK();
         this.config = this.loadConfig();
         this.activeOrder = null;
+        this.isExecutingOrder = false;
         this.ensureJournalStorage();
         this.paperBalance = this.loadPaperBalance();
     }
@@ -244,29 +245,32 @@ class OrderExecutionManager {
         const liveCapital = totalCapital || await this.fetchLiveCapital();
 
         if (this.isPositionActive()) {
-            console.log(`⚠️ Handshake Lock: Position #${this.activeOrder.orderId} is currently ACTIVE. Order Manager rejected duplicate signal.`);
-            return { status: "rejected", message: "Active position currently open. Handshake lock engaged." };
+            console.log(`⚠️ Handshake Lock: Position #${this.activeOrder ? this.activeOrder.orderId : 'PENDING'} is currently ACTIVE or EXECUTING. Order Manager rejected duplicate signal.`);
+            return { status: "rejected", message: "Active position currently open or execution in progress. Handshake lock engaged." };
         }
 
-        // Enforce Daily Risk Limits (maxTradesPerDay & maxLossPerDay)
-        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-        const journal = this.getJournalData();
-        const todayTrades = journal.filter(t => t.date === todayStr);
+        this.isExecutingOrder = true;
 
-        const maxTrades = this.config.paperTrading?.maxTradesPerDay || this.config.riskManagement?.maxTradesPerDay || this.config.maxTradesPerDay || 4;
-        if (todayTrades.length >= maxTrades) {
-            console.log(`⚠️ Risk Limit Exceeded: Daily Trade Limit (${todayTrades.length}/${maxTrades}) reached for today (${todayStr}). Order Manager rejected order.`);
-            return { status: "rejected", message: `Daily trade limit (${maxTrades}) reached for today.` };
-        }
+        try {
+            // Enforce Daily Risk Limits (maxTradesPerDay & maxLossPerDay)
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            const journal = this.getJournalData();
+            const todayTrades = journal.filter(t => t.date === todayStr);
 
-        const maxLoss = this.config.riskManagement?.maxLossPerDay || 5000;
-        const todayPnL = todayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
-        if (todayPnL <= -maxLoss) {
-            console.log(`⚠️ Risk Limit Exceeded: Daily Max Loss Limit (₹${todayPnL} / -₹${maxLoss}) hit for today. Trading locked.`);
-            return { status: "rejected", message: `Daily max loss limit (₹${maxLoss}) reached.` };
-        }
+            const maxTrades = this.config.paperTrading?.maxTradesPerDay || this.config.riskManagement?.maxTradesPerDay || this.config.maxTradesPerDay || 4;
+            if (todayTrades.length >= maxTrades) {
+                console.log(`⚠️ Risk Limit Exceeded: Daily Trade Limit (${todayTrades.length}/${maxTrades}) reached for today (${todayStr}). Order Manager rejected order.`);
+                return { status: "rejected", message: `Daily trade limit (${maxTrades}) reached for today.` };
+            }
 
-        const spotPrice = signal.spotPrice || signal.entryPrice || currentSpotPrice;
+            const maxLoss = this.config.riskManagement?.maxLossPerDay || 5000;
+            const todayPnL = todayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
+            if (todayPnL <= -maxLoss) {
+                console.log(`⚠️ Risk Limit Exceeded: Daily Max Loss Limit (₹${todayPnL} / -₹${maxLoss}) hit for today. Trading locked.`);
+                return { status: "rejected", message: `Daily max loss limit (₹${maxLoss}) reached.` };
+            }
+
+            const spotPrice = signal.spotPrice || signal.entryPrice || currentSpotPrice;
         const optionType = (signal.type === "BUY_SIGNAL" || signal.type === "BUY" || signal.signalType === "BUY_SIGNAL") ? "CE" : "PE";
         
         let contractDetails;
@@ -451,6 +455,9 @@ class OrderExecutionManager {
                 mode: "REAL",
                 order: this.activeOrder
             };
+        }
+        } finally {
+            this.isExecutingOrder = false;
         }
     }
 

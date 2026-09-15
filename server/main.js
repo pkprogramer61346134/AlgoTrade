@@ -138,6 +138,24 @@ async function syncTodayCandlesFromDhan() {
     return todayCandlesCache;
 }
 
+let lastTradeExitTimestamp = 0;
+let lastEvaluatedSpotPrice = 0;
+
+function isIndianMarketOpen() {
+    const now = new Date();
+    const kolkataTimeStr = now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+    const kolkataDate = new Date(kolkataTimeStr);
+    const day = kolkataDate.getDay(); // 0 = Sun, 6 = Sat
+    if (day === 0 || day === 6) return false;
+
+    const hours = kolkataDate.getHours();
+    const minutes = kolkataDate.getMinutes();
+    const totalMins = hours * 60 + minutes;
+
+    // 9:15 AM = 555 mins, 3:30 PM (15:30) = 930 mins
+    return totalMins >= 555 && totalMins <= 930;
+}
+
 // Periodic Live Market Quote Updater & Strategy Evaluator (Every 2s from Dhan API)
 setInterval(async () => {
     try {
@@ -185,6 +203,21 @@ setInterval(async () => {
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+        // ==================== 0. MARKET HOURS CHECK (9:15 AM - 3:30 PM IST) ====================
+        if (!isIndianMarketOpen()) {
+            liveState.liveEngineLogs.unshift({
+                time: timeStr,
+                spotPrice: liveState.niftySpotPrice,
+                status: "MARKET_CLOSED",
+                reasoning: `🌙 MARKET CLOSED: Live Signal Engine & Order Manager are PAUSED. Market hours are Mon-Fri 9:15 AM to 3:30 PM IST.`,
+                strategyId: "consensus_master_head",
+                strategyName: "Order Execution Manager",
+                orderSwitch: liveState.orderSwitchOn ? "ON (Paused Outside Hours)" : "OFF"
+            });
+            if (liveState.liveEngineLogs.length > 50) liveState.liveEngineLogs.pop();
+            return; // STRICT LOCK: DO NOT EVALUATE STRATEGIES OR PLACE ORDERS OUTSIDE MARKET HOURS!
+        }
+
         const liveTodayCandles = await syncTodayCandlesFromDhan();
 
         // If live quote API rate-limited, use latest Dhan intraday candle close
@@ -195,15 +228,16 @@ setInterval(async () => {
         const spot = liveState.niftySpotPrice;
 
         // ==================== 1. STRICT 2-WAY HANDSHAKE POSITION MONITORING ====================
-        // If an active position exists in Order Manager, SCANNING IS LOCKED! Monitor active position live with Dhan Real-Time Premium.
+        // If an active position exists in Order Manager, SCANNING IS 100% LOCKED & FROZEN! No new signals created!
         if (orderManager.isPositionActive()) {
             const posUpdate = orderManager.monitorActivePosition(spot, liveOptionLtp);
             if (posUpdate && posUpdate.status === "POSITION_CLOSED") {
+                lastTradeExitTimestamp = Date.now();
                 liveState.liveEngineLogs.unshift({
                     time: timeStr,
                     spotPrice: spot,
                     status: "POSITION_CLOSED",
-                    reasoning: `🏁 2-WAY HANDSHAKE CONFIRMED: Position #${posUpdate.trade.orderId} closed (${posUpdate.reason}). PnL: ₹${posUpdate.trade.pnl}. Signal Scanning UNLOCKED.`,
+                    reasoning: `🏁 2-WAY HANDSHAKE UNLOCKED: Position #${posUpdate.trade.orderId} closed (${posUpdate.reason}). PnL: ₹${posUpdate.trade.pnl}. Master Head Signal Engine UNLOCKED for next fresh signal.`,
                     strategyId: "consensus_master_head",
                     strategyName: "Order Execution Manager",
                     orderSwitch: liveState.orderSwitchOn ? "ON (Real Orders Active)" : "OFF (Signal Alert Only)"
@@ -219,7 +253,12 @@ setInterval(async () => {
                     orderSwitch: liveState.orderSwitchOn ? "ON (Real Orders Active)" : "OFF (Signal Alert Only)"
                 });
             }
-            return; // EXIT LOOP EARLY - NO NEW SIGNALS PROCESSED WHILE POSITION IS OPEN!
+            return; // EXIT LOOP EARLY - NO NEW SIGNALS PROCESSED OR GENERATED WHILE POSITION IS OPEN!
+        }
+
+        // Post-Trade Cooldown Check (Wait 15s after position square off for fresh candle price action)
+        if (Date.now() - lastTradeExitTimestamp < 15000) {
+            return; // WAIT 15s AFTER POSITION CLOSURE BEFORE SCANNING NEW SIGNALS
         }
 
         // 2-Way Handshake Limit Check: If Order Manager has locked trading (Max Trades/Loss limit reached), PAUSE Master Head Signal Engine!
@@ -236,6 +275,10 @@ setInterval(async () => {
             });
             if (liveState.liveEngineLogs.length > 50) liveState.liveEngineLogs.pop();
             return; // EXIT LOOP EARLY - DO NOT GENERATE OR OUTPUT SIGNALS WHEN RISK LIMIT IS HIT!
+        }
+
+        if (!spot || spot === 0) {
+            return; // DO NOT SCAN WITHOUT VALID SPOT PRICE
         }
 
         const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
@@ -300,53 +343,59 @@ setInterval(async () => {
         }
 
         if (status !== "FLAT") {
-            const optionType = status === "BUY_SIGNAL" ? "CE" : "PE";
-            const config = orderManager.loadConfig();
-            const rr = config.riskRewardRatio !== undefined ? config.riskRewardRatio : 3.0;
-            const liveCapital = await orderManager.fetchLiveCapital();
-            const usagePct = config.capitalUsagePct !== undefined ? config.capitalUsagePct : 100;
-            const allocatedCapital = (liveCapital * usagePct) / 100;
+            // STRICT HANDSHAKE LOCK: Do NOT emit or log signal if an active trade is already open or executing!
+            if (!orderManager.isPositionActive()) {
+                const lastSignal = liveState.liveSignals[0];
+                const isDuplicateSignal = lastSignal && 
+                    lastSignal.signalType === status && 
+                    (Date.now() - (lastSignal.timestamp || 0)) < 60000 && 
+                    Math.abs(lastSignal.spotPrice - spot) < 2.0;
 
-            const contract = await orderManager.resolveOptionContractFromDhan(spot, optionType, allocatedCapital);
-            const entryPremium = contract.price || 36.5;
-            const riskPts = Math.max(3, Math.min(20, Math.round(entryPremium * 0.15)));
-            const optionSL = Math.max(1, Number((entryPremium - riskPts).toFixed(2)));
-            const optionTarget = Number((entryPremium + (rr * riskPts)).toFixed(2));
-            const NIFTY_LOT_SIZE = 65;
-            const numLots = Math.max(1, Math.floor(allocatedCapital / (entryPremium * NIFTY_LOT_SIZE)));
-            const totalQty = numLots * NIFTY_LOT_SIZE;
+                if (!isDuplicateSignal) {
+                    const optionType = status === "BUY_SIGNAL" ? "CE" : "PE";
+                    const config = orderManager.loadConfig();
+                    const rr = config.riskRewardRatio !== undefined ? config.riskRewardRatio : 3.0;
+                    const liveCapital = await orderManager.fetchLiveCapital();
+                    const usagePct = config.capitalUsagePct !== undefined ? config.capitalUsagePct : 100;
+                    const allocatedCapital = (liveCapital * usagePct) / 100;
 
-            const newSignal = {
-                time: timeStr,
-                strategyName: stratName,
-                signalType: status,
-                type: optionType,
-                spotPrice: spot,
-                atmStrike: contract.strike,
-                optionSymbol: contract.tradingSymbol,
-                entryPremium: entryPremium,
-                optionSL: optionSL,
-                optionTarget: optionTarget,
-                riskRewardRatio: rr,
-                numLots: numLots,
-                quantity: totalQty,
-                allocatedCapital: Number(allocatedCapital.toFixed(2)),
-                orderSwitchOn: liveState.orderSwitchOn,
-                executionMode: config.executionMode || "PAPER",
-                timestamp: Date.now()
-            };
+                    const contract = await orderManager.resolveOptionContractFromDhan(spot, optionType, allocatedCapital);
+                    const entryPremium = contract.price || 36.5;
+                    const riskPts = Math.max(3, Math.min(20, Math.round(entryPremium * 0.15)));
+                    const optionSL = Math.max(1, Number((entryPremium - riskPts).toFixed(2)));
+                    const optionTarget = Number((entryPremium + (rr * riskPts)).toFixed(2));
+                    const NIFTY_LOT_SIZE = 65;
+                    const numLots = Math.max(1, Math.floor(allocatedCapital / (entryPremium * NIFTY_LOT_SIZE)));
+                    const totalQty = numLots * NIFTY_LOT_SIZE;
 
-            const lastSignal = liveState.liveSignals[0];
-            const signalCooldownMs = 10000; // 10s cooldown for fresh signal execution after position close
-            if (!lastSignal || lastSignal.signalType !== status || (Date.now() - (lastSignal.timestamp || 0)) > signalCooldownMs) {
-                liveState.liveSignals.unshift(newSignal);
-                if (liveState.liveSignals.length > 20) liveState.liveSignals.pop();
+                    const newSignal = {
+                        time: timeStr,
+                        strategyName: stratName,
+                        signalType: status,
+                        type: optionType,
+                        spotPrice: spot,
+                        atmStrike: contract.strike,
+                        optionSymbol: contract.tradingSymbol,
+                        entryPremium: entryPremium,
+                        optionSL: optionSL,
+                        optionTarget: optionTarget,
+                        riskRewardRatio: rr,
+                        numLots: numLots,
+                        quantity: totalQty,
+                        allocatedCapital: Number(allocatedCapital.toFixed(2)),
+                        orderSwitchOn: liveState.orderSwitchOn,
+                        executionMode: config.executionMode || "PAPER",
+                        timestamp: Date.now()
+                    };
 
-                // Submit signal to Order Manager (Handshake verification)
-                if (liveState.orderSwitchOn && !orderManager.isPositionActive()) {
-                    const execRes = await orderManager.executeOrder(newSignal, spot, liveCapital);
-                    
-                    console.log(`🤝 2-Way Handshake Confirmation: Signal Engine -> Order Manager (${execRes.mode} Mode). Status: ${execRes.status}`);
+                    liveState.liveSignals.unshift(newSignal);
+                    if (liveState.liveSignals.length > 20) liveState.liveSignals.pop();
+
+                    // Submit signal to Order Manager (Handshake verification)
+                    if (liveState.orderSwitchOn && !orderManager.isPositionActive()) {
+                        const execRes = await orderManager.executeOrder(newSignal, spot, liveCapital);
+                        console.log(`🤝 2-Way Handshake Confirmation: Signal Engine -> Order Manager (${execRes.mode} Mode). Status: ${execRes.status}`);
+                    }
                 }
             }
         }
