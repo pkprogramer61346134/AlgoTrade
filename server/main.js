@@ -8,6 +8,15 @@ const { prepareJSONStrategyData, evaluateJSONStrategy } = require('../src/dynami
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
 const { DhanSDK, ensureValidDhanToken } = require('../dhanAPI/index');
 
+// Global Process Crash Protector: Prevent background network errors from crashing Node.js
+process.on('uncaughtException', (err) => {
+    console.error('🛡️ [PROCESS GUARD] Uncaught Exception caught (Server active):', err.message);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('🛡️ [PROCESS GUARD] Unhandled Rejection caught (Server active):', reason);
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -80,7 +89,9 @@ function saveAppConfig(updates) {
                         fileContent = JSON.parse(fs.readFileSync(filePath, 'utf8'));
                     }
                     Object.assign(fileContent, updates);
-                    fs.writeFileSync(filePath, JSON.stringify(fileContent, null, 2));
+                    const tmpPath = `${filePath}.tmp`;
+                    fs.writeFileSync(tmpPath, JSON.stringify(fileContent, null, 2), 'utf8');
+                    fs.renameSync(tmpPath, filePath);
                 } catch (err) {
                     console.warn(`⚠️ Failed writing to config file ${file}:`, err.message);
                 }

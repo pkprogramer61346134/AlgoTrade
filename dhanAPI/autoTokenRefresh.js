@@ -79,14 +79,24 @@ async function autoRefreshDhanToken() {
         url.searchParams.set("pin", pin);
         url.searchParams.set("totp", totpCode);
 
-        const response = await fetch(url.toString(), {
-            method: "POST",
-            headers: { "Accept": "application/json" }
-        });
-        const responseText = await response.text();
-        let resData;
-        try { resData = JSON.parse(responseText); } catch { resData = { raw: responseText }; }
-        return { ok: response.ok, status: response.status, data: resData };
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        try {
+            const response = await fetch(url.toString(), {
+                method: "POST",
+                headers: { "Accept": "application/json" },
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            const responseText = await response.text();
+            let resData;
+            try { resData = JSON.parse(responseText); } catch { resData = { raw: responseText }; }
+            return { ok: response.ok, status: response.status, data: resData };
+        } catch (err) {
+            clearTimeout(timeoutId);
+            return { ok: false, status: 500, data: { status: "error", message: err.message || "Auth network timeout" } };
+        }
     }
 
     // ---------------------------------------------------------
@@ -221,14 +231,19 @@ async function ensureValidDhanToken(forceRefresh = false) {
         if (config && config.ACCESS_TOKEN && config.CLIENT_ID) {
             try {
                 const testUrl = `${config.BASE_URL || 'https://api.dhan.co/v2'}/fundlimit`;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+
                 const response = await fetch(testUrl, {
                     method: 'GET',
                     headers: {
                         'access-token': config.ACCESS_TOKEN,
                         'client-id': config.CLIENT_ID,
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    signal: controller.signal
                 });
+                clearTimeout(timeoutId);
 
                 if (response.ok) {
                     const data = await response.json();

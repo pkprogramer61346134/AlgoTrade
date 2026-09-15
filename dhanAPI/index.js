@@ -44,9 +44,14 @@ class DhanClient {
         const url = `${this.baseUrl}${endpoint}`;
         const headers = { ...this.getHeaders(), ...(options.headers || {}) };
 
+        const controller = new AbortController();
+        const timeoutMs = options.timeoutMs || 10000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
         const config = {
             method: options.method || 'GET',
             headers: headers,
+            signal: controller.signal
         };
 
         if (options.body) {
@@ -55,6 +60,7 @@ class DhanClient {
 
         try {
             const response = await fetch(url, config);
+            clearTimeout(timeoutId);
             const data = await response.json();
 
             if (!response.ok) {
@@ -83,6 +89,10 @@ class DhanClient {
 
             return { status: 'success', statusCode: response.status, data: data };
         } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                return { status: 'error', message: `Dhan API request timed out (${timeoutMs}ms)` };
+            }
             return { status: 'error', message: error.message || 'Network error' };
         }
     }
