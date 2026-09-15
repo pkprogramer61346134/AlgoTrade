@@ -141,9 +141,20 @@ async function syncTodayCandlesFromDhan() {
 // Periodic Live Market Quote Updater & Strategy Evaluator (Every 2s from Dhan API)
 setInterval(async () => {
     try {
+        let liveOptionLtp = null;
+
         if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
-            const res = await dhan.marketData.getMarketQuote({ IDX_I: [13, 25] });
-            const segData = res?.data?.data?.IDX_I || res?.data?.data?.data?.IDX_I || res?.data?.IDX_I || {};
+            const reqBody = { IDX_I: [13, 25] };
+            if (orderManager.activeOrder && orderManager.activeOrder.securityId) {
+                const secIdNum = Number(orderManager.activeOrder.securityId);
+                if (!isNaN(secIdNum) && secIdNum > 0) {
+                    reqBody.NSE_FNO = [secIdNum];
+                }
+            }
+
+            const res = await dhan.marketData.getMarketQuote(reqBody);
+            const rootData = res?.data?.data || res?.data || {};
+            const segData = rootData.IDX_I || {};
             const sec13 = segData[13] || segData["13"] || {};
             const sec25 = segData[25] || segData["25"] || {};
             const liveLtp = sec13.last_price || sec13.lastPrice || sec13.LTP;
@@ -157,6 +168,18 @@ setInterval(async () => {
             if (bankPrevClose) liveState.bankNiftyPrevClose = Number(bankPrevClose);
             if (bankOpen) liveState.bankNiftyOpen = Number(bankOpen);
             if (bankChange !== undefined) liveState.bankNiftyNetChange = Number(bankChange);
+
+            // Extract Live Option Premium LTP directly from Dhan FNO Feed
+            if (orderManager.activeOrder && orderManager.activeOrder.securityId) {
+                const fnoData = rootData.NSE_FNO || {};
+                const optObj = fnoData[orderManager.activeOrder.securityId] || fnoData[String(orderManager.activeOrder.securityId)];
+                if (optObj) {
+                    const price = optObj.last_price || optObj.lastPrice || optObj.LTP;
+                    if (price && price > 0) {
+                        liveOptionLtp = Number(price);
+                    }
+                }
+            }
         }
 
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
@@ -172,9 +195,9 @@ setInterval(async () => {
         const spot = liveState.niftySpotPrice;
 
         // ==================== 1. STRICT 2-WAY HANDSHAKE POSITION MONITORING ====================
-        // If an active position exists in Order Manager, SCANNING IS LOCKED! Monitor active position live.
+        // If an active position exists in Order Manager, SCANNING IS LOCKED! Monitor active position live with Dhan Real-Time Premium.
         if (orderManager.isPositionActive()) {
-            const posUpdate = orderManager.monitorActivePosition(spot);
+            const posUpdate = orderManager.monitorActivePosition(spot, liveOptionLtp);
             if (posUpdate && posUpdate.status === "POSITION_CLOSED") {
                 liveState.liveEngineLogs.unshift({
                     time: timeStr,
@@ -197,6 +220,22 @@ setInterval(async () => {
                 });
             }
             return; // EXIT LOOP EARLY - NO NEW SIGNALS PROCESSED WHILE POSITION IS OPEN!
+        }
+
+        // 2-Way Handshake Limit Check: If Order Manager has locked trading (Max Trades/Loss limit reached), PAUSE Master Head Signal Engine!
+        const dailyLimitCheck = orderManager.isDailyLimitReached();
+        if (dailyLimitCheck.limitReached) {
+            liveState.liveEngineLogs.unshift({
+                time: timeStr,
+                spotPrice: spot,
+                status: "LIMIT_REACHED",
+                reasoning: `⛔ 2-WAY HANDSHAKE LOCK: ${dailyLimitCheck.reason}. Master Head Signal Engine PAUSED to protect capital.`,
+                strategyId: "consensus_master_head",
+                strategyName: "Order Execution Manager",
+                orderSwitch: liveState.orderSwitchOn ? "ON (Trading Paused)" : "OFF (Signal Alert Only)"
+            });
+            if (liveState.liveEngineLogs.length > 50) liveState.liveEngineLogs.pop();
+            return; // EXIT LOOP EARLY - DO NOT GENERATE OR OUTPUT SIGNALS WHEN RISK LIMIT IS HIT!
         }
 
         const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
@@ -298,7 +337,8 @@ setInterval(async () => {
             };
 
             const lastSignal = liveState.liveSignals[0];
-            if (!lastSignal || lastSignal.signalType !== status || (Date.now() - (lastSignal.timestamp || 0)) > 60000) {
+            const signalCooldownMs = 10000; // 10s cooldown for fresh signal execution after position close
+            if (!lastSignal || lastSignal.signalType !== status || (Date.now() - (lastSignal.timestamp || 0)) > signalCooldownMs) {
                 liveState.liveSignals.unshift(newSignal);
                 if (liveState.liveSignals.length > 20) liveState.liveSignals.pop();
 

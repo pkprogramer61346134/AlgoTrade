@@ -132,12 +132,18 @@ class OrderExecutionManager {
         return NIFTY_LOT_SIZE;
     }
 
-    getATMStrike(spotPrice = 23400) {
-        return Math.round(spotPrice / 50) * 50;
+    getATMStrike(spotPrice = 23400, optionType = "CE") {
+        if (optionType === "PE") {
+            // For Put Options (SELL_SIGNAL), round UP to get ATM/Slight ITM Strike (e.g. 23266.9 -> 23300-PE)
+            return Math.ceil(spotPrice / 50) * 50;
+        } else {
+            // For Call Options (BUY_SIGNAL), round DOWN to get ATM/Slight ITM Strike (e.g. 23266.9 -> 23250-CE)
+            return Math.floor(spotPrice / 50) * 50;
+        }
     }
 
     async resolveOptionContractFromDhan(spotPrice = 23400, optionType = "CE", availableCapital = 10000) {
-        const atmStrike = this.getATMStrike(spotPrice);
+        const atmStrike = this.getATMStrike(spotPrice, optionType);
         const maxAffordablePremium = Math.max(10, Math.floor(availableCapital / 65));
 
         try {
@@ -200,6 +206,38 @@ class OrderExecutionManager {
         };
     }
 
+    isDailyLimitReached() {
+        this.config = this.loadConfig();
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const journal = this.getJournalData();
+        const todayTrades = journal.filter(t => t.date === todayStr);
+
+        const maxTrades = this.config.paperTrading?.maxTradesPerDay || this.config.riskManagement?.maxTradesPerDay || this.config.maxTradesPerDay || 4;
+        if (todayTrades.length >= maxTrades) {
+            return { limitReached: true, reason: `Daily Trade Limit (${todayTrades.length}/${maxTrades}) reached for today (${todayStr})` };
+        }
+
+        const maxLoss = this.config.riskManagement?.maxLossPerDay || 5000;
+        const todayPnL = todayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
+        if (todayPnL <= -maxLoss) {
+            return { limitReached: true, reason: `Daily Max Loss Limit (₹${todayPnL} / -₹${maxLoss}) reached` };
+        }
+
+        return { limitReached: false };
+    }
+
+    getJournalData() {
+        try {
+            this.ensureJournalStorage();
+            if (fs.existsSync(JOURNAL_FILE)) {
+                const raw = fs.readFileSync(JOURNAL_FILE, 'utf-8');
+                const data = JSON.parse(raw);
+                return Array.isArray(data) ? data : [];
+            }
+        } catch (e) {}
+        return [];
+    }
+
     async executeOrder(signal, currentSpotPrice = 23400, totalCapital = null) {
         this.config = this.loadConfig();
         const mode = this.config.executionMode || "PAPER";
@@ -210,13 +248,31 @@ class OrderExecutionManager {
             return { status: "rejected", message: "Active position currently open. Handshake lock engaged." };
         }
 
+        // Enforce Daily Risk Limits (maxTradesPerDay & maxLossPerDay)
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const journal = this.getJournalData();
+        const todayTrades = journal.filter(t => t.date === todayStr);
+
+        const maxTrades = this.config.paperTrading?.maxTradesPerDay || this.config.riskManagement?.maxTradesPerDay || this.config.maxTradesPerDay || 4;
+        if (todayTrades.length >= maxTrades) {
+            console.log(`⚠️ Risk Limit Exceeded: Daily Trade Limit (${todayTrades.length}/${maxTrades}) reached for today (${todayStr}). Order Manager rejected order.`);
+            return { status: "rejected", message: `Daily trade limit (${maxTrades}) reached for today.` };
+        }
+
+        const maxLoss = this.config.riskManagement?.maxLossPerDay || 5000;
+        const todayPnL = todayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
+        if (todayPnL <= -maxLoss) {
+            console.log(`⚠️ Risk Limit Exceeded: Daily Max Loss Limit (₹${todayPnL} / -₹${maxLoss}) hit for today. Trading locked.`);
+            return { status: "rejected", message: `Daily max loss limit (₹${maxLoss}) reached.` };
+        }
+
         const spotPrice = signal.spotPrice || signal.entryPrice || currentSpotPrice;
         const optionType = (signal.type === "BUY_SIGNAL" || signal.type === "BUY" || signal.signalType === "BUY_SIGNAL") ? "CE" : "PE";
         
         let contractDetails;
         if (signal.entryPremium || signal.optionPremium || signal.price) {
             const premVal = Number(signal.entryPremium || signal.optionPremium || signal.price);
-            const atmStrike = signal.atmStrike || this.getATMStrike(spotPrice);
+            const atmStrike = signal.atmStrike || this.getATMStrike(spotPrice, optionType);
             contractDetails = {
                 strike: atmStrike,
                 tradingSymbol: signal.optionSymbol || `NIFTY-2026-09-15-${atmStrike}-${optionType}`,
@@ -403,10 +459,12 @@ class OrderExecutionManager {
 
         const pos = this.activeOrder;
         
-        // Estimate live option premium if not directly streamed:
-        // Option premium moves ~0.50 delta relative to Spot movement
+        // 1. Use Direct Real-Time Live Option Premium from Dhan Market API:
         let currentPremium = liveOptionPremium;
-        if (!currentPremium || currentPremium <= 0) {
+        if (currentPremium && currentPremium > 0) {
+            currentPremium = Number(currentPremium.toFixed(2));
+        } else {
+            // Fallback estimation only if Dhan API feed is offline/rate-limited
             const spotMove = currentSpotPrice - pos.spotEntryPrice;
             const deltaMove = pos.optionType === "CE" ? (spotMove * 0.50) : (-spotMove * 0.50);
             currentPremium = Math.max(0.5, Number((pos.optionPremiumPrice + deltaMove).toFixed(2)));
@@ -496,6 +554,11 @@ class OrderExecutionManager {
         const totalPnL = Number((ptsPnL * pos.quantity).toFixed(2));
         const isWin = ptsPnL > 0;
 
+        let actualExitReason = reason;
+        if (ptsPnL < 0 && actualExitReason.includes("TARGET")) {
+            actualExitReason = pos.t1Reached ? "TRAILED_SL_HIT" : "SL_HIT";
+        }
+
         const closedTradeRecord = {
             id: `TRD_${Date.now()}`,
             orderId: pos.orderId,
@@ -519,7 +582,7 @@ class OrderExecutionManager {
             result: isWin ? (pos.t1Reached ? "T1_TRAILED_WIN" : "WIN") : "LOSS",
             pointsPnL: ptsPnL,
             pnl: totalPnL,
-            exitReason: reason,
+            exitReason: actualExitReason,
             durationSec: Math.round((Date.now() - (pos.startTimestamp || Date.now())) / 1000)
         };
 

@@ -20,10 +20,10 @@ function base32ToBuffer(base32Str) {
     return Buffer.from(bytes);
 }
 
-function generateTOTP(secretBase32, timeStepSeconds = 30) {
+function generateTOTP(secretBase32, timeStepSeconds = 30, timeOffsetSeconds = 0) {
     if (!secretBase32) throw new Error("Secret key is required");
     const key = base32ToBuffer(secretBase32);
-    const epoch = Math.floor(Date.now() / 1000);
+    const epoch = Math.floor((Date.now() / 1000) + timeOffsetSeconds);
     const timeStep = Math.floor(epoch / timeStepSeconds);
 
     const buffer = Buffer.alloc(8);

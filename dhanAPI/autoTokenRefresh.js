@@ -45,8 +45,15 @@ async function autoRefreshDhanToken() {
     }
 
     // ---------------------------------------------------------
-    // 1. Generate current TOTP
+    // 1. Generate current TOTP (Avoid window boundary race condition)
     // ---------------------------------------------------------
+
+    let epochSeconds = Math.floor(Date.now() / 1000);
+    let remainingSeconds = 30 - (epochSeconds % 30);
+    if (remainingSeconds < 4) {
+        console.log(`⏳ Near TOTP window boundary (${remainingSeconds}s remaining). Waiting ${remainingSeconds + 1}s for fresh window...`);
+        await new Promise(res => setTimeout(res, (remainingSeconds + 1) * 1000));
+    }
 
     const liveTOTP = generateTOTP(totpSecret);
 
@@ -54,8 +61,25 @@ async function autoRefreshDhanToken() {
         `📌 Generated Live 6-Digit TOTP Code: ${liveTOTP} (Valid for ~30s)`
     );
 
+    // Helper function for Auth API POST
+    async function requestToken(totpCode) {
+        const url = new URL("https://auth.dhan.co/app/generateAccessToken");
+        url.searchParams.set("dhanClientId", dhanClientId);
+        url.searchParams.set("pin", pin);
+        url.searchParams.set("totp", totpCode);
+
+        const response = await fetch(url.toString(), {
+            method: "POST",
+            headers: { "Accept": "application/json" }
+        });
+        const responseText = await response.text();
+        let resData;
+        try { resData = JSON.parse(responseText); } catch { resData = { raw: responseText }; }
+        return { ok: response.ok, status: response.status, data: resData };
+    }
+
     // ---------------------------------------------------------
-    // 2. Generate Dhan Access Token
+    // 2. Generate Dhan Access Token (With Clock Drift Fallback)
     // ---------------------------------------------------------
 
     try {
@@ -63,47 +87,41 @@ async function autoRefreshDhanToken() {
             `📡 Requesting Dhan Access Token for Client ID ${dhanClientId}...`
         );
 
-        const url = new URL(
-            "https://auth.dhan.co/app/generateAccessToken"
-        );
+        let result = await requestToken(liveTOTP);
 
-        url.searchParams.set("dhanClientId", dhanClientId);
-        url.searchParams.set("pin", pin);
-        url.searchParams.set("totp", liveTOTP);
+        // If Invalid TOTP returned, try clock drift offsets (-30s, +30s)
+        if (result.data?.message === "Invalid TOTP" || result.data?.status === "error" && result.data?.message?.includes("TOTP")) {
+            console.warn("⚠️ Initial TOTP was rejected by Dhan. Checking clock drift offsets (-30s, +30s)...");
+            const prevTOTP = generateTOTP(totpSecret, 30, -30);
+            const nextTOTP = generateTOTP(totpSecret, 30, 30);
 
-        const response = await fetch(url.toString(), {
-            method: "POST",
-            headers: {
-                "Accept": "application/json"
+            let retryResult = await requestToken(prevTOTP);
+            if (retryResult.data?.accessToken) {
+                result = retryResult;
+            } else {
+                retryResult = await requestToken(nextTOTP);
+                if (retryResult.data?.accessToken) {
+                    result = retryResult;
+                }
             }
-        });
-
-        const responseText = await response.text();
-
-        let resData;
-
-        try {
-            resData = JSON.parse(responseText);
-        } catch {
-            console.error("❌ Dhan returned non-JSON response:");
-            console.error(responseText);
-            return { status: "invalid_response" };
         }
 
-        console.log(`📡 Dhan HTTP Status: ${response.status}`);
+        const resData = result.data;
+        const responseOk = result.ok;
+        const responseStatus = result.status;
 
         // ---------------------------------------------------------
         // 3. Check API response
         // ---------------------------------------------------------
 
-        if (!response.ok) {
+        if (!responseOk) {
             console.error(
                 `❌ Dhan Token Generation Failed: ${JSON.stringify(resData)}`
             );
 
             return {
                 status: "failed",
-                httpStatus: response.status,
+                httpStatus: responseStatus,
                 response: resData
             };
         }

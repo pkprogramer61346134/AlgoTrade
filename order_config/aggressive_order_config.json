@@ -26,5 +26,5 @@
     "maxLossPerDay": 5000
   },
   "riskRewardRatio": 3,
-  "orderSwitchOn": false
+  "orderSwitchOn": true
 }
