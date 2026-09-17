@@ -214,8 +214,25 @@ setInterval(async () => {
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-        // ==================== 0. MARKET HOURS CHECK (9:15 AM - 3:30 PM IST) ====================
+        // ==================== 0. MARKET HOURS CHECK & EOD AUTO SQUARE-OFF ====================
         if (!isIndianMarketOpen()) {
+            // EOD Auto Square-Off Protection: If position is still ACTIVE when market closes, auto square-off & save to journal
+            if (orderManager.isPositionActive()) {
+                const exitPrice = liveOptionLtp || orderManager.activeOrder.currentPremium || orderManager.activeOrder.optionPremiumPrice;
+                const spotExit = liveState.niftySpotPrice || orderManager.activeOrder.spotEntryPrice;
+                const posClose = orderManager.closeActivePosition("EOD_MARKET_CLOSE", exitPrice, spotExit, timeStr);
+                if (posClose) {
+                    liveState.liveEngineLogs.unshift({
+                        time: timeStr,
+                        spotPrice: spotExit,
+                        status: "POSITION_CLOSED",
+                        reasoning: `🌙 EOD MARKET CLOSE AUTO SQUARE-OFF: Position #${posClose.trade.orderId} squared off at 3:30 PM market close. PnL: ₹${posClose.trade.pnl}. Saved to journal.`,
+                        strategyId: "consensus_master_head",
+                        strategyName: "Order Execution Manager",
+                        orderSwitch: liveState.orderSwitchOn ? "ON" : "OFF"
+                    });
+                }
+            }
             liveState.liveEngineLogs.unshift({
                 time: timeStr,
                 spotPrice: liveState.niftySpotPrice,

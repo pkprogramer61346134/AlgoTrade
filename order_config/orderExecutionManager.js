@@ -528,12 +528,20 @@ class OrderExecutionManager {
             };
         }
 
-        // ==================== 2. EXIT EVALUATION (T2 HIT, SL HIT, TRAILED SL HIT) ====================
+        // ==================== 2. EXIT EVALUATION (T2 HIT, SL HIT, TRAILED SL HIT, EOD 3:15 PM) ====================
         let exitTriggered = false;
         let exitReason = "";
         let exitPrice = currentPremium;
 
-        if (pos.t1Reached && currentPremium >= pos.target2) {
+        // EOD Auto Square-Off Check (3:15 PM IST = 915 mins from midnight)
+        const nowKolkata = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+        const totalMins = nowKolkata.getHours() * 60 + nowKolkata.getMinutes();
+
+        if (totalMins >= 915) {
+            exitTriggered = true;
+            exitReason = "EOD_MARKET_CLOSE";
+            exitPrice = currentPremium;
+        } else if (pos.t1Reached && currentPremium >= pos.target2) {
             exitTriggered = true;
             exitReason = "TARGET_2_HIT";
             exitPrice = pos.target2;
