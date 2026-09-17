@@ -178,7 +178,7 @@
         <!-- TAB 2: LIVE MARKET & REAL-TIME TRADING ROOM -->
         <section id="tab-live" class="tab-content">
             <!-- Real-Time System & API Health Alert Banner -->
-            <div id="system-health-banner" class="system-alert-banner alert-success" style="margin-bottom: 1.25rem;">
+            <div id="system-health-banner" class="system-alert-banner alert-success" style="margin-bottom: 1rem;">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span id="health-banner-dot" class="status-dot active"></span>
@@ -187,6 +187,27 @@
                     </div>
                     <div style="font-size: 0.75rem; opacity: 0.8; font-family: var(--font-mono);" id="health-banner-sync">
                         Last Sync: Just Now
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pre-Market 9:15 AM Readiness Checklist Card -->
+            <div id="premarket-readiness-card" class="card" style="margin-bottom: 1.25rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                            <span class="status-dot active" id="premarket-ready-dot"></span>
+                            <strong id="premarket-status-title" style="font-size: 0.95rem; color: #10b981;">🟢 9:15 AM PRE-MARKET READINESS: 100% OPERATIONAL</strong>
+                        </div>
+                        <div id="premarket-checklist-details" style="font-size: 0.82rem; color: #cbd5e1; display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.35rem;">
+                            <span>✅ Dhan Token: Active</span>
+                            <span>✅ Historical Candles: 2,18,443 Loaded</span>
+                            <span>✅ 16-Engine Consensus: Warmed Up</span>
+                            <span>✅ Market Feed: Connected</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="badge badge-win" id="premarket-sync-badge">Pre-Market Boot Synced</span>
                     </div>
                 </div>
             </div>

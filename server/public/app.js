@@ -326,6 +326,41 @@ async function fetchLiveStatus() {
                 if (tokenSubCard) tokenSubCard.innerText = 'Auto-Refresh TOTP Active';
             }
 
+            // Update Pre-Market 9:15 AM Readiness Checklist UI
+            if (data.preMarketReadiness) {
+                const pm = data.preMarketReadiness;
+                const pmTitle = document.getElementById('premarket-status-title');
+                const pmDetails = document.getElementById('premarket-checklist-details');
+                const pmBadge = document.getElementById('premarket-sync-badge');
+                const pmDot = document.getElementById('premarket-ready-dot');
+
+                if (pm.isReady) {
+                    if (pmTitle) {
+                        pmTitle.innerText = pm.statusText || '🟢 9:15 AM PRE-MARKET READINESS: 100% OPERATIONAL';
+                        pmTitle.style.color = '#10b981';
+                    }
+                    if (pmDot) pmDot.className = 'status-dot active';
+                    if (pmBadge) {
+                        pmBadge.innerText = `Synced at ${pm.lastSyncTime || '08:45 AM'}`;
+                        pmBadge.className = 'badge badge-win';
+                    }
+                } else {
+                    if (pmTitle) {
+                        pmTitle.innerText = pm.statusText || '⚠️ PRE-MARKET SYNCING...';
+                        pmTitle.style.color = '#ffea00';
+                    }
+                    if (pmDot) pmDot.className = 'status-dot warning';
+                    if (pmBadge) {
+                        pmBadge.innerText = 'Syncing...';
+                        pmBadge.className = 'badge badge-info';
+                    }
+                }
+
+                if (pmDetails && Array.isArray(pm.checklist) && pm.checklist.length > 0) {
+                    pmDetails.innerHTML = pm.checklist.map(item => `<span>${item}</span>`).join('');
+                }
+            }
+
             if (document.getElementById('live-nifty-spot')) {
                 document.getElementById('live-nifty-spot').innerText = `₹${data.niftySpotPrice.toLocaleString()}`;
             }

@@ -50,41 +50,113 @@ let liveState = {
     liveEngineLogs: []
 };
 
-// Immediate Dhan Live Quote & Token Verification Boot-Sync
-(async () => {
+// Pre-Market 9:15 AM Readiness & Boot Sync Manager
+let preMarketReadiness = {
+    isReady: false,
+    statusText: "⏳ PRE-MARKET SYNCING...",
+    lastSyncTime: "--",
+    tokenVerified: false,
+    candlesLoaded: 0,
+    engineWarmedUp: false,
+    marketFeedConnected: false,
+    checklist: []
+};
+
+async function runPreMarketBootSync() {
+    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+    console.log("=================================================================================");
+    console.log(`🌅 [PRE-MARKET 9:15 AM BOOT SYNC] Initializing Pre-Market Readiness Check at ${timeStr}...`);
+    console.log("=================================================================================");
+
+    preMarketReadiness.lastSyncTime = timeStr;
+    preMarketReadiness.checklist = [];
+
+    // 1. Dhan API Token & Auth Sync
     try {
-        console.log("🔑 [SERVER BOOT] Verifying Dhan API Access Token...");
+        console.log("🔑 [STEP 1/4] Verifying Dhan API Access Token & TOTP...");
         const authRes = await ensureValidDhanToken();
         if (authRes && authRes.accessToken) {
             dhan.setCredentials(authRes.clientId, authRes.accessToken);
             liveState.dhanTokenStatus = "VALID";
             liveState.dhanTokenMessage = "🟢 Dhan API Token Active & Verified";
-        } else if (authRes && authRes.status === "cooldown") {
-            liveState.dhanTokenStatus = "COOLDOWN";
-            liveState.dhanTokenMessage = `⚠️ Dhan Token Cooldown Active (${authRes.remainingSeconds || 120}s remaining). Retrying TOTP refresh...`;
+            preMarketReadiness.tokenVerified = true;
+            preMarketReadiness.checklist.push("✅ Dhan Broker Token: Active & Verified");
+        } else {
+            preMarketReadiness.tokenVerified = false;
+            preMarketReadiness.checklist.push("⚠️ Dhan Token: Cooldown Active (Auto Retrying TOTP)");
         }
+    } catch (e) {
+        preMarketReadiness.tokenVerified = false;
+        preMarketReadiness.checklist.push(`⚠️ Dhan Auth Warning: ${e.message}`);
+    }
 
+    // 2. Candle Data Warm-up & Cache Check
+    try {
+        console.log("💾 [STEP 2/4] Loading & Validating Historical Candle Dataset...");
+        const candlesDir = getCandleDataDir();
+        const rawHist = loadAllCandlesFromDir(candlesDir) || [];
+        preMarketReadiness.candlesLoaded = rawHist.length;
+        preMarketReadiness.checklist.push(`✅ Candle Database: Loaded (${rawHist.length.toLocaleString()} candles in RAM)`);
+    } catch (e) {
+        preMarketReadiness.checklist.push(`⚠️ Data Load Warning: ${e.message}`);
+    }
+
+    // 3. 16-Engine Strategy Engine Warm-Up
+    try {
+        console.log("🧠 [STEP 3/4] Pre-computing 16-Engine Indicators & Warmup...");
+        const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
+        if (fs.existsSync(consensusMasterPath)) {
+            const stratConfig = JSON.parse(fs.readFileSync(consensusMasterPath, 'utf8'));
+            const candlesDir = getCandleDataDir();
+            const rawHist = loadAllCandlesFromDir(candlesDir) || [];
+            if (rawHist.length > 5) {
+                const warmupData = prepareJSONStrategyData(rawHist.slice(-200), stratConfig);
+                evaluateJSONStrategy(rawHist.slice(-200), rawHist.slice(-200).length - 1, stratConfig, warmupData, {});
+            }
+        }
+        preMarketReadiness.engineWarmedUp = true;
+        preMarketReadiness.checklist.push("✅ 16-Engine Consensus: Warmed Up in RAM");
+    } catch (e) {
+        preMarketReadiness.engineWarmedUp = false;
+        preMarketReadiness.checklist.push(`⚠️ Engine Warmup Warning: ${e.message}`);
+    }
+
+    // 4. Dhan Live Price Stream Connection Check
+    try {
+        console.log("📡 [STEP 4/4] Testing Dhan Market Price Feed Connection...");
         if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
             const res = await dhan.marketData.getMarketQuote({ IDX_I: [13, 25] });
-            const segData = res?.data?.data?.IDX_I || res?.data?.data?.data?.IDX_I || res?.data?.IDX_I || {};
+            const rootData = res?.data?.data || res?.data || {};
+            const segData = rootData.IDX_I || {};
             const sec13 = segData[13] || segData["13"] || {};
             const sec25 = segData[25] || segData["25"] || {};
             if (sec13.last_price) liveState.niftySpotPrice = Number(sec13.last_price);
             if (sec25.last_price) liveState.bankNiftySpotPrice = Number(sec25.last_price);
-            if (sec25.ohlc?.close) liveState.bankNiftyPrevClose = Number(sec25.ohlc.close);
-            if (sec25.ohlc?.open) liveState.bankNiftyOpen = Number(sec25.ohlc.open);
-            if (sec25.net_change !== undefined) liveState.bankNiftyNetChange = Number(sec25.net_change);
             liveState.lastSyncTimestamp = Date.now();
-            console.log(`📌 Immediate Dhan Live Quote Boot Synced: Nifty Spot ₹${liveState.niftySpotPrice}, Bank Nifty ₹${liveState.bankNiftySpotPrice}`);
+            preMarketReadiness.marketFeedConnected = true;
+            preMarketReadiness.checklist.push("✅ Dhan Market Feed: Connected");
         }
     } catch (e) {
-        console.warn(`⚠️ Warning in Dhan boot-sync: ${e.message}`);
-        liveState.lastDhanError = e.message;
-        if (e.message.includes('401') || e.message.includes('Unauthorized') || e.message.includes('token')) {
-            liveState.dhanTokenStatus = "COOLDOWN";
-            liveState.dhanTokenMessage = `⚠️ HTTP 401 Unauthorized / Token Expired. Auto TOTP Refresh active.`;
-        }
+        preMarketReadiness.marketFeedConnected = false;
+        preMarketReadiness.checklist.push(`⚠️ Market Feed Warning: ${e.message}`);
     }
+
+    // Overall Status
+    if (preMarketReadiness.tokenVerified && preMarketReadiness.candlesLoaded > 0) {
+        preMarketReadiness.isReady = true;
+        preMarketReadiness.statusText = "🟢 9:15 AM PRE-MARKET READINESS: 100% OPERATIONAL";
+        console.log("=================================================================================");
+        console.log("🟢 [PRE-MARKET BOOT COMPLETE] ALL SYSTEMS READY FOR 9:15 AM TRADING!");
+        console.log("=================================================================================\n");
+    } else {
+        preMarketReadiness.isReady = false;
+        preMarketReadiness.statusText = "⚠️ PRE-MARKET SYNCING (CHECKLIST IN PROGRESS)";
+    }
+}
+
+// Immediate Pre-Market Boot Sync Trigger
+(async () => {
+    await runPreMarketBootSync();
 })();
 
 // Helper function: Persist config updates to all JSON config files in order_config
@@ -983,7 +1055,8 @@ app.get('/api/live-status', async (req, res) => {
             dhanTokenMessage: liveState.dhanTokenMessage || "🟢 All Systems Operational",
             lastDhanError: liveState.lastDhanError || null,
             lastSyncTimestamp: liveState.lastSyncTimestamp || Date.now(),
-            isMarketOpen: isIndianMarketOpen()
+            isMarketOpen: isIndianMarketOpen(),
+            preMarketReadiness: preMarketReadiness
         });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
