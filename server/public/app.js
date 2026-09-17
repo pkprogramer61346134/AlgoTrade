@@ -281,6 +281,51 @@ async function fetchLiveStatus() {
         const data = await res.json();
 
         if (data.status === 'success') {
+            // Update System Health Alert Banner & Dhan Token Status Card
+            const banner = document.getElementById('system-health-banner');
+            const bDot = document.getElementById('health-banner-dot');
+            const bTitle = document.getElementById('health-banner-title');
+            const bText = document.getElementById('health-banner-text');
+            const bSync = document.getElementById('health-banner-sync');
+
+            const tokenValCard = document.getElementById('live-token-status');
+            const tokenSubCard = document.getElementById('live-token-subtext');
+
+            const syncTimeStr = new Date(data.lastSyncTimestamp || Date.now()).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+            if (bSync) bSync.innerText = `Last Sync: ${syncTimeStr}`;
+
+            if (data.dhanTokenStatus === 'COOLDOWN') {
+                if (banner) banner.className = 'system-alert-banner alert-warning';
+                if (bDot) bDot.className = 'status-dot warning';
+                if (bTitle) bTitle.innerText = '⚠️ DHAN API TOKEN RATE-LIMIT COOLDOWN (HTTP 401)';
+                if (bText) bText.innerText = data.dhanTokenMessage || 'API Rate Limit active. Automatic TOTP refresh will retry shortly.';
+                if (tokenValCard) {
+                    tokenValCard.innerText = '⚠️ COOLDOWN';
+                    tokenValCard.style.color = '#ffea00';
+                }
+                if (tokenSubCard) tokenSubCard.innerText = 'HTTP 401 Rate Limited';
+            } else if (data.dhanTokenStatus === 'EXPIRED' || data.dhanTokenStatus === 'ERROR') {
+                if (banner) banner.className = 'system-alert-banner alert-danger';
+                if (bDot) bDot.className = 'status-dot inactive';
+                if (bTitle) bTitle.innerText = '🔴 SYSTEM API ERROR ALERT';
+                if (bText) bText.innerText = data.dhanTokenMessage || data.lastDhanError || 'API token error detected.';
+                if (tokenValCard) {
+                    tokenValCard.innerText = '🔴 ERROR';
+                    tokenValCard.style.color = 'var(--danger)';
+                }
+                if (tokenSubCard) tokenSubCard.innerText = data.lastDhanError || 'Authentication Error';
+            } else {
+                if (banner) banner.className = 'system-alert-banner alert-success';
+                if (bDot) bDot.className = 'status-dot active';
+                if (bTitle) bTitle.innerText = '🟢 ALL SYSTEMS OPERATIONAL';
+                if (bText) bText.innerText = 'Dhan Broker API Token Active & Live Market Feed Connected.';
+                if (tokenValCard) {
+                    tokenValCard.innerText = '🟢 VALID';
+                    tokenValCard.style.color = 'var(--success)';
+                }
+                if (tokenSubCard) tokenSubCard.innerText = 'Auto-Refresh TOTP Active';
+            }
+
             if (document.getElementById('live-nifty-spot')) {
                 document.getElementById('live-nifty-spot').innerText = `₹${data.niftySpotPrice.toLocaleString()}`;
             }

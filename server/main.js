@@ -40,6 +40,10 @@ let liveState = {
     bankNiftyNetChange: 0,
     livePCR: 1.15,
     webSocketConnected: true,
+    dhanTokenStatus: "VALID", // "VALID", "COOLDOWN", "EXPIRED", "ERROR"
+    dhanTokenMessage: "🟢 Dhan API Token Active & Connected",
+    lastDhanError: null,
+    lastSyncTimestamp: Date.now(),
     liveSignals: [],
     activeOrders: [],
     tradeHistory: [],
@@ -53,6 +57,11 @@ let liveState = {
         const authRes = await ensureValidDhanToken();
         if (authRes && authRes.accessToken) {
             dhan.setCredentials(authRes.clientId, authRes.accessToken);
+            liveState.dhanTokenStatus = "VALID";
+            liveState.dhanTokenMessage = "🟢 Dhan API Token Active & Verified";
+        } else if (authRes && authRes.status === "cooldown") {
+            liveState.dhanTokenStatus = "COOLDOWN";
+            liveState.dhanTokenMessage = `⚠️ Dhan Token Cooldown Active (${authRes.remainingSeconds || 120}s remaining). Retrying TOTP refresh...`;
         }
 
         if (dhan.marketData && typeof dhan.marketData.getMarketQuote === 'function') {
@@ -65,10 +74,16 @@ let liveState = {
             if (sec25.ohlc?.close) liveState.bankNiftyPrevClose = Number(sec25.ohlc.close);
             if (sec25.ohlc?.open) liveState.bankNiftyOpen = Number(sec25.ohlc.open);
             if (sec25.net_change !== undefined) liveState.bankNiftyNetChange = Number(sec25.net_change);
+            liveState.lastSyncTimestamp = Date.now();
             console.log(`📌 Immediate Dhan Live Quote Boot Synced: Nifty Spot ₹${liveState.niftySpotPrice}, Bank Nifty ₹${liveState.bankNiftySpotPrice}`);
         }
     } catch (e) {
         console.warn(`⚠️ Warning in Dhan boot-sync: ${e.message}`);
+        liveState.lastDhanError = e.message;
+        if (e.message.includes('401') || e.message.includes('Unauthorized') || e.message.includes('token')) {
+            liveState.dhanTokenStatus = "COOLDOWN";
+            liveState.dhanTokenMessage = `⚠️ HTTP 401 Unauthorized / Token Expired. Auto TOTP Refresh active.`;
+        }
     }
 })();
 
@@ -197,6 +212,12 @@ setInterval(async () => {
             if (bankPrevClose) liveState.bankNiftyPrevClose = Number(bankPrevClose);
             if (bankOpen) liveState.bankNiftyOpen = Number(bankOpen);
             if (bankChange !== undefined) liveState.bankNiftyNetChange = Number(bankChange);
+
+            if (liveLtp || bankLtp) {
+                liveState.lastSyncTimestamp = Date.now();
+                liveState.dhanTokenStatus = "VALID";
+                liveState.dhanTokenMessage = "🟢 Dhan API Token Active & Live Market Feed Connected";
+            }
 
             // Extract Live Option Premium LTP directly from Dhan FNO Feed
             if (orderManager.activeOrder && orderManager.activeOrder.securityId) {
@@ -439,7 +460,16 @@ setInterval(async () => {
         });
 
         if (liveState.liveEngineLogs.length > 50) liveState.liveEngineLogs.pop();
-    } catch (e) {}
+    } catch (e) {
+        liveState.lastDhanError = e.message || String(e);
+        if (e.message && (e.message.includes('401') || e.message.includes('Unauthorized') || e.message.includes('Token') || e.message.includes('cooldown'))) {
+            liveState.dhanTokenStatus = "COOLDOWN";
+            liveState.dhanTokenMessage = `⚠️ Dhan API Rate-Limit Cooldown / HTTP 401 Unauthorized: ${e.message}`;
+        } else {
+            liveState.dhanTokenStatus = "ERROR";
+            liveState.dhanTokenMessage = `⚠️ System Engine Warning: ${e.message}`;
+        }
+    }
 }, 2000);
 
 // 1. GET /api/strategies - List active strategies
@@ -948,7 +978,12 @@ app.get('/api/live-status', async (req, res) => {
             activeOrder: orderManager.activeOrder,
             recentSignals: liveState.liveSignals.slice(-10),
             engineLogs: liveState.liveEngineLogs.slice(0, 15),
-            webSocketStatus: liveState.webSocketConnected ? "CONNECTED" : "DISCONNECTED"
+            webSocketStatus: liveState.webSocketConnected ? "CONNECTED" : "DISCONNECTED",
+            dhanTokenStatus: liveState.dhanTokenStatus || "VALID",
+            dhanTokenMessage: liveState.dhanTokenMessage || "🟢 All Systems Operational",
+            lastDhanError: liveState.lastDhanError || null,
+            lastSyncTimestamp: liveState.lastSyncTimestamp || Date.now(),
+            isMarketOpen: isIndianMarketOpen()
         });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });

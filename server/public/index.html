@@ -177,27 +177,46 @@
 
         <!-- TAB 2: LIVE MARKET & REAL-TIME TRADING ROOM -->
         <section id="tab-live" class="tab-content">
+            <!-- Real-Time System & API Health Alert Banner -->
+            <div id="system-health-banner" class="system-alert-banner alert-success" style="margin-bottom: 1.25rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span id="health-banner-dot" class="status-dot active"></span>
+                        <strong id="health-banner-title" style="font-size: 0.95rem;">🟢 ALL SYSTEMS OPERATIONAL</strong>
+                        <span id="health-banner-text" style="font-size: 0.85rem; opacity: 0.9;">Dhan Broker API Token Active & WebSocket Price Feed Connected.</span>
+                    </div>
+                    <div style="font-size: 0.75rem; opacity: 0.8; font-family: var(--font-mono);" id="health-banner-sync">
+                        Last Sync: Just Now
+                    </div>
+                </div>
+            </div>
+
             <!-- Live Status Grid -->
-            <div class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+            <div class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
                 <div class="card">
-                    <div class="card-title">NIFTY 50 Live Spot <span class="status-dot active"></span></div>
+                    <div class="card-title">NIFTY 50 Live Spot <span class="status-dot active" id="nifty-spot-dot"></span></div>
                     <div class="card-value cyan" id="live-nifty-spot">₹23,431.50</div>
-                    <div class="card-subtitle">Dhan API Real-Time Feed</div>
+                    <div class="card-subtitle" id="nifty-spot-subtext">Dhan API Real-Time Feed</div>
                 </div>
                 <div class="card">
-                    <div class="card-title">BANK NIFTY Live Spot <span class="status-dot active"></span></div>
+                    <div class="card-title">BANK NIFTY Live Spot <span class="status-dot active" id="banknifty-spot-dot"></span></div>
                     <div class="card-value purple" id="live-banknifty-spot" style="color: #c084fc;">₹51,200.00</div>
                     <div class="card-subtitle">12 Heavyweight Banks Monitored</div>
                 </div>
                 <div class="card">
                     <div class="card-title">Option Chain PCR</div>
                     <div class="card-value green" id="live-pcr">1.15</div>
-                    <div class="card-subtitle">Market Sentiment: Bullish Confirmation</div>
+                    <div class="card-subtitle">Market Sentiment: Bullish</div>
                 </div>
                 <div class="card">
                     <div class="card-title">Order Execution Switch</div>
                     <div class="card-value" id="live-switch-card-text" style="color: var(--danger);">🔴 OFF</div>
                     <div class="card-subtitle" id="live-switch-subtext">Signal Alert Mode Only</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Dhan API Token Status</div>
+                    <div class="card-value green" id="live-token-status" style="font-size: 1.3rem;">🟢 VALID</div>
+                    <div class="card-subtitle" id="live-token-subtext">Auto-Refresh TOTP Enabled</div>
                 </div>
                 <div class="card">
                     <div class="card-title">Live Account Capital</div>
