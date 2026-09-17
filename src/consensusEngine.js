@@ -4,10 +4,30 @@
  * Requires High-Conviction Majority Consensus (>= 11 out of 15 YES Votes) to execute trade.
  */
 
+function parseTimeToMins(tStr) {
+    if (!tStr) return 0;
+    let clean = String(tStr).toLowerCase().trim();
+    let isPM = clean.includes('pm');
+    let isAM = clean.includes('am');
+    clean = clean.replace('am', '').replace('pm', '').trim();
+    const parts = clean.split(':').map(Number);
+    let hrs = parts[0] || 0;
+    let mins = parts[1] || 0;
+    if (isPM && hrs < 12) hrs += 12;
+    if (isAM && hrs === 12) hrs = 0;
+    return hrs * 60 + mins;
+}
+
 function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCounts) {
     if (i < 3) return { type: "NONE" };
     const c = candles[i];
     if (!c.date) return { type: "NONE" };
+
+    // ORB Range Protection: 9:15 AM to 9:30 AM is morning range build window. Breakouts valid >= 9:30 AM (570 mins)
+    if (c.time) {
+        const mins = parseTimeToMins(c.time);
+        if (mins < 570) return { type: "NONE" };
+    }
 
     const maxTrades = strategyConfig.maxTradesPerDay || 4;
     if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
