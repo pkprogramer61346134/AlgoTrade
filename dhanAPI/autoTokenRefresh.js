@@ -14,6 +14,19 @@ async function autoRefreshDhanToken() {
 
     const timeSinceLastAttempt = Date.now() - lastTokenGenerationAttempt;
     if (timeSinceLastAttempt < 120000) {
+        try {
+            if (fs.existsSync(CONFIG_PATH)) {
+                delete require.cache[require.resolve('./config')];
+                const freshConfig = require('./config');
+                if (freshConfig && freshConfig.ACCESS_TOKEN) {
+                    return {
+                        status: "success",
+                        accessToken: freshConfig.ACCESS_TOKEN,
+                        clientId: freshConfig.CLIENT_ID
+                    };
+                }
+            }
+        } catch (e) {}
         const remainingSec = Math.ceil((120000 - timeSinceLastAttempt) / 1000);
         console.warn(`⏳ [DHAN AUTH COOLDOWN] Dhan API limits token generation to once every 2 minutes. Waiting ${remainingSec}s before retrying.`);
         return { status: "cooldown", remainingSeconds: remainingSec };
