@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { loadAllStrategiesFromJSON, CONFIG_DIR } = require('../src/strategyLoader');
-const { loadAllCandlesFromDir } = require('../indicators/utils/dataLoader');
+const { loadAllCandlesFromDir, getCandleDataDir } = require('../indicators/utils/dataLoader');
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('../src/dynamicStrategyEngine');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
 const { DhanSDK, ensureValidDhanToken } = require('../dhanAPI/index');
@@ -340,7 +340,7 @@ setInterval(async () => {
         }
         const stratName = stratConfig ? stratConfig.name : "👑 Master Head Multi-Strategy Consensus Engine (16-Engine Voting)";
 
-        const rawHist = loadAllCandlesFromDir('C:\\candle data') || [];
+        const rawHist = loadAllCandlesFromDir(getCandleDataDir()) || [];
         const histCandles = rawHist.filter(c => c.date !== todayStr);
 
         let allCandles = [...histCandles, ...liveTodayCandles];
@@ -485,7 +485,7 @@ app.get('/api/strategies', (req, res) => {
 // 2. POST /api/backtest - Run historical backtest over C:\candle data
 app.post('/api/backtest', (req, res) => {
     try {
-        const candlesDir = 'C:\\candle data';
+        const candlesDir = getCandleDataDir();
         const candles = loadAllCandlesFromDir(candlesDir);
         const strategies = loadAllStrategiesFromJSON();
 
@@ -651,7 +651,7 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
             for (const dStr in candlesByDate) {
                 const dayCandles = candlesByDate[dStr];
                 if (dayCandles.length > 0) {
-                    const cachePath = path.join('C:\\candle data', `nifty_5min_dhan_${dStr}.json`);
+                    const cachePath = path.join(getCandleDataDir(), `nifty_5min_dhan_${dStr}.json`);
                     fs.writeFileSync(cachePath, JSON.stringify(dayCandles, null, 2));
                     console.log(`💾 Saved ${dayCandles.length} Dhan API candles for date ${dStr} to ${cachePath}`);
                     allDownloaded.push(...dayCandles);
@@ -716,7 +716,7 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
                 });
             }
 
-            const cachePath = path.join('C:\\candle data', `nifty_5min_auto_${dayStr}.json`);
+            const cachePath = path.join(getCandleDataDir(), `nifty_5min_auto_${dayStr}.json`);
             fs.writeFileSync(cachePath, JSON.stringify(dayCandles, null, 2));
             downloadedCandles.push(...dayCandles);
         }
@@ -746,7 +746,7 @@ app.post('/api/custom-backtest', async (req, res) => {
         const endDate = normalizeDateString(rawEndDate);
         const initialCapital = startCapital;
 
-        const candlesDir = 'C:\\candle data';
+        const candlesDir = getCandleDataDir();
         let allCandles = loadAllCandlesFromDir(candlesDir);
         const strategies = loadAllStrategiesFromJSON();
 

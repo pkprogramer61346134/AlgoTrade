@@ -1,7 +1,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_CACHE_DIR = "C:\\candle data";
+function getCandleDataDir() {
+    if (process.platform === 'win32' && fs.existsSync("C:\\candle data")) {
+        return "C:\\candle data";
+    }
+    const localDir = path.join(__dirname, '..', '..', 'candle_data');
+    if (!fs.existsSync(localDir)) {
+        try { fs.mkdirSync(localDir, { recursive: true }); } catch (e) {}
+    }
+    return localDir;
+}
+
+const DEFAULT_CACHE_DIR = getCandleDataDir();
 
 /**
  * Loads candles JSON file from C:\candle data or custom path
@@ -65,6 +76,7 @@ function loadAllCandlesFromDir(dirPath = DEFAULT_CACHE_DIR) {
 }
 
 module.exports = {
+    getCandleDataDir,
     loadCandleFile,
     loadAllCandlesFromDir
 };
