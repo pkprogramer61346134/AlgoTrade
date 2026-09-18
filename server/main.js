@@ -94,7 +94,17 @@ async function runPreMarketBootSync() {
     try {
         console.log("💾 [STEP 2/4] Loading & Validating Historical Candle Dataset...");
         const candlesDir = getCandleDataDir();
-        const rawHist = loadAllCandlesFromDir(candlesDir) || [];
+        let rawHist = loadAllCandlesFromDir(candlesDir) || [];
+
+        if (rawHist.length < 100) {
+            console.log("📡 Candle database empty or low on server. Auto-fetching past 30 days of candles from Dhan API...");
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            const past30Obj = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const past30Date = past30Obj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            await fetchAndCacheDhanCandles(past30Date, todayStr);
+            rawHist = loadAllCandlesFromDir(candlesDir) || [];
+        }
+
         preMarketReadiness.candlesLoaded = rawHist.length;
         preMarketReadiness.checklist.push(`✅ Candle Database: Loaded (${rawHist.length.toLocaleString()} candles in RAM)`);
     } catch (e) {
