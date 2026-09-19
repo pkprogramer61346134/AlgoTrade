@@ -41,8 +41,8 @@ function loadCandleFile(symbol = "NIFTY_50", interval = "5", fromDate = null, to
  */
 function loadAllCandlesFromDir(dirPath = DEFAULT_CACHE_DIR) {
     if (!fs.existsSync(dirPath)) return [];
-    // Only load 5-minute interval files to avoid mixing 15-min or 1-min timeframe candles
-    const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.json') && !f.includes('_15_') && !f.includes('_1_'));
+    // Only load 5-minute interval files to avoid mixing 15-min or 1-min timeframe candles, and exclude synthetic auto files
+    const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.json') && !f.includes('_15_') && !f.includes('_1_') && !f.includes('auto'));
     let allCandles = [];
 
     for (const file of files) {

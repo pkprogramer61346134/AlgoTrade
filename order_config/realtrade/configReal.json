@@ -1,12 +1,7 @@
 {
-  "id": "aggressive_order_config",
-  "name": "Aggressive 100% Capital Usage + Paper/Real Order Execution Config",
-  "executionMode": "PAPER",
-  "paperTrading": {
-    "initialCapital": 10000,
-    "riskRewardRatio": 3,
-    "maxTradesPerDay": 4
-  },
+  "id": "configReal",
+  "name": "Real Dhan Broker Trading Config",
+  "executionMode": "REAL",
   "capitalUsagePct": 100,
   "productType": "INTRADAY",
   "exchangeSegment": "NSE_FNO",
@@ -22,9 +17,9 @@
   },
   "riskManagement": {
     "maxOpenPositions": 1,
-    "maxTradesPerDay": 4,
+    "maxTradesPerDay": 3,
+    "maxLossPerTrade": 1000,
     "maxLossPerDay": 5000
   },
-  "riskRewardRatio": 3,
   "orderSwitchOn": true
 }

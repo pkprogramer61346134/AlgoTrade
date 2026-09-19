@@ -1,0 +1,30 @@
+{
+  "id": "configPaper",
+  "name": "Paper Trading Execution Config",
+  "executionMode": "PAPER",
+  "paperTrading": {
+    "initialCapital": 10000,
+    "riskRewardRatio": 3,
+    "maxTradesPerDay": 4
+  },
+  "capitalUsagePct": 100,
+  "productType": "INTRADAY",
+  "exchangeSegment": "NSE_FNO",
+  "tradingSymbol": "NIFTY_OPTION",
+  "defaultQuantity": 65,
+  "trailingSL": {
+    "enabled": true,
+    "algoTrailing": true,
+    "lockAtTarget": true,
+    "costOffsetPoints": 1,
+    "trailingJumpStep": 5,
+    "stepMoveRequirement": 10
+  },
+  "riskManagement": {
+    "maxOpenPositions": 1,
+    "maxTradesPerDay": 3,
+    "maxLossPerTrade": 1000,
+    "maxLossPerDay": 5000
+  },
+  "orderSwitchOn": true
+}

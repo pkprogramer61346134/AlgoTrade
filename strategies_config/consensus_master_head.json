@@ -7,7 +7,7 @@
   "timeframe": "5",
   "maxTradesPerDay": 4,
   "riskRewardRatio": 3.0,
-  "consensusThreshold": 11,
+  "consensusThreshold": 13,
   "indicators": {
     "orbMinutes": 15,
     "rsiPeriod": 14,
@@ -15,10 +15,10 @@
   },
   "rules": {
     "buy": [
-      { "field": "consensus", "operator": ">=", "target": 11 }
+      { "field": "consensus", "operator": ">=", "target": 13 }
     ],
     "sell": [
-      { "field": "consensus", "operator": ">=", "target": 11 }
+      { "field": "consensus", "operator": ">=", "target": 13 }
     ]
   },
   "stopLoss": {

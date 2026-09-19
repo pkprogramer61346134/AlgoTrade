@@ -22,9 +22,10 @@
   },
   "riskManagement": {
     "maxOpenPositions": 1,
-    "maxTradesPerDay": 4,
+    "maxTradesPerDay": 3,
+    "maxLossPerTrade": 1000,
     "maxLossPerDay": 5000
   },
-  "riskRewardRatio": 3,
+  "riskRewardRatio": 4,
   "orderSwitchOn": true
 }

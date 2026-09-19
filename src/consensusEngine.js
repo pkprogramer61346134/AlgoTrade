@@ -4,6 +4,8 @@
  * Requires High-Conviction Majority Consensus (>= 11 out of 15 YES Votes) to execute trade.
  */
 
+const { candleDataHub } = require('./candleDataHub');
+
 function parseTimeToMins(tStr) {
     if (!tStr) return 0;
     let clean = String(tStr).toLowerCase().trim();
@@ -18,7 +20,7 @@ function parseTimeToMins(tStr) {
     return hrs * 60 + mins;
 }
 
-function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCounts) {
+function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCounts, ignoreMaxTradesCap = false) {
     if (i < 3) return { type: "NONE" };
     const c = candles[i];
     if (!c.date) return { type: "NONE" };
@@ -29,8 +31,10 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         if (mins < 570) return { type: "NONE" };
     }
 
-    const maxTrades = strategyConfig.maxTradesPerDay || 4;
-    if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
+    if (!ignoreMaxTradesCap) {
+        const maxTrades = strategyConfig.maxTradesPerDay || 4;
+        if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
+    }
 
     const orb = data.dayORB[c.date];
     if (!orb || orb.high === -Infinity || orb.low === Infinity) return { type: "NONE" };
@@ -134,13 +138,13 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
 
     // Sub-Engine 9: Supertrend Trend Direction Engine
     const stObj = (data.supertrend && data.supertrend[i]) ? data.supertrend[i] : null;
-    if (stObj && stObj.direction) {
-        if (stObj.direction === "UP") {
+    if (stObj && stObj.direction !== undefined && stObj.direction !== null) {
+        if (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY") {
             buyVotes++;
-            voteDetails.push(`Engine 9 [Supertrend ${stObj.value?.toFixed ? stObj.value.toFixed(1) : ''}]: BULLISH (+1)`);
-        } else if (stObj.direction === "DOWN") {
+            voteDetails.push(`Engine 9 [Supertrend ${stObj.supertrend?.toFixed ? stObj.supertrend.toFixed(1) : ''}]: BULLISH (+1)`);
+        } else if (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL") {
             sellVotes++;
-            voteDetails.push(`Engine 9 [Supertrend ${stObj.value?.toFixed ? stObj.value.toFixed(1) : ''}]: BEARISH (+1)`);
+            voteDetails.push(`Engine 9 [Supertrend ${stObj.supertrend?.toFixed ? stObj.supertrend.toFixed(1) : ''}]: BEARISH (+1)`);
         }
     }
 
@@ -182,9 +186,29 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         }
     }
 
-    // Sub-Engine 13: Previous Day High / Low Institutional Level Break Engine
-    const prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
-    if (prevDay) {
+    // Sub-Engine 13: Previous Day High / Low Institutional Level Break Engine (Connected to Candle Data Hub)
+    let prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
+    if (!prevDay && candles && i > 0) {
+        // Fallback: search prior candles in dataset for previous day high/low
+        const currDate = c.date;
+        let pHigh = -Infinity;
+        let pLow = Infinity;
+        for (let k = i - 1; k >= 0; k--) {
+            if (candles[k].date !== currDate) {
+                const targetPrevDate = candles[k].date;
+                for (let m = k; m >= 0 && candles[m].date === targetPrevDate; m--) {
+                    if (candles[m].high > pHigh) pHigh = candles[m].high;
+                    if (candles[m].low < pLow) pLow = candles[m].low;
+                }
+                if (pHigh !== -Infinity) {
+                    prevDay = { high: pHigh, low: pLow };
+                }
+                break;
+            }
+        }
+    }
+
+    if (prevDay && prevDay.high !== -Infinity) {
         if (c.close > prevDay.high) {
             buyVotes++;
             voteDetails.push(`Engine 13 [Prev Day High Break ₹${prevDay.high}]: BULLISH (+1)`);

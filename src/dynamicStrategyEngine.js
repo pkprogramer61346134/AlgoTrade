@@ -56,19 +56,21 @@ function prepareJSONStrategyData(candles, strategyConfig) {
 /**
  * Evaluates rules of a JSON strategy at candle index i
  */
-function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts) {
+function evaluateJSONStrategy(candles, i, strategyConfig, data, dailyTradeCounts, ignoreMaxTradesCap = false) {
     if (i < 3) return { type: "NONE" };
 
     const c = candles[i];
     if (!c.date) return { type: "NONE" };
 
     if (strategyConfig.id === "consensus_master_head" || strategyConfig.consensusThreshold) {
-        return evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCounts);
+        return evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCounts, ignoreMaxTradesCap);
     }
 
-    // Max Trades Cap
-    const maxTrades = strategyConfig.maxTradesPerDay || 3;
-    if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
+    // Max Trades Cap (Skipped during pure strategy backtest)
+    if (!ignoreMaxTradesCap) {
+        const maxTrades = strategyConfig.maxTradesPerDay || 3;
+        if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
+    }
 
     const orb = data.dayORB[c.date];
     const r = (data.rvol && data.rvol[i] !== null && data.rvol[i] !== undefined) ? Number(data.rvol[i]) : 1.0;

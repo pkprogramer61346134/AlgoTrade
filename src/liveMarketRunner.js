@@ -1,6 +1,7 @@
 const { DhanSDK } = require('../dhanAPI/index');
 const { loadAllStrategiesFromJSON } = require('./strategyLoader');
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('./dynamicStrategyEngine');
+const { candleDataHub } = require('./candleDataHub');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
 
 const dhan = new DhanSDK();
@@ -84,14 +85,29 @@ function runLiveMarketMode(autoPlaceOrders = true) {
     console.log("🔄 Initializing Live Dhan Market Data Quotes & WebSocket Stream...\n");
 
     let livePCR = 1.15; // Default Put-Call Ratio baseline
+    let historicalWarmupCandles = [];
+
+    // Pre-load 300 real historical warmup candles from Central Candle Data Hub
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    candleDataHub.setDhanInstance(dhan);
+    candleDataHub.getCandlesWithWarmup(todayStr, todayStr, 300).then(warmupCandles => {
+        if (Array.isArray(warmupCandles) && warmupCandles.length > 0) {
+            historicalWarmupCandles = warmupCandles.filter(c => c.date < todayStr);
+            console.log(`✅ [DATA FUSION HUB] Successfully loaded ${historicalWarmupCandles.length} real historical warmup candles for 100% genuine indicator calculations.`);
+        }
+    }).catch(e => {
+        console.warn(`⚠️ [DATA FUSION HUB] Could not load historical warmup candles: ${e.message}`);
+    });
 
     // Fetch Initial Quote & Option Chain Data to test API connection
     dhan.marketData.getMarketQuote({ IDX_I: [13] }).then(res => {
         const rootData = res?.data?.data || res?.data || res;
         const segData = rootData?.IDX_I || {};
         const secData = segData[13] || segData["13"] || {};
-        const initialLtp = secData.last_price || 23431.5;
-        console.log(`📌 NIFTY 50 Live Spot Price from Dhan API: ₹${initialLtp}`);
+        const initialLtp = secData.last_price || null;
+        if (initialLtp) {
+            console.log(`📌 NIFTY 50 Live Spot Price from Dhan API: ₹${initialLtp}`);
+        }
         console.log("✅ Live Market Data API Connection Successful!");
         console.log(`📊 Live Option Chain PCR Initialized: ${livePCR} (Bullish Bias)`);
         console.log(`📡 Live Candle Aggregator is active & ready. Order Switch: [${autoPlaceOrders ? "ON" : "OFF"}]`);
@@ -115,14 +131,15 @@ function runLiveMarketMode(autoPlaceOrders = true) {
 
                     const activeCandle = aggregator.processTick(ltp);
 
-                    if (aggregator.completedCandles.length >= 3) {
-                        const candles = aggregator.completedCandles;
-                        const i = candles.length - 1;
+                    // FUSE REAL HISTORICAL CANDLES + COMPLETED LIVE CANDLES + ACTIVE CANDLE
+                    const fullCandles = [...historicalWarmupCandles, ...aggregator.completedCandles, activeCandle];
+                    const i = fullCandles.length - 1;
 
+                    if (fullCandles.length >= 10) {
                         jsonStrategies.forEach(stratConfig => {
-                            const data = prepareJSONStrategyData(candles, stratConfig);
+                            const data = prepareJSONStrategyData(fullCandles, stratConfig);
                             data.livePCR = livePCR;
-                            const signal = evaluateJSONStrategy(candles, i, stratConfig, data, dailyTradeCounts);
+                            const signal = evaluateJSONStrategy(fullCandles, i, stratConfig, data, dailyTradeCounts);
 
                             if (signal && signal.type !== "NONE") {
                                 console.log(`\n🚨 [LIVE MARKET SIGNAL!] Strategy: ${stratConfig.name}`);

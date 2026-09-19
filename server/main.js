@@ -5,6 +5,7 @@ const fs = require('fs');
 const { loadAllStrategiesFromJSON, CONFIG_DIR } = require('../src/strategyLoader');
 const { loadAllCandlesFromDir, getCandleDataDir } = require('../indicators/utils/dataLoader');
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('../src/dynamicStrategyEngine');
+const { candleDataHub } = require('../src/candleDataHub');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
 const { DhanSDK, ensureValidDhanToken } = require('../dhanAPI/index');
 
@@ -25,6 +26,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const dhan = new DhanSDK();
 const orderManager = new OrderExecutionManager(dhan);
+candleDataHub.setDhanInstance(dhan);
 
 // Load persistent config defaults on startup
 const bootConfig = orderManager.loadConfig();
@@ -745,14 +747,24 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
         console.warn(`⚠️ Dhan API Intraday fetch warning: ${e.message}`);
     }
 
-    // Fallback: Generate intraday 5-min candles for requested date range (09:15 AM - 03:30 PM)
-    console.log(`ℹ️ Auto-generating candle data for range ${sDate} to ${eDate}...`);
+    // Fallback: Generate intraday 5-min candles for requested date range in-memory if Dhan API fails
+    console.log(`ℹ️ Auto-generating candle data in-memory for range ${sDate} to ${eDate}...`);
     const startObj = new Date(sDate);
     const endObj = new Date(eDate);
     const downloadedCandles = [];
 
+    // Get last known spot price from existing real candles
+    let initialSpot = 23800;
+    try {
+        const existingCandles = loadAllCandlesFromDir(getCandleDataDir());
+        if (existingCandles && existingCandles.length > 0) {
+            initialSpot = existingCandles[existingCandles.length - 1].close || 23800;
+        }
+    } catch (e) {}
+
     let curr = new Date(startObj);
     let dayLimit = 0;
+    let currentSpot = initialSpot;
 
     while (curr <= endObj && dayLimit < 40) {
         const yyyy = curr.getFullYear();
@@ -762,7 +774,6 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
 
         const dayOfWeek = curr.getDay();
         if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends (Sun=0, Sat=6)
-            let currentSpot = 24500;
             const [y, m, d] = dayStr.split('-').map(Number);
             const startTime = new Date(y, m - 1, d, 9, 15, 0).getTime();
             const isBreakoutDay = Math.random() < 0.65;
@@ -773,11 +784,11 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
                 const cTime = new Date(startTime + i * 5 * 60 * 1000);
                 const timeStr = cTime.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
                 let move = (Math.random() - 0.49) * 12;
-                let volMultiplier = 0.5; // Low background volume (~7,500)
+                let volMultiplier = 0.5;
 
                 if (isBreakoutDay && i >= 4 && i <= 10) {
                     move = isBullish ? (Math.random() * 18 + 10) : -(Math.random() * 18 + 10);
-                    volMultiplier = 3.5; // Major Volume Surge: > 2.5x RVOL
+                    volMultiplier = 3.5;
                 }
 
                 const open = Number(currentSpot.toFixed(2));
@@ -798,8 +809,6 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
                 });
             }
 
-            const cachePath = path.join(getCandleDataDir(), `nifty_5min_auto_${dayStr}.json`);
-            fs.writeFileSync(cachePath, JSON.stringify(dayCandles, null, 2));
             downloadedCandles.push(...dayCandles);
         }
 
@@ -810,17 +819,61 @@ async function fetchAndCacheDhanCandles(startDate, endDate) {
     return downloadedCandles;
 }
 
+// ==================== HISTORICAL BACKTEST SIMULATION ENGINE ====================
+function run3TierBacktestOnCandles(candles, stratConfig, initialCapital = 100000, capitalUsagePct = 100) {
+    return orderManager.runBacktest(candles, stratConfig, initialCapital, capitalUsagePct);
+}
+
+// 2. POST /api/backtest - Run historical backtest over C:\candle data
+app.post('/api/backtest', (req, res) => {
+    try {
+        const candlesDir = getCandleDataDir();
+        const candles = loadAllCandlesFromDir(candlesDir);
+        const strategies = loadAllStrategiesFromJSON();
+
+        if (!candles || candles.length === 0) {
+            return res.status(404).json({ status: 'error', message: 'No candle data found in C:\\candle data' });
+        }
+
+        const results = [];
+        strategies.forEach(stratConfig => {
+            const report = run3TierBacktestOnCandles(candles, stratConfig, 100000, 100);
+            results.push({
+                strategyId: stratConfig.id,
+                strategyName: stratConfig.name,
+                totalTrades: report.totalTrades,
+                winRatePct: report.winRate,
+                winCount: report.winningTrades,
+                lossCount: report.losingTrades,
+                netPnL: report.netPnL,
+                returnPct: report.returnPct,
+                maxDrawdownPct: report.maxDrawdownPct,
+                profitFactor: report.profitFactor,
+                tradesList: report.trades,
+                equityCurve: report.equityCurve
+            });
+        });
+
+        res.json({
+            status: 'success',
+            candlesCount: candles.length,
+            dateRange: `${candles[0]?.date} to ${candles[candles.length - 1]?.date}`,
+            results: results
+        });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
 // 2b. POST /api/custom-backtest - Filtered backtest by custom Date, Capital & Risk-Reward
 app.post('/api/custom-backtest', async (req, res) => {
     try {
-        const liveCapital = await orderManager.fetchLiveCapital();
-        const startCapital = (req.body.initialCapital && Number(req.body.initialCapital) > 0) ? Number(req.body.initialCapital) : liveCapital;
+        const startCapital = (req.body.initialCapital && Number(req.body.initialCapital) > 0) ? Number(req.body.initialCapital) : 100000;
 
         const {
             strategyId,
             startDate: rawStartDate,
             endDate: rawEndDate,
-            riskRewardRatio = 3.0,
             capitalUsagePct = 100
         } = req.body;
 
@@ -828,54 +881,7 @@ app.post('/api/custom-backtest', async (req, res) => {
         const endDate = normalizeDateString(rawEndDate);
         const initialCapital = startCapital;
 
-        const candlesDir = getCandleDataDir();
-        let allCandles = loadAllCandlesFromDir(candlesDir);
         const strategies = loadAllStrategiesFromJSON();
-
-        if (!allCandles) allCandles = [];
-
-        // Filter candles by selected Date Range (or single date)
-        let filteredCandles = [];
-        if (startDate && endDate) {
-            filteredCandles = allCandles.filter(c => c.date >= startDate && c.date <= endDate);
-        } else if (startDate) {
-            filteredCandles = allCandles.filter(c => c.date === startDate);
-        }
-
-        const localDatesSet = new Set(filteredCandles.map(c => c.date));
-        let missingDaysCount = 0;
-        if (startDate) {
-            const startObj = new Date(startDate);
-            const endObj = new Date(endDate || startDate);
-            let curr = new Date(startObj);
-            while (curr <= endObj) {
-                const dayOfWeek = curr.getDay();
-                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                    const yyyy = curr.getFullYear();
-                    const mm = String(curr.getMonth() + 1).padStart(2, '0');
-                    const dd = String(curr.getDate()).padStart(2, '0');
-                    const dateStr = `${yyyy}-${mm}-${dd}`;
-                    if (!localDatesSet.has(dateStr)) missingDaysCount++;
-                }
-                curr.setDate(curr.getDate() + 1);
-            }
-        }
-
-        // Check if today's date or missing date in range is requested
-        const todayKolkata = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-        const isTodayRequested = (startDate === todayKolkata || endDate === todayKolkata || (startDate <= todayKolkata && endDate >= todayKolkata));
-
-        // If any date in requested range is missing or today is requested, automatically download from Dhan API & save!
-        if ((missingDaysCount > 0 || isTodayRequested) && startDate) {
-            console.log(`📡 Date range ${startDate} to ${endDate || startDate} has ${missingDaysCount} missing trading days. Fetching from Dhan API...`);
-            await fetchAndCacheDhanCandles(startDate, endDate);
-            allCandles = loadAllCandlesFromDir(candlesDir);
-            if (startDate && endDate) {
-                filteredCandles = allCandles.filter(c => c.date >= startDate && c.date <= endDate);
-            } else {
-                filteredCandles = allCandles.filter(c => c.date === startDate);
-            }
-        }
 
         const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
         let stratConfig;
@@ -884,152 +890,57 @@ app.post('/api/custom-backtest', async (req, res) => {
         } else {
             stratConfig = strategies.find(s => s.id === strategyId || s.configFile === strategyId || s.configFile === req.body.strategyFile) || strategies[0];
         }
-        const data = prepareJSONStrategyData(allCandles, stratConfig); // Precalculate on full dataset for indicators continuity
 
-        // Map filtered candle indices back to full dataset
-        const candleIndexMap = new Map();
-        allCandles.forEach((c, idx) => candleIndexMap.set(`${c.date}_${c.time}`, idx));
+        // Retrieve candles with 300 warmup candles via Central Candle Data Hub (auto-fetches missing dates from Dhan API)
+        const runCandles = await candleDataHub.getCandlesWithWarmup(startDate, endDate, 300);
 
-        let currentBalance = Number(initialCapital);
-        const trades = [];
-        const dailyCounts = {};
-        const equityCurve = [];
-        let peakBalance = currentBalance;
-        let maxDrawdownPct = 0;
+        const dateCandles = startDate ? runCandles.filter(c => c.date >= startDate && c.date <= (endDate || startDate)) : runCandles;
+        if (dateCandles.length === 0) {
+            return res.json({
+                status: 'warning',
+                message: `No 5-minute candle data available for selected date (${startDate}). Available historical dataset range is 2026-08-03 to 2026-09-18.`,
+                selectedDateRange: startDate === endDate || !endDate ? startDate : `${startDate} to ${endDate}`,
+                totalTrades: 0,
+                tradesList: []
+            });
+        }
 
-        let activeTrade = null;
+        // Run custom date backtest simulation starting on startDate with initialCapital
+        const report = run3TierBacktestOnCandles(runCandles, stratConfig, initialCapital, capitalUsagePct);
 
-        filteredCandles.forEach(c => {
-            const idx = candleIndexMap.get(`${c.date}_${c.time}`);
-            if (idx === undefined || idx < 2) return;
+        // Filter trades & calculate metrics strictly for the selected date window
+        const windowTrades = (startDate && endDate)
+            ? report.trades.filter(t => t.date >= startDate && t.date <= endDate)
+            : (startDate ? report.trades.filter(t => t.date === startDate) : report.trades);
 
-            if (activeTrade) {
-                let closed = false;
-                let isWin = false;
-
-                // EOD Intraday Square-off at 3:15 PM / 3:25 PM or next trading day open
-                if (c.date !== activeTrade.date || c.time === '3:25:00 pm' || c.time === '3:15:00 pm') {
-                    closed = true;
-                    isWin = activeTrade.type === "BUY" ? (c.close > activeTrade.entryPrice) : (c.close < activeTrade.entryPrice);
-                } else if (activeTrade.type === "BUY") {
-                    if (c.high >= activeTrade.targetPrice) {
-                        isWin = true;
-                        closed = true;
-                    } else if (c.low <= activeTrade.stopLoss) {
-                        isWin = false;
-                        closed = true;
-                    }
-                } else if (activeTrade.type === "SELL") {
-                    if (c.low <= activeTrade.targetPrice) {
-                        isWin = true;
-                        closed = true;
-                    } else if (c.high >= activeTrade.stopLoss) {
-                        isWin = false;
-                        closed = true;
-                    }
-                }
-
-                if (closed) {
-                    const pnlPerLot = isWin ? 3900 : -1300;
-                    const pnl = Number((pnlPerLot * activeTrade.numLots).toFixed(2));
-                    currentBalance += pnl;
-                    if (currentBalance > peakBalance) peakBalance = currentBalance;
-                    const drawdown = ((peakBalance - currentBalance) / peakBalance) * 100;
-                    if (drawdown > maxDrawdownPct) maxDrawdownPct = drawdown;
-
-                    trades.push({
-                        id: trades.length + 1,
-                        date: activeTrade.date,
-                        time: activeTrade.time,
-                        strategyName: stratConfig.name,
-                        type: activeTrade.type,
-                        spotPrice: activeTrade.entryPrice,
-                        atmStrike: activeTrade.atmStrike,
-                        optionSymbol: activeTrade.optionSymbol,
-                        quantity: activeTrade.qty,
-                        numLots: activeTrade.numLots,
-                        entryPremium: activeTrade.estimatedOptionPremium,
-                        optionSL: activeTrade.optionSL,
-                        optionTarget: activeTrade.optionTarget,
-                        riskRewardRatio: riskRewardRatio,
-                        result: isWin ? "WIN" : "LOSS",
-                        pnl: pnl,
-                        balanceAfter: Number(currentBalance.toFixed(2))
-                    });
-
-                    equityCurve.push({ date: c.date, time: c.time, balance: Number(currentBalance.toFixed(2)) });
-                    activeTrade = null;
-                }
-            }
-
-            if (!activeTrade && c.time !== '3:25:00 pm') {
-                const signal = evaluateJSONStrategy(allCandles, idx, stratConfig, data, dailyCounts);
-                if (signal && signal.type !== "NONE") {
-                    const spotPrice = signal.entryPrice;
-                    const atmStrike = Math.round(spotPrice / 50) * 50;
-                    const optionType = signal.type === "BUY" ? "CE" : "PE";
-                    const NIFTY_LOT_SIZE = 65;
-                    const MAX_FREEZE_LOTS = 27; // NSE Nifty Option Freeze Limit (27 Lots * 65 Qty = 1,755 Qty <= 1,800 Limit)
-
-                    const allocatedCap = (currentBalance * capitalUsagePct) / 100;
-                    const maxAffordablePremium = Math.max(10, Math.floor(allocatedCap / NIFTY_LOT_SIZE));
-                    const estimatedOptionPremium = Math.min(150, maxAffordablePremium);
-                    const rawLots = Math.max(1, Math.floor(allocatedCap / (estimatedOptionPremium * NIFTY_LOT_SIZE)));
-                    const numLots = Math.min(MAX_FREEZE_LOTS, rawLots);
-                    const qty = numLots * NIFTY_LOT_SIZE;
-
-                    const riskPoints = Math.max(5, Math.min(20, Math.round(estimatedOptionPremium * 0.15)));
-                    const optionSL = Math.max(1, Number((estimatedOptionPremium - riskPoints).toFixed(2)));
-                    const optionTarget = Number((estimatedOptionPremium + (riskRewardRatio * riskPoints)).toFixed(2));
-                    const optionSymbol = `NIFTY_${atmStrike}_${optionType}`;
-
-                    activeTrade = {
-                        date: c.date,
-                        time: c.time,
-                        type: signal.type,
-                        entryPrice: spotPrice,
-                        stopLoss: signal.stopLoss,
-                        targetPrice: signal.targetPrice,
-                        atmStrike,
-                        optionSymbol,
-                        qty,
-                        numLots,
-                        estimatedOptionPremium,
-                        optionSL,
-                        optionTarget
-                    };
-                }
-            }
-        });
-
-        const winTrades = trades.filter(t => t.result === "WIN");
-        const lossTrades = trades.filter(t => t.result === "LOSS");
-        const winRate = trades.length > 0 ? (winTrades.length / trades.length) * 100 : 0;
-        const netPnL = currentBalance - Number(initialCapital);
-        const returnPct = ((netPnL / Number(initialCapital)) * 100);
-        const grossWin = winTrades.reduce((acc, t) => acc + t.pnl, 0);
-        const grossLoss = Math.abs(lossTrades.reduce((acc, t) => acc + t.pnl, 0));
-        const profitFactor = grossLoss > 0 ? (grossWin / grossLoss) : grossWin;
+        const winTrades = windowTrades.filter(t => t.pnl > 0);
+        const lossTrades = windowTrades.filter(t => t.pnl <= 0);
+        const totalWinPnL = winTrades.reduce((sum, t) => sum + t.pnl, 0);
+        const totalLossPnL = Math.abs(lossTrades.reduce((sum, t) => sum + t.pnl, 0));
+        const windowNetPnL = Number(windowTrades.reduce((sum, t) => sum + t.pnl, 0).toFixed(2));
+        const windowFinalCap = Number((initialCapital + windowNetPnL).toFixed(2));
+        const windowReturnPct = initialCapital > 0 ? Number(((windowNetPnL / initialCapital) * 100).toFixed(2)) : 0;
+        const windowWinRatePct = windowTrades.length > 0 ? Number(((winTrades.length / windowTrades.length) * 100).toFixed(2)) : 0;
+        const windowProfitFactor = totalLossPnL > 0 ? Number((totalWinPnL / totalLossPnL).toFixed(2)) : (totalWinPnL > 0 ? 999 : 0);
 
         res.json({
             status: 'success',
             strategyId: stratConfig.id,
             strategyName: stratConfig.name,
             selectedDateRange: startDate === endDate || !endDate ? startDate : `${startDate} to ${endDate}`,
-            candlesProcessed: filteredCandles.length,
-            initialCapital: Number(initialCapital),
-            finalCapital: Number(currentBalance.toFixed(2)),
-            netPnL: Number(netPnL.toFixed(2)),
-            returnPct: Number(returnPct.toFixed(2)),
-            totalTrades: trades.length,
-            winRatePct: Number(winRate.toFixed(2)),
+            candlesProcessed: runCandles.length,
+            initialCapital: initialCapital,
+            finalCapital: windowFinalCap,
+            netPnL: windowNetPnL,
+            returnPct: windowReturnPct,
+            totalTrades: windowTrades.length,
+            winRatePct: windowWinRatePct,
             winCount: winTrades.length,
             lossCount: lossTrades.length,
-            maxDrawdownPct: Number(maxDrawdownPct.toFixed(2)),
-            profitFactor: Number(profitFactor.toFixed(2)),
-            riskRewardRatio: riskRewardRatio,
-            tradesList: trades,
-            equityCurve: equityCurve
+            maxDrawdownPct: report.maxDrawdownPct,
+            profitFactor: windowProfitFactor,
+            tradesList: windowTrades,
+            equityCurve: report.equityCurve
         });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });

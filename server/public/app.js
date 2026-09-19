@@ -112,7 +112,7 @@ async function runCustomAnalysis() {
     const strategyId = 'consensus_master_head';
     const startDate = document.getElementById('custom-start-date').value;
     const endDate = document.getElementById('custom-end-date').value;
-    const initialCapital = document.getElementById('custom-capital').value || 10000;
+    const initialCapital = document.getElementById('custom-capital').value || 100000;
     const riskRewardRatio = 3.0;
 
     const btn = document.querySelector('button[onclick="runCustomAnalysis()"]');
@@ -155,7 +155,7 @@ async function runCustomAnalysis() {
 // Render Custom Analysis Results
 function renderCustomAnalysisResults(res) {
     const pnlColor = res.netPnL >= 0 ? 'var(--success)' : 'var(--danger)';
-    document.getElementById('kpi-pnl').innerText = `₹${res.netPnL.toLocaleString()}`;
+    document.getElementById('kpi-pnl').innerText = `${res.netPnL >= 0 ? '+' : ''}₹${res.netPnL.toLocaleString()}`;
     document.getElementById('kpi-pnl').style.color = pnlColor;
     document.getElementById('kpi-return').innerText = `${res.returnPct >= 0 ? '+' : ''}${res.returnPct}% Return on ₹${res.initialCapital.toLocaleString()}`;
     document.getElementById('kpi-winrate').innerText = `${res.winRatePct}%`;
@@ -163,28 +163,80 @@ function renderCustomAnalysisResults(res) {
     document.getElementById('kpi-drawdown').innerText = `${res.maxDrawdownPct}%`;
     document.getElementById('kpi-pf').innerText = res.profitFactor;
 
+    const thead = document.getElementById('backtest-report-thead');
+    if (thead) {
+        thead.innerHTML = `
+            <tr>
+                <th>Date & Time</th>
+                <th>Instrument & Qty</th>
+                <th>Type & Spot</th>
+                <th>Entry Price</th>
+                <th>Stop Loss</th>
+                <th>Target</th>
+                <th>Trade PnL (₹ & Points)</th>
+                <th>Account Balance (₹)</th>
+                <th>Trade Remark / Status Note</th>
+            </tr>
+        `;
+    }
+
     const tbody = document.getElementById('backtest-report-tbody');
     tbody.innerHTML = '';
 
     if (res.tradesList && res.tradesList.length > 0) {
         res.tradesList.forEach(t => {
             const tr = document.createElement('tr');
-            const itemPnlColor = t.pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+            const rupeePnL = t.pnl !== undefined ? t.pnl : 0;
+            const ptsPnL = t.pointsPnL !== undefined ? t.pointsPnL : 0;
+            const itemPnlColor = rupeePnL >= 0 ? 'var(--success)' : 'var(--danger)';
+            const isWin = (t.result && t.result.includes('WIN')) || t.result === 'TARGET_HIT' || (t.result === 'EOD_SQUAREOFF' && ptsPnL > 0);
+            const balVal = t.balanceAfter !== undefined ? t.balanceAfter : 0;
+            const balColor = balVal >= res.initialCapital ? 'var(--success)' : 'var(--warning)';
+
+            const entryTimeStr = t.entryTime || t.time || '';
+            const symbStr = t.symbol || t.optionSymbol || 'NIFTY 50';
+            const entrySpot = t.spotEntryPrice || t.spotPrice || t.entryPremium || 0;
+            const slSpot = t.slPrice || t.optionSL || 0;
+            const tgtSpot = t.targetPrice || t.target || t.optionTarget || 0;
+
+            let remarkText = t.statusNote || "🕒 EOD CLOSE (SQUAREOFF)";
+            let remarkClass = "badge-info";
+            if (t.result === "TARGET_HIT" || (t.statusNote && t.statusNote.includes("TARGET"))) {
+                remarkText = "🎯 TARGET HIT (SUCCESS)";
+                remarkClass = "badge-win";
+            } else if (t.result === "SL_HIT" || (t.statusNote && t.statusNote.includes("STOP LOSS"))) {
+                remarkText = "🛑 STOP LOSS HIT";
+                remarkClass = "badge-loss";
+            } else if (t.result === "BREAKEVEN_SL" || (t.statusNote && t.statusNote.includes("BREAKEVEN"))) {
+                remarkText = "🛡️ BREAKEVEN PROTECTED";
+                remarkClass = "badge-info";
+            } else if (t.result === "EOD_SQUAREOFF") {
+                if (ptsPnL > 0 || rupeePnL > 0) {
+                    remarkText = "🕒 EOD CLOSE (SUCCESS PROFIT)";
+                    remarkClass = "badge-win";
+                } else {
+                    remarkText = "🕒 EOD CLOSE (SQUAREOFF)";
+                    remarkClass = "badge-info";
+                }
+            }
+
             tr.innerHTML = `
-                <td>📅 ${t.date} ${t.time}</td>
-                <td style="font-weight: 700; color: #fff;">${t.optionSymbol} (${t.numLots} Lot / ${t.quantity} Qty)</td>
-                <td><span class="badge ${t.result === 'WIN' ? 'badge-win' : 'badge-loss'}">${t.type} @ ₹${t.spotPrice}</span></td>
-                <td>₹${t.entryPremium}</td>
-                <td style="color: var(--danger);">₹${t.optionSL}</td>
-                <td style="color: var(--success);">₹${t.optionTarget} (R:R 1:${t.riskRewardRatio})</td>
-                <td style="color: ${itemPnlColor}; font-weight: 800;">${t.pnl >= 0 ? '+' : ''}₹${t.pnl.toLocaleString()}</td>
+                <td>📅 ${t.date} ${entryTimeStr}</td>
+                <td style="font-weight: 700; color: #fff;">${symbStr} (${t.numLots || 1} Lot / ${t.quantity} Qty)</td>
+                <td><span class="badge ${isWin ? 'badge-win' : 'badge-loss'}">${t.type} @ ₹${entrySpot}</span></td>
+                <td style="font-weight: 700;">₹${entrySpot}</td>
+                <td style="color: var(--danger); font-weight: 700;">₹${slSpot}</td>
+                <td style="color: var(--success); font-weight: 700;">₹${tgtSpot} <span style="font-size:0.75rem; color:#a7f3d0;">(R:R 1:${t.riskRewardRatio || 3})</span></td>
+                <td style="color: ${itemPnlColor}; font-weight: 800;">${rupeePnL >= 0 ? '+' : ''}₹${rupeePnL.toLocaleString()} <span style="font-size: 0.75rem; opacity: 0.9;">(${ptsPnL >= 0 ? '+' : ''}${ptsPnL} pts)</span></td>
+                <td style="color: ${balColor}; font-weight: 800; font-family: var(--font-mono);">₹${balVal.toLocaleString()}</td>
+                <td><span class="badge ${remarkClass}">${remarkText}</span></td>
             `;
             tbody.appendChild(tr);
         });
     } else {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; color: var(--warning); padding: 2rem;">
+                <td colspan="9" style="text-align: center; color: var(--warning); padding: 2rem;">
                     ⚪ No trade setup formed on date: <strong>${res.selectedDateRange}</strong> according to strategy rules.
                 </td>
             </tr>
@@ -203,8 +255,8 @@ function renderBacktestResults(results) {
 
     const bestStrat = results[0];
 
-    document.getElementById('kpi-pnl').innerText = `₹${bestStrat.netPnL.toLocaleString()}`;
-    document.getElementById('kpi-return').innerText = `+${bestStrat.returnPct}% Return`;
+    document.getElementById('kpi-pnl').innerText = `${bestStrat.netPnL >= 0 ? '+' : ''}${bestStrat.netPnL.toLocaleString()} pts`;
+    document.getElementById('kpi-return').innerText = `${bestStrat.returnPct >= 0 ? '+' : ''}${bestStrat.returnPct}% Return`;
     document.getElementById('kpi-winrate').innerText = `${bestStrat.winRatePct}%`;
     document.getElementById('kpi-trades').innerText = `${bestStrat.winCount} Wins / ${bestStrat.lossCount} Losses (${bestStrat.totalTrades} Total)`;
     document.getElementById('kpi-drawdown').innerText = `${bestStrat.maxDrawdownPct}%`;
@@ -217,7 +269,7 @@ function renderBacktestResults(results) {
             <td style="font-weight: 700; color: #fff;">🟢 ${s.strategyName}</td>
             <td>${s.totalTrades}</td>
             <td><span class="badge badge-win">${s.winRatePct}%</span></td>
-            <td style="color: ${pnlColor}; font-weight: 700;">₹${s.netPnL.toLocaleString()}</td>
+            <td style="color: ${pnlColor}; font-weight: 700;">${s.netPnL >= 0 ? '+' : ''}${s.netPnL.toLocaleString()} pts</td>
             <td style="color: ${pnlColor}; font-weight: 700;">+${s.returnPct}%</td>
             <td style="color: var(--danger);">${s.maxDrawdownPct}%</td>
             <td>${s.profitFactor}</td>
@@ -435,9 +487,8 @@ async function fetchLiveStatus() {
                             <td style="color: var(--primary); font-weight: 700;">${pos.optionSymbol} (${pos.numLots || 1} Lot / ${pos.quantity} Qty)</td>
                             <td style="font-weight: 700;">₹${pos.optionPremiumPrice}</td>
                             <td style="font-weight: 800; color: ${premColor};">₹${curPrem} <span style="font-size: 0.75rem; font-weight: 600;">(${premSign}₹${Math.abs(premDiff)})</span></td>
-                            <td style="color: var(--warning); font-weight: 800;">₹${pos.currentSL} ${pos.t1Reached ? '🔒' : ''}</td>
-                            <td style="color: var(--success);">₹${pos.target1} (1:3)</td>
-                            <td style="color: #c084fc; font-weight: 700;">₹${pos.target2} (1:4.5)</td>
+                            <td style="color: var(--warning); font-weight: 800;">₹${pos.currentSL}</td>
+                            <td style="color: var(--success); font-weight: 800;">₹${pos.target || pos.target1} (R:R 1:3)</td>
                             <td>
                                 <div style="font-weight: 800; font-size: 0.95rem; color: ${pnlColor}; margin-bottom: 2px;">${pnlSign}₹${pnlVal.toLocaleString()} (${pnlSign}${pnlPct}%)</div>
                                 <span class="badge ${targetBadgeClass}" style="font-size: 0.7rem;">${targetBadge}</span>
