@@ -26,6 +26,7 @@ const { analyzeGap } = require('./price_action/gap_analysis');
 const { evaluateCandleStrength } = require('./price_action/candle_strength');
 const { analyzeWicks } = require('./price_action/wick_analysis');
 const { detectCandlestickPatterns } = require('./price_action/candlestick_patterns');
+const LiquiditySweepStrategy = require('../src/liquiditySweepStrategy');
 
 // Momentum
 const { calculateRSI } = require('./momentum/rsi');
@@ -134,7 +135,8 @@ module.exports = {
         analyzeGap,
         evaluateCandleStrength,
         analyzeWicks,
-        detectCandlestickPatterns
+        detectCandlestickPatterns,
+        calculateLiquiditySweep: LiquiditySweepStrategy.calculateLiquiditySweepIndicator
     },
 
     // Momentum

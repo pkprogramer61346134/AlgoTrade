@@ -2,22 +2,25 @@ const { candleDataHub } = require('./candleDataHub');
 const { evaluateConsensusEngine } = require('./consensusEngine');
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('./dynamicStrategyEngine');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
+const SpotRiskDeltaCalculator = require('./spotRiskDeltaCalculator');
+const LiquiditySweepStrategy = require('./liquiditySweepStrategy');
 
 /**
  * SYSTEM HIGHWAY ROUTER (Unified Trading Pipeline)
  * 
  * Connects all core modules onto a single, high-performance Data & Execution Highway:
  * 
- *   [Candle Feed] ──► [Candle Data Hub] ──► [Master Head Consensus Engine] ──► [Order Execution Manager]
- *                                                                                    │
- *                                                      ┌─────────────────────────────┼─────────────────────────────┐
- *                                                      ▼                             ▼                             ▼
- *                                             [BACKTEST ENGINE]             [PAPER TRADE MANAGER]         [REAL TRADE MANAGER]
+ *   [Candle Feed] ──► [Candle Data Hub] ──► [Master Head Consensus Engine] ──► [SpotRiskDeltaCalculator] ──► [Order Execution Manager]
+ *                                                                                                                │
+ *                                                      ┌─────────────────────────────────────────────────────────┼─────────────────────────────┐
+ *                                                      ▼                                                         ▼                             ▼
+ *                                             [BACKTEST ENGINE]                                         [PAPER TRADE MANAGER]         [REAL TRADE MANAGER]
  */
 class SystemHighwayRouter {
     constructor(dhanInstance = null) {
         this.orderManager = new OrderExecutionManager(dhanInstance);
         this.candleDataHub = candleDataHub;
+        this.spotRiskCalculator = SpotRiskDeltaCalculator;
         if (dhanInstance) {
             this.candleDataHub.setDhanInstance(dhanInstance);
         }

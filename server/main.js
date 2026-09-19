@@ -7,6 +7,7 @@ const { loadAllCandlesFromDir, getCandleDataDir } = require('../indicators/utils
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('../src/dynamicStrategyEngine');
 const { candleDataHub } = require('../src/candleDataHub');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
+const BacktestManager = require('../order_config/backtest/backtestManager');
 const { DhanSDK, ensureValidDhanToken } = require('../dhanAPI/index');
 
 // Global Process Crash Protector: Prevent background network errors from crashing Node.js
@@ -26,6 +27,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const dhan = new DhanSDK();
 const orderManager = new OrderExecutionManager(dhan);
+const backtestManager = new BacktestManager();
 candleDataHub.setDhanInstance(dhan);
 
 // Load persistent config defaults on startup
@@ -266,6 +268,23 @@ function isIndianMarketOpen() {
     return totalMins >= 555 && totalMins <= 930;
 }
 
+// Dedicated Backtest API Endpoint
+app.post('/api/backtest/run', async (req, res) => {
+    try {
+        const { startDate, endDate, initialCapital } = req.body || {};
+        const start = startDate || '2026-09-01';
+        const end = endDate || start;
+        const capital = Number(initialCapital) || 100000;
+
+        console.log(`📊 [API BACKTEST RUN] Date Range: ${start} to ${end} | Capital: ₹${capital}`);
+        const report = await backtestManager.runBacktest(start, end, capital);
+        res.json({ success: true, report });
+    } catch (err) {
+        console.error(`❌ [API BACKTEST ERROR] ${err.message}`);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Periodic Live Market Quote Updater & Strategy Evaluator (Every 2s from Dhan API)
 setInterval(async () => {
     try {
@@ -493,7 +512,10 @@ setInterval(async () => {
                     const allocatedCapital = (liveCapital * usagePct) / 100;
 
                     const contract = await orderManager.resolveOptionContractFromDhan(spot, optionType, allocatedCapital);
-                    const entryPremium = contract.price || 36.5;
+                    const entryPremium = Number(contract.price);
+                    if (!entryPremium || isNaN(entryPremium) || entryPremium <= 0) {
+                        throw new Error(`Invalid contract price from Dhan for ${contract.tradingSymbol}: ${contract.price}`);
+                    }
                     const riskPts = Math.max(3, Math.min(20, Math.round(entryPremium * 0.15)));
                     const optionSL = Math.max(1, Number((entryPremium - riskPts).toFixed(2)));
                     const optionTarget = Number((entryPremium + (rr * riskPts)).toFixed(2));

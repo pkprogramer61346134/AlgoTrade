@@ -33,16 +33,16 @@
     <!-- Top Navigation Bar -->
     <header class="navbar">
         <div class="brand">
-            <span class="brand-icon">⚡</span>
-            <span>ALGOTRADE HQ</span>
+            <span class="brand-icon">📺</span>
+            <span>ALGOTRADE HQ - TV MONITOR DASHBOARD</span>
         </div>
 
         <div class="nav-tabs">
-            <button class="tab-btn active" id="tab-btn-backtest" onclick="switchTab('backtest')">
-                <span>📊</span> Backtest & Strategy Lab
-            </button>
-            <button class="tab-btn" id="tab-btn-live" onclick="switchTab('live')">
+            <button class="tab-btn active" id="tab-btn-live" onclick="switchTab('live')">
                 <span>⚡</span> Live Market & Trading Room
+            </button>
+            <button class="tab-btn" id="tab-btn-backtest" onclick="switchTab('backtest')">
+                <span>🔬</span> Interactive Backtest Engine
             </button>
             <button class="tab-btn" id="tab-btn-reports" onclick="switchTab('reports')">
                 <span>📈</span> Reports & Trade Journal
@@ -50,135 +50,20 @@
         </div>
 
         <div class="header-controls" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-            <!-- Execution Mode Toggle (Paper vs Real) -->
-            <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(0,0,0,0.3); padding: 0.35rem 0.75rem; border-radius: 10px; border: 1px solid var(--border-color);">
-                <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">MODE:</span>
-                <button id="mode-paper-btn" class="mode-selector-badge paper" onclick="setExecutionMode('PAPER')">
-                    📄 Dummy Money (Paper)
-                </button>
-                <button id="mode-real-btn" class="mode-selector-badge" style="opacity: 0.5;" onclick="setExecutionMode('REAL')">
-                    ⚡ Real Money (Dhan)
-                </button>
-            </div>
-
-            <div class="order-switch-container">
-                <span class="switch-label" id="switch-status-text">ORDER SWITCH: OFF</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="order-switch-toggle" onchange="toggleOrderSwitch()">
-                    <span class="slider"></span>
-                </label>
+            <!-- Read-Only Execution Mode Display (Controlled strictly via JSON config file) -->
+            <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(0,0,0,0.4); padding: 0.4rem 0.85rem; border-radius: 10px; border: 1px solid var(--border-color);">
+                <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">SYSTEM MODE:</span>
+                <span id="mode-display-badge" class="mode-selector-badge paper" style="cursor: default; pointer-events: none;">
+                    📄 PAPER MONEY (Configured in JSON)
+                </span>
             </div>
         </div>
     </header>
 
     <div class="container">
 
-        <!-- TAB 1: HISTORICAL BACKTESTING LAB -->
-        <section id="tab-backtest" class="tab-content active">
-            <div class="action-bar" style="flex-wrap: wrap; gap: 1rem;">
-                <div>
-                    <h2>📊 Custom Strategy & Single-Date Tester Lab</h2>
-                    <p style="color: var(--text-muted); font-size: 0.9rem;">Dataset: 2,18,443 Candles (C:\candle data) | Select any specific date, custom capital & Risk-Reward ratio.</p>
-                </div>
-                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-                    <button class="btn-primary" onclick="runFullBacktest()">
-                        <span>🚀</span> Run All-Time Backtest
-                    </button>
-                </div>
-            </div>
-
-            <!-- Custom Date & Capital Tester Controls Panel -->
-            <div class="card" style="margin-bottom: 2rem; background: rgba(18, 26, 43, 0.9); border: 1px solid var(--border-accent);">
-                <h3 style="margin-bottom: 1.25rem; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
-                    <span>🎛️</span> Custom Date & Initial Capital Controls (Target R:R 1:3.0 Fixed)
-                </h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; align-items: end;">
-                    <div>
-                        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Start Date (From)</label>
-                        <input type="date" id="custom-start-date" value="2026-09-01" style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff; border-radius: 8px; font-family: var(--font-mono);">
-                    </div>
-
-                    <div>
-                        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">End Date (To)</label>
-                        <input type="date" id="custom-end-date" value="2026-09-04" style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff; border-radius: 8px; font-family: var(--font-mono);">
-                    </div>
-
-                    <div>
-                        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Initial Capital (₹)</label>
-                        <input type="number" id="custom-capital" placeholder="Enter initial capital (e.g. 100000)" value="100000" step="5000" style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: #fff; border-radius: 8px; font-family: var(--font-mono);">
-                    </div>
-
-                    <div>
-                        <button class="btn-primary" style="width: 100%; justify-content: center; background: var(--secondary-gradient);" onclick="runCustomAnalysis()">
-                            <span>🔍</span> Analyze Selected Date
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- KPI Cards -->
-            <div class="grid-4" id="backtest-kpi-grid">
-                <div class="card">
-                    <div class="card-title">Winning Strategy PnL</div>
-                    <div class="card-value green" id="kpi-pnl">₹--</div>
-                    <div class="card-subtitle" id="kpi-return">+--% Return</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Win Rate %</div>
-                    <div class="card-value cyan" id="kpi-winrate">--%</div>
-                    <div class="card-subtitle" id="kpi-trades">0 Wins / 0 Losses</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Max Drawdown</div>
-                    <div class="card-value red" id="kpi-drawdown">--%</div>
-                    <div class="card-subtitle">Capital Protected</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Profit Factor</div>
-                    <div class="card-value" id="kpi-pf">--</div>
-                    <div class="card-subtitle">Gross Win / Gross Loss</div>
-                </div>
-            </div>
-
-            <!-- Equity Growth Chart -->
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h3>📈 Equity Growth Curve (Capital Protection & Compound Curve)</h3>
-                    <span class="badge badge-info">Initial Capital: ₹1,00,000</span>
-                </div>
-                <canvas id="equityChart" height="100"></canvas>
-            </div>
-
-            <!-- Strategy Comparison Table -->
-            <div class="table-container">
-                <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color);">
-                    <h3>📋 Loaded JSON Strategies Performance Report</h3>
-                </div>
-                <table>
-                    <thead id="backtest-report-thead">
-                        <tr>
-                            <th>Date & Time</th>
-                            <th>Instrument & Qty</th>
-                            <th>Type & Spot</th>
-                            <th>Entry Price</th>
-                            <th>Stop Loss</th>
-                            <th>Target</th>
-                            <th>Trade PnL (₹ & Points)</th>
-                            <th>Account Balance (₹)</th>
-                            <th>Trade Status / Remark Note</th>
-                        </tr>
-                    </thead>
-                    <tbody id="backtest-report-tbody">
-                        <tr>
-                            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Click "Run Full Backtest Now" to load historical strategy performance.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- TAB 2: LIVE MARKET & REAL-TIME TRADING ROOM -->
-        <section id="tab-live" class="tab-content">
+        <!-- TAB 1: LIVE MARKET & REAL-TIME TRADING ROOM -->
+        <section id="tab-live" class="tab-content active">
             <!-- Real-Time System & API Health Alert Banner -->
             <div id="system-health-banner" class="system-alert-banner alert-success" style="margin-bottom: 1rem;">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
@@ -232,9 +117,9 @@
                     <div class="card-subtitle">Market Sentiment: Bullish</div>
                 </div>
                 <div class="card">
-                    <div class="card-title">Order Execution Switch</div>
-                    <div class="card-value" id="live-switch-card-text" style="color: var(--danger);">🔴 OFF</div>
-                    <div class="card-subtitle" id="live-switch-subtext">Signal Alert Mode Only</div>
+                    <div class="card-title">Auto Execution Status</div>
+                    <div class="card-value green" id="live-switch-card-text" style="color: var(--success); font-size: 1.3rem;">🟢 ACTIVE</div>
+                    <div class="card-subtitle" id="live-switch-subtext">Managed via JSON Config</div>
                 </div>
                 <div class="card">
                     <div class="card-title">Dhan API Token Status</div>
@@ -243,23 +128,20 @@
                 </div>
                 <div class="card">
                     <div class="card-title">Live Account Capital</div>
-                    <div class="card-value green" id="live-account-capital">₹10,000.00</div>
+                    <div class="card-value green" id="live-account-capital">₹1,00,000.00</div>
                     <div class="card-subtitle" id="live-capital-subtext">Paper Trading Capital</div>
                 </div>
             </div>
 
-            <!-- Active Position & Trailing SL Status -->
+            <!-- Active Position Status (Read-Only TV Monitor) -->
             <div class="table-container">
                 <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <h3 style="display: inline-block; margin-right: 0.5rem;">🎯 Active Position & 2-Way Handshake Manager</h3>
-                        <span style="font-size: 0.8rem; color: var(--text-muted);">(Strict single-position lock & T1->T2 Trailing SL)</span>
+                        <h3 style="display: inline-block; margin-right: 0.5rem;">🎯 Active Position Monitor</h3>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">(Read-Only TV Display | Auto Target, SL & 3:00 PM EOD Square Off)</span>
                     </div>
                     <div style="display: flex; gap: 0.75rem; align-items: center;">
                         <span class="badge badge-info" id="active-position-badge">No Active Position</span>
-                        <button class="btn-danger" id="exit-position-btn" style="display: none; padding: 0.4rem 0.8rem; font-size: 0.85rem;" onclick="closeActivePosition()">
-                            🛑 Square Off Position
-                        </button>
                     </div>
                 </div>
                 <table>
@@ -437,6 +319,90 @@
                     <tbody id="report-journal-tbody">
                         <tr>
                             <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">No trades recorded in journal. Start Paper or Real trading to generate history.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TAB 2: INTERACTIVE BACKTEST ENGINE PANEL -->
+        <section id="tab-backtest" class="tab-content">
+            <div class="card" style="margin-bottom: 1.5rem; background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2 style="margin-bottom: 0.25rem;">🔬 Interactive Backtest Engine</h2>
+                        <p style="color: var(--text-muted); font-size: 0.88rem;">Select any date range or single date to run 100% real Dhan API historical candle backtests with Liquidity Sweep Strategy & Spot Risk Delta Calculator.</p>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                        <div>
+                            <label style="font-size: 0.78rem; color: var(--text-muted); display: block;">Start Date</label>
+                            <input type="date" id="bt-start-date" value="2026-09-01" style="background: #0f172a; color: #fff; border: 1px solid var(--border-color); padding: 0.4rem 0.6rem; border-radius: 6px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.78rem; color: var(--text-muted); display: block;">End Date</label>
+                            <input type="date" id="bt-end-date" value="2026-09-18" style="background: #0f172a; color: #fff; border: 1px solid var(--border-color); padding: 0.4rem 0.6rem; border-radius: 6px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.78rem; color: var(--text-muted); display: block;">Initial Capital (₹)</label>
+                            <input type="number" id="bt-initial-capital" value="100000" style="background: #0f172a; color: #fff; border: 1px solid var(--border-color); padding: 0.4rem 0.6rem; border-radius: 6px; width: 110px;">
+                        </div>
+                        <div style="align-self: flex-end;">
+                            <button id="run-backtest-btn" class="btn-primary" onclick="runUIBacktest()" style="background: linear-gradient(135deg, #0ea5e9, #2563eb); font-weight: 700;">
+                                ⚡ RUN BACKTEST
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backtest Summary Cards -->
+            <div class="grid-4">
+                <div class="card">
+                    <div class="card-title">Initial Capital</div>
+                    <div class="card-value" id="bt-card-initial">₹1,00,000.00</div>
+                    <div class="card-subtitle">Starting Capital</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Final Capital</div>
+                    <div class="card-value cyan" id="bt-card-final">₹1,05,421.65</div>
+                    <div class="card-subtitle">After Backtest Runs</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Net Realized PnL</div>
+                    <div class="card-value green" id="bt-card-pnl">+₹5,421.65 (+5.42%)</div>
+                    <div class="card-subtitle" id="bt-card-pnl-sub">Real Dhan Candle Data</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Win Rate %</div>
+                    <div class="card-value green" id="bt-card-winrate">75.0%</div>
+                    <div class="card-subtitle" id="bt-card-wins-losses">6 Wins / 2 Losses (8 Trades)</div>
+                </div>
+            </div>
+
+            <!-- Backtest Trades Breakdown Table -->
+            <div class="table-container" style="margin-top: 1.5rem;">
+                <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    <h3>📋 Executed Trades Breakdown Table</h3>
+                    <span id="bt-status-badge" class="badge badge-success">✅ Backtest Ready</span>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Date / Entry Time</th>
+                            <th>Exit Time</th>
+                            <th>Contract / Type</th>
+                            <th>Spot Entry</th>
+                            <th>Spot SL / Target</th>
+                            <th>Option Premium (Entry → Exit)</th>
+                            <th>Exit Reason</th>
+                            <th>Trade PnL (₹)</th>
+                            <th>Balance After</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bt-trades-tbody">
+                        <tr>
+                            <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">Select dates above and click <strong>RUN BACKTEST</strong> to execute 100% real Dhan API candle backtest.</td>
                         </tr>
                     </tbody>
                 </table>

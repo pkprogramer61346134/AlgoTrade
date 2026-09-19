@@ -19,6 +19,7 @@ function prepareJSONStrategyData(candles, strategyConfig) {
     const macd = indicators.momentum.calculateMACD(candles, 12, 26, 9);
     const bollinger = indicators.volatility.calculateBollingerBands(candles, 20, 2);
     const obv = indicators.volume.calculateOBV(candles);
+    const liquiditySweep = indicators.priceAction.calculateLiquiditySweep(candles);
 
     // Day ORB & Previous Day High/Low
     const dayORB = {};
@@ -50,7 +51,7 @@ function prepareJSONStrategyData(candles, strategyConfig) {
         prevDayMap[currDate] = dayHighLow[prevDate];
     }
 
-    return { emaTrend, emaFast, emaSlow, rvol, rsi, atr, adx, vwap, supertrend, macd, bollinger, obv, dayORB, prevDayMap };
+    return { emaTrend, emaFast, emaSlow, rvol, rsi, atr, adx, vwap, supertrend, macd, bollinger, obv, liquiditySweep, dayORB, prevDayMap };
 }
 
 /**

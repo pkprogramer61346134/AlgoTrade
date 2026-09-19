@@ -46,20 +46,14 @@ async function setExecutionMode(mode) {
 }
 
 function updateExecutionModeUI(mode) {
-    const paperBtn = document.getElementById('mode-paper-btn');
-    const realBtn = document.getElementById('mode-real-btn');
-
-    if (mode === 'REAL') {
-        if (paperBtn) paperBtn.style.opacity = '0.5';
-        if (realBtn) {
-            realBtn.style.opacity = '1';
-            realBtn.className = 'mode-selector-badge real';
-        }
-    } else {
-        if (realBtn) realBtn.style.opacity = '0.5';
-        if (paperBtn) {
-            paperBtn.style.opacity = '1';
-            paperBtn.className = 'mode-selector-badge paper';
+    const modeBadge = document.getElementById('mode-display-badge');
+    if (modeBadge) {
+        if (mode === 'REAL') {
+            modeBadge.innerText = '⚡ REAL MONEY (Dhan Broker)';
+            modeBadge.className = 'mode-selector-badge real';
+        } else {
+            modeBadge.innerText = '📄 PAPER MONEY (Configured in JSON)';
+            modeBadge.className = 'mode-selector-badge paper';
         }
     }
 }
@@ -113,7 +107,7 @@ async function runCustomAnalysis() {
     const startDate = document.getElementById('custom-start-date').value;
     const endDate = document.getElementById('custom-end-date').value;
     const initialCapital = document.getElementById('custom-capital').value || 100000;
-    const riskRewardRatio = 3.0;
+    const riskRewardRatio = 2.0;
 
     const btn = document.querySelector('button[onclick="runCustomAnalysis()"]');
     if (btn) {
@@ -154,14 +148,16 @@ async function runCustomAnalysis() {
 
 // Render Custom Analysis Results
 function renderCustomAnalysisResults(res) {
-    const pnlColor = res.netPnL >= 0 ? 'var(--success)' : 'var(--danger)';
-    document.getElementById('kpi-pnl').innerText = `${res.netPnL >= 0 ? '+' : ''}₹${res.netPnL.toLocaleString()}`;
-    document.getElementById('kpi-pnl').style.color = pnlColor;
-    document.getElementById('kpi-return').innerText = `${res.returnPct >= 0 ? '+' : ''}${res.returnPct}% Return on ₹${res.initialCapital.toLocaleString()}`;
-    document.getElementById('kpi-winrate').innerText = `${res.winRatePct}%`;
-    document.getElementById('kpi-trades').innerText = `${res.winCount} Wins / ${res.lossCount} Losses (${res.totalTrades} Total Trades)`;
-    document.getElementById('kpi-drawdown').innerText = `${res.maxDrawdownPct}%`;
-    document.getElementById('kpi-pf').innerText = res.profitFactor;
+    if (document.getElementById('kpi-pnl')) {
+        const pnlColor = res.netPnL >= 0 ? 'var(--success)' : 'var(--danger)';
+        document.getElementById('kpi-pnl').innerText = `${res.netPnL >= 0 ? '+' : ''}₹${res.netPnL.toLocaleString()}`;
+        document.getElementById('kpi-pnl').style.color = pnlColor;
+    }
+    if (document.getElementById('kpi-return')) document.getElementById('kpi-return').innerText = `${res.returnPct >= 0 ? '+' : ''}${res.returnPct}% Return on ₹${res.initialCapital.toLocaleString()}`;
+    if (document.getElementById('kpi-winrate')) document.getElementById('kpi-winrate').innerText = `${res.winRatePct}%`;
+    if (document.getElementById('kpi-trades')) document.getElementById('kpi-trades').innerText = `${res.winCount} Wins / ${res.lossCount} Losses (${res.totalTrades} Total Trades)`;
+    if (document.getElementById('kpi-drawdown')) document.getElementById('kpi-drawdown').innerText = `${res.maxDrawdownPct}%`;
+    if (document.getElementById('kpi-pf')) document.getElementById('kpi-pf').innerText = res.profitFactor;
 
     const thead = document.getElementById('backtest-report-thead');
     if (thead) {
@@ -181,6 +177,7 @@ function renderCustomAnalysisResults(res) {
     }
 
     const tbody = document.getElementById('backtest-report-tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     if (res.tradesList && res.tradesList.length > 0) {
@@ -220,13 +217,18 @@ function renderCustomAnalysisResults(res) {
                 }
             }
 
+            let rrText = String(t.riskRewardRatio || '2.0');
+            if (!rrText.includes(':')) {
+                rrText = `1:${rrText}`;
+            }
+
             tr.innerHTML = `
                 <td>📅 ${t.date} ${entryTimeStr}</td>
                 <td style="font-weight: 700; color: #fff;">${symbStr} (${t.numLots || 1} Lot / ${t.quantity} Qty)</td>
                 <td><span class="badge ${isWin ? 'badge-win' : 'badge-loss'}">${t.type} @ ₹${entrySpot}</span></td>
                 <td style="font-weight: 700;">₹${entrySpot}</td>
                 <td style="color: var(--danger); font-weight: 700;">₹${slSpot}</td>
-                <td style="color: var(--success); font-weight: 700;">₹${tgtSpot} <span style="font-size:0.75rem; color:#a7f3d0;">(R:R 1:${t.riskRewardRatio || 3})</span></td>
+                <td style="color: var(--success); font-weight: 700;">₹${tgtSpot} <span style="font-size:0.75rem; color:#a7f3d0;">(R:R ${rrText})</span></td>
                 <td style="color: ${itemPnlColor}; font-weight: 800;">${rupeePnL >= 0 ? '+' : ''}₹${rupeePnL.toLocaleString()} <span style="font-size: 0.75rem; opacity: 0.9;">(${ptsPnL >= 0 ? '+' : ''}${ptsPnL} pts)</span></td>
                 <td style="color: ${balColor}; font-weight: 800; font-family: var(--font-mono);">₹${balVal.toLocaleString()}</td>
                 <td><span class="badge ${remarkClass}">${remarkText}</span></td>
@@ -251,6 +253,7 @@ function renderCustomAnalysisResults(res) {
 // Render Backtest Results & Chart
 function renderBacktestResults(results) {
     const tbody = document.getElementById('backtest-report-tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     const bestStrat = results[0];
@@ -319,10 +322,8 @@ function renderEquityChart(equityData) {
 }
 
 function updateLiveControlsUI(data) {
-    const toggle = document.getElementById('order-switch-toggle');
-    if (toggle) {
-        toggle.checked = data.orderSwitchOn;
-        updateSwitchUI(data.orderSwitchOn);
+    if (data.executionMode) {
+        updateExecutionModeUI(data.executionMode);
     }
 }
 
@@ -529,7 +530,7 @@ async function fetchLiveStatus() {
                                 <td>₹${sig.spotPrice}</td>
                                 <td style="color: var(--primary); font-weight: 700;">${sig.atmStrike} (${sig.optionSymbol || 'NIFTY ATM'}) ${premInfo}</td>
                                 <td style="color: var(--danger); font-weight: 700;">₹${sig.optionSL}</td>
-                                <td style="color: var(--success); font-weight: 700;">₹${sig.optionTarget} <span style="font-size:0.75rem; color:#a7f3d0;">(R:R 1:${sig.riskRewardRatio || 3.0})</span></td>
+                                <td style="color: var(--success); font-weight: 700;">₹${sig.optionTarget} <span style="font-size:0.75rem; color:#a7f3d0;">(R:R ${sig.riskRewardRatio || '2.0'})</span></td>
                                 <td><span class="badge ${sig.orderSwitchOn ? 'badge-win' : 'badge-info'}">${sig.orderSwitchOn ? `🟢 ${modeText}` : '🟡 SIGNAL ALERT ONLY'}</span></td>
                             </tr>
                         `;
@@ -717,17 +718,128 @@ function updateSwitchUI(isOn) {
     }
 }
 
-// Initial Load
-window.onload = () => {
-    if (window.location.hash === '#live') {
-        switchTab('live');
-    } else if (window.location.hash === '#backtest') {
-        switchTab('backtest');
-    } else if (window.location.hash === '#reports') {
-        switchTab('reports');
+// Interactive UI Backtest Execution Handler
+async function runUIBacktest() {
+    let startEl = document.getElementById('bt-start-date');
+    let endEl = document.getElementById('bt-end-date');
+
+    let startDate = startEl?.value || '2026-09-01';
+    let endDate = endEl?.value || '2026-09-18';
+
+    // Auto-correct corrupt date inputs (e.g. 0001-08-31 -> 2026-08-31)
+    if (startDate.startsWith('0001') || (startDate.split('-')[0] && parseInt(startDate.split('-')[0], 10) < 2000)) {
+        startDate = '2026' + startDate.substring(4);
+        if (startEl) startEl.value = startDate;
+    }
+    if (endDate.startsWith('0001') || (endDate.split('-')[0] && parseInt(endDate.split('-')[0], 10) < 2000)) {
+        endDate = '2026' + endDate.substring(4);
+        if (endEl) endEl.value = endDate;
     }
 
-    runFullBacktest();
+    const initialCapital = Number(document.getElementById('bt-initial-capital')?.value || 100000);
+
+    const btn = document.getElementById('run-backtest-btn');
+    const badge = document.getElementById('bt-status-badge');
+    const tbody = document.getElementById('bt-trades-tbody');
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `⏳ RUNNING...`;
+    }
+    if (badge) {
+        badge.className = 'badge badge-warning';
+        badge.innerText = '⏳ Downloading Candles & Processing...';
+    }
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">⏳ Processing Dhan 5-min candles for ${startDate} to ${endDate}... Please wait...</td></tr>`;
+    }
+
+    try {
+        const res = await fetch('/api/backtest/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ startDate, endDate, initialCapital })
+        });
+        const data = await res.json();
+
+        if (data.success && data.report) {
+            const r = data.report;
+
+            const initEl = document.getElementById('bt-card-initial');
+            if (initEl) initEl.innerText = `₹${r.initialCapital.toLocaleString()}`;
+
+            const finalEl = document.getElementById('bt-card-final');
+            if (finalEl) finalEl.innerText = `₹${r.finalCapital.toLocaleString()}`;
+
+            const pnlEl = document.getElementById('bt-card-pnl');
+            const isProfit = r.netPnL >= 0;
+            if (pnlEl) {
+                pnlEl.className = isProfit ? 'card-value green' : 'card-value red';
+                pnlEl.innerText = `${isProfit ? '+' : ''}₹${r.netPnL.toLocaleString()} (${isProfit ? '+' : ''}${r.netPnLPct}%)`;
+            }
+
+            const winrateEl = document.getElementById('bt-card-winrate');
+            if (winrateEl) {
+                winrateEl.className = r.winRate >= 50 ? 'card-value green' : 'card-value red';
+                winrateEl.innerText = `${r.winRate}%`;
+            }
+
+            const wlEl = document.getElementById('bt-card-wins-losses');
+            if (wlEl) wlEl.innerText = `${r.wins} Wins / ${r.losses} Losses (${r.totalTrades} Trades)`;
+
+            if (badge) {
+                badge.className = 'badge badge-success';
+                badge.innerText = `✅ Completed (${r.totalTrades} Trades)`;
+            }
+
+            if (!r.trades || r.trades.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">⚪ No trades triggered during ${startDate} to ${endDate}. 100% Capital Safe (₹${r.initialCapital.toLocaleString()}).</td></tr>`;
+            } else {
+                tbody.innerHTML = r.trades.map((t, idx) => {
+                    const isWin = t.pnlRupees > 0;
+                    const isLoss = t.pnlRupees < 0;
+                    const badgeClass = isWin ? 'badge-win' : (isLoss ? 'badge-loss' : 'badge-info');
+                    const pnlColor = isWin ? '#10b981' : (isLoss ? '#ef4444' : '#94a3b8');
+
+                    return `
+                        <tr>
+                            <td>#${idx + 1}</td>
+                            <td>${t.date} ${t.entryTime}</td>
+                            <td>${t.exitTime}</td>
+                            <td><span class="badge ${t.optionType === 'CE' ? 'badge-win' : 'badge-loss'}">NIFTY ${t.optionType}</span></td>
+                            <td>₹${t.spotEntryPrice}</td>
+                            <td style="font-size: 0.8rem;">SL: ₹${t.spotSL}<br>Target: ₹${t.spotTarget}</td>
+                            <td>Entry: ₹${t.optionPremiumPrice}<br>Exit: ₹${t.exitPremiumPrice}</td>
+                            <td><span class="badge ${badgeClass}">${t.exitReason}</span></td>
+                            <td style="font-weight: 700; color: ${pnlColor};">${t.pnlRupees >= 0 ? '+' : ''}₹${t.pnlRupees} (${t.pnlPoints >= 0 ? '+' : ''}${t.pnlPoints} pts)</td>
+                            <td style="font-weight: 700;">₹${t.balanceAfter.toLocaleString()}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        } else {
+            alert('Backtest error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Backtest fetch failed: ' + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `⚡ RUN BACKTEST`;
+        }
+    }
+}
+
+// Initial Load
+window.onload = () => {
+    if (window.location.hash === '#reports') {
+        switchTab('reports');
+    } else if (window.location.hash === '#backtest') {
+        switchTab('backtest');
+    } else {
+        switchTab('live');
+    }
+
     fetchLiveStatus();
     setInterval(fetchLiveStatus, 2000);
 };

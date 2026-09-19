@@ -1,11 +1,11 @@
 {
   "id": "default_order_config",
-  "name": "Default 100% Capital Usage + Paper/Real Order Execution Config",
+  "name": "Master Head Consensus Strategy Order Execution Config",
   "executionMode": "PAPER",
   "paperTrading": {
-    "initialCapital": 10000,
-    "riskRewardRatio": 3,
-    "maxTradesPerDay": 4
+    "initialCapital": 100000,
+    "riskRewardRatio": 2.0,
+    "maxTradesPerDay": 3
   },
   "capitalUsagePct": 100,
   "productType": "INTRADAY",
@@ -13,12 +13,12 @@
   "tradingSymbol": "NIFTY_OPTION",
   "defaultQuantity": 65,
   "trailingSL": {
-    "enabled": true,
-    "algoTrailing": true,
-    "lockAtTarget": true,
-    "costOffsetPoints": 1,
-    "trailingJumpStep": 5,
-    "stepMoveRequirement": 10
+    "enabled": false,
+    "algoTrailing": false,
+    "lockAtTarget": false,
+    "costOffsetPoints": 0,
+    "trailingJumpStep": 0,
+    "stepMoveRequirement": 0
   },
   "riskManagement": {
     "maxOpenPositions": 1,
@@ -26,6 +26,6 @@
     "maxLossPerTrade": 1000,
     "maxLossPerDay": 5000
   },
-  "riskRewardRatio": 4,
+  "riskRewardRatio": 2.0,
   "orderSwitchOn": true
 }

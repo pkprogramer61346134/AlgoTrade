@@ -3,7 +3,7 @@ const path = require('path');
 const { DhanSDK } = require('../dhanAPI/index');
 const PaperTradeManager = require('./papertrade/paperTradeManager');
 const RealTradeManager = require('./realtrade/realTradeManager');
-const BacktestExecutionEngine = require('./backtest/backtestExecutionEngine');
+const SpotRiskDeltaCalculator = require('../src/spotRiskDeltaCalculator');
 
 const CONFIG_DIR = __dirname;
 const FALLBACK_CONFIG_PATH = path.join(__dirname, '..', 'order_config.json');
@@ -15,7 +15,6 @@ class OrderExecutionManager {
 
         this.paperManager = new PaperTradeManager(this.config);
         this.realManager = new RealTradeManager(this.dhan, this.config);
-        this.backtestEngine = new BacktestExecutionEngine(this.config);
 
         this.isExecutingOrder = false;
     }
@@ -37,11 +36,11 @@ class OrderExecutionManager {
         }
         return {
             executionMode: "PAPER",
-            paperTrading: { initialCapital: 10000, riskRewardRatio: 3, maxTradesPerDay: 4 },
+            paperTrading: { initialCapital: 100000, riskRewardRatio: 2.0, maxTradesPerDay: 3 },
             capitalUsagePct: 100,
             productType: "INTRADAY",
             defaultQuantity: 65,
-            riskManagement: { maxOpenPositions: 1, maxTradesPerDay: 4, maxLossPerTrade: 1000, maxLossPerDay: 5000 },
+            riskManagement: { maxOpenPositions: 1, maxTradesPerDay: 3, maxLossPerTrade: 1000, maxLossPerDay: 5000 },
             orderSwitchOn: true
         };
     }
@@ -122,7 +121,7 @@ class OrderExecutionManager {
         return cappedLots * LOT_SIZE;
     }
 
-    async resolveOptionContractFromDhan(spotPrice = 23400, optionType = "CE", allocatedCapital = 10000) {
+    async resolveOptionContractFromDhan(spotPrice = null, optionType = "CE", allocatedCapital = 100000) {
         return this.realManager.resolveOptionContractFromDhan(spotPrice, optionType, allocatedCapital);
     }
 
@@ -136,7 +135,7 @@ class OrderExecutionManager {
         const journal = this.getJournalData();
         const todayTrades = journal.filter(t => t.date === todayStr);
 
-        const maxTrades = this.config.paperTrading?.maxTradesPerDay || this.config.riskManagement?.maxTradesPerDay || this.config.maxTradesPerDay || 4;
+        const maxTrades = this.config.paperTrading?.maxTradesPerDay || this.config.riskManagement?.maxTradesPerDay || this.config.maxTradesPerDay || 3;
         if (todayTrades.length >= maxTrades) {
             return { limitReached: true, reason: `Daily Trade Limit (${todayTrades.length}/${maxTrades}) reached for today (${todayStr})` };
         }
@@ -162,7 +161,7 @@ class OrderExecutionManager {
         return this.paperManager.saveTradeToJournal(tradeRecord);
     }
 
-    async executeOrder(signal, currentSpotPrice = 23400, totalCapital = null) {
+    async executeOrder(signal, currentSpotPrice = null, totalCapital = null) {
         this.config = this.loadConfig();
         const mode = this.config.executionMode || "PAPER";
         const liveCapital = totalCapital || await this.fetchLiveCapital();
@@ -201,7 +200,10 @@ class OrderExecutionManager {
             const atmStrike = contractDetails.strike;
             const optionSymbol = contractDetails.tradingSymbol;
             const optionSecurityId = contractDetails.securityId;
-            const optionPremiumPrice = contractDetails.price || 36.5;
+            const optionPremiumPrice = Number(contractDetails.price);
+            if (!optionPremiumPrice || isNaN(optionPremiumPrice) || optionPremiumPrice <= 0) {
+                throw new Error(`Invalid option premium price resolved for contract ${optionSymbol}: ${contractDetails.price}`);
+            }
 
             const qty = signal.quantity || this.calculateQuantity(liveCapital, optionPremiumPrice);
             const numLots = signal.numLots || Math.max(1, Math.floor(qty / 65));
@@ -209,16 +211,29 @@ class OrderExecutionManager {
             const maxTradeLossRupees = this.config.paperTrading?.maxLossPerTrade || this.config.riskManagement?.maxLossPerTrade || 1000;
             const maxRiskPtsCap = Number((maxTradeLossRupees / qty).toFixed(2));
 
-            const spotSL = signal.stopLoss ? Number(signal.stopLoss) : (optionType === "CE" ? spotPrice - 20 : spotPrice + 20);
-            const spotRiskPoints = Math.max(5, Math.abs(spotPrice - spotSL));
-            const delta = 0.50;
-            const calculatedOptionRisk = Math.round(spotRiskPoints * delta);
-            const premiumRiskPoints = Math.max(3, Math.min(maxRiskPtsCap, calculatedOptionRisk));
+            // 1. Analyze Nifty Spot Price Chart Structure (Entry, SL & Target) via SpotRiskDeltaCalculator
+            const spotStruct = SpotRiskDeltaCalculator.calculateSpotChartStructure({
+                spotPrice,
+                signalType: optionType === "CE" ? "BUY" : "SELL",
+                stopLoss: signal.stopLoss,
+                targetPrice: signal.targetPrice,
+                riskRewardRatio: signal.rrMultiplier || signal.riskRewardRatio || this.config.paperTrading?.riskRewardRatio || 2.0
+            });
+            const { spotSL, spotTarget, rrMultiplier } = spotStruct;
 
-            const optionSL = signal.optionSL ? Number(signal.optionSL) : Math.max(1, Number((optionPremiumPrice - premiumRiskPoints).toFixed(2)));
-
-            const rrRatio = signal.riskRewardRatio || this.config.paperTrading?.riskRewardRatio || this.config.riskRewardRatio || 3.0;
-            const target = Number((optionPremiumPrice + (rrRatio * premiumRiskPoints)).toFixed(2));
+            // 2. Map Spot Chart Levels to Option Strike Price via Delta (ATM Sensitivity ~0.50)
+            const optionDeltaMap = SpotRiskDeltaCalculator.mapSpotToOptionDelta({
+                spotPrice,
+                spotSL,
+                spotTarget,
+                optionPremiumPrice,
+                optionType,
+                maxRiskPtsCap,
+                delta: 0.50
+            });
+            const { optionSL, optionTarget } = optionDeltaMap;
+            const target = signal.optionTarget ? Number(signal.optionTarget) : optionTarget;
+            const rrRatio = rrMultiplier;
 
             const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
             const dateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -227,6 +242,8 @@ class OrderExecutionManager {
                 optionSymbol,
                 optionType,
                 spotPrice,
+                spotSL,
+                spotTarget,
                 atmStrike,
                 optionSecurityId,
                 qty,
@@ -250,7 +267,7 @@ class OrderExecutionManager {
         }
     }
 
-    monitorActivePosition(currentSpotPrice = 23400, liveOptionPremium = null) {
+    monitorActivePosition(currentSpotPrice = null, liveOptionPremium = null) {
         const mode = this.config.executionMode || "PAPER";
         if (mode === "REAL" && this.realManager.activeOrder) {
             return this.realManager.monitorPosition(currentSpotPrice, liveOptionPremium);
@@ -258,7 +275,7 @@ class OrderExecutionManager {
         return this.paperManager.monitorPosition(currentSpotPrice, liveOptionPremium);
     }
 
-    closeActivePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = 23400, timeStr = "") {
+    closeActivePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = null, timeStr = "") {
         const mode = this.config.executionMode || "PAPER";
         if (mode === "REAL" && this.realManager.activeOrder) {
             return this.realManager.closePosition(reason, exitPremiumPrice, spotExitPrice, timeStr);

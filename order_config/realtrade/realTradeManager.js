@@ -40,7 +40,8 @@ class RealTradeManager {
         }
     }
 
-    async resolveOptionContractFromDhan(spotPrice = 23400, optionType = "CE", allocatedCapital = 10000) {
+    async resolveOptionContractFromDhan(spotPrice, optionType = "CE", allocatedCapital = 100000) {
+        if (!spotPrice || isNaN(spotPrice)) spotPrice = 24500;
         const atmStrike = Math.round(spotPrice / 50) * 50;
         const maxAffordablePremium = Math.max(20, Math.floor(allocatedCapital / 65));
 
@@ -48,14 +49,14 @@ class RealTradeManager {
             if (this.dhan && this.dhan.marketData && typeof this.dhan.marketData.getOptionChain === 'function') {
                 const expRes = await this.dhan.marketData.getOptionChainExpiries(13, 'IDX_I');
                 const expiries = expRes?.data?.data || expRes?.data || [];
-                const nearestExpiry = expiries.length > 0 ? expiries[0] : '2026-09-15';
+                const nearestExpiry = expiries.length > 0 ? expiries[0] : new Date().toISOString().split('T')[0];
 
                 const ocRes = await this.dhan.marketData.getOptionChain(13, 'IDX_I', nearestExpiry);
                 const ocData = ocRes?.data?.data?.oc || ocRes?.data?.oc || {};
 
                 let bestStrike = atmStrike;
                 let bestSecId = optionType === "CE" ? "47291" : "47286";
-                let bestPrice = 36.5;
+                let bestPrice = Math.max(10, Math.round(spotPrice * 0.005));
 
                 const targetSecIdKey = optionType === "CE" ? 'ce_security_id' : 'pe_security_id';
                 const targetPremKey = optionType === "CE" ? 'ce_last_price' : 'pe_last_price';
@@ -86,7 +87,7 @@ class RealTradeManager {
                 };
             }
         } catch (err) {
-            console.warn(`⚠️ Warning fetching Option Chain from Dhan API: ${err.message}. Falling back to default strike calculation.`);
+            console.warn(`⚠️ Warning fetching Option Chain from Dhan API: ${err.message}`);
         }
 
         const fallbackSecId = optionType === "CE" ? "47291" : "47286";
@@ -94,7 +95,7 @@ class RealTradeManager {
             strike: atmStrike,
             tradingSymbol: `NIFTY-2026-09-15-${atmStrike}-${optionType}`,
             securityId: fallbackSecId,
-            price: 36.5
+            price: Math.max(10, Math.round(spotPrice * 0.005))
         };
     }
 
@@ -216,8 +217,9 @@ class RealTradeManager {
         };
     }
 
-    monitorPosition(currentSpotPrice = 23400, liveOptionPremium = null) {
+    monitorPosition(currentSpotPrice = null, liveOptionPremium = null) {
         if (!this.activeOrder || this.activeOrder.status !== "ACTIVE") return null;
+        const spotPrice = currentSpotPrice || this.activeOrder.spotPrice || this.activeOrder.spotEntryPrice;
 
         const pos = this.activeOrder;
         let currentPremium = liveOptionPremium;
@@ -269,8 +271,9 @@ class RealTradeManager {
         return null;
     }
 
-    closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = 23400, timeStr = "") {
+    closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = null, timeStr = "") {
         if (!this.activeOrder) return null;
+        const actualSpotExitPrice = spotExitPrice || (this.activeOrder ? this.activeOrder.spotPrice : 0);
 
         const pos = this.activeOrder;
         const exitTime = timeStr || new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });

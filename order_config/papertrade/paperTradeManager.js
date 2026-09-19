@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const SpotRiskDeltaCalculator = require('../../src/spotRiskDeltaCalculator');
 
 const JOURNAL_DIR = path.resolve(__dirname, '../../server/data');
 const JOURNAL_FILE = path.join(JOURNAL_DIR, 'trade_journal.json');
@@ -20,7 +21,7 @@ class PaperTradeManager {
         } catch (e) {}
         return {
             executionMode: "PAPER",
-            paperTrading: { initialCapital: 10000, riskRewardRatio: 3, maxTradesPerDay: 4 },
+            paperTrading: { initialCapital: 100000, riskRewardRatio: 2.0, maxTradesPerDay: 3 },
             riskManagement: { maxOpenPositions: 1, maxTradesPerDay: 3, maxLossPerTrade: 1000, maxLossPerDay: 5000 }
         };
     }
@@ -39,7 +40,7 @@ class PaperTradeManager {
     }
 
     loadPaperBalance() {
-        const initialCap = this.config.paperTrading?.initialCapital || this.config.paperCapital || 10000;
+        const initialCap = this.config.paperTrading?.initialCapital || this.config.paperCapital || 100000;
         try {
             this.ensureJournalStorage();
             if (fs.existsSync(JOURNAL_FILE)) {
@@ -63,7 +64,7 @@ class PaperTradeManager {
         return initialCap;
     }
 
-    resetPaperBalance(newCapital = 10000) {
+    resetPaperBalance(newCapital = 100000) {
         this.paperBalance = Number(newCapital);
         return this.paperBalance;
     }
@@ -73,6 +74,8 @@ class PaperTradeManager {
             optionSymbol,
             optionType,
             spotPrice,
+            spotSL,
+            spotTarget,
             atmStrike,
             optionSecurityId,
             qty,
@@ -90,8 +93,8 @@ class PaperTradeManager {
         console.log(`\n📄 [PAPER TRADE MANAGER] Paper Trade Executed!`);
         console.log(`   - Order ID: #${paperOrderId} | Symbol: ${optionSymbol}`);
         console.log(`   - Option Type: ${optionType} | Qty: ${qty} units (${numLots} Lots)`);
-        console.log(`   - Option Entry Premium: ₹${optionPremiumPrice} | Spot: ₹${spotPrice}`);
-        console.log(`   - Initial SL: ₹${optionSL} | Target (1:${rrRatio}): ₹${target}`);
+        console.log(`   - Spot Entry: ₹${spotPrice} | Spot SL: ₹${spotSL || 'N/A'} | Spot Target: ₹${spotTarget || 'N/A'}`);
+        console.log(`   - Premium Entry: ₹${optionPremiumPrice} | Premium SL: ₹${optionSL} | Target (1:${rrRatio}): ₹${target}`);
 
         this.activeOrder = {
             orderId: paperOrderId,
@@ -103,6 +106,8 @@ class PaperTradeManager {
             type: signal.type || signal.signalType || "BUY_SIGNAL",
             optionType: optionType,
             spotEntryPrice: spotPrice,
+            spotSL: spotSL || (optionType === "CE" ? spotPrice - 20 : spotPrice + 20),
+            spotTarget: spotTarget || (optionType === "CE" ? spotPrice + 40 : spotPrice - 40),
             atmStrike: atmStrike,
             optionSymbol: optionSymbol,
             securityId: optionSecurityId,
@@ -130,16 +135,17 @@ class PaperTradeManager {
         };
     }
 
-    monitorPosition(currentSpotPrice = 23400, liveOptionPremium = null) {
+    monitorPosition(currentSpotPrice = null, liveOptionPremium = null) {
         if (!this.activeOrder || this.activeOrder.status !== "ACTIVE") return null;
 
         const pos = this.activeOrder;
+        if (!currentSpotPrice && pos) currentSpotPrice = pos.spotEntryPrice;
 
         let currentPremium = liveOptionPremium;
         if (currentPremium && currentPremium > 0) {
             currentPremium = Number(currentPremium.toFixed(2));
         } else {
-            const spotMove = currentSpotPrice - pos.spotEntryPrice;
+            const spotMove = (currentSpotPrice || pos.spotEntryPrice) - pos.spotEntryPrice;
             const deltaMove = pos.optionType === "CE" ? (spotMove * 0.50) : (-spotMove * 0.50);
             currentPremium = Math.max(0.5, Number((pos.optionPremiumPrice + deltaMove).toFixed(2)));
         }
@@ -161,30 +167,21 @@ class PaperTradeManager {
         const nowKolkata = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
         const totalMins = nowKolkata.getHours() * 60 + nowKolkata.getMinutes();
 
-        const targetPrice = pos.target || pos.target1 || pos.currentTarget;
+        const dualExit = SpotRiskDeltaCalculator.evaluateDualLayerExit({
+            currentSpotPrice,
+            currentOptionPremium: currentPremium,
+            activePosition: pos,
+            totalMins
+        });
 
-        if (totalMins >= 915) {
-            exitTriggered = true;
-            exitReason = "EOD_MARKET_CLOSE";
-            exitPrice = currentPremium;
-        } else if (currentPremium >= targetPrice) {
-            exitTriggered = true;
-            exitReason = "TARGET_HIT";
-            exitPrice = targetPrice;
-        } else if (currentPremium <= pos.currentSL) {
-            exitTriggered = true;
-            exitReason = "SL_HIT";
-            exitPrice = pos.currentSL;
-        }
-
-        if (exitTriggered) {
-            return this.closePosition(exitReason, exitPrice, currentSpotPrice, timeStr);
+        if (dualExit.exitTriggered) {
+            return this.closePosition(dualExit.exitReason, dualExit.exitPrice, currentSpotPrice, timeStr);
         }
 
         return null;
     }
 
-    closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = 23400, timeStr = "") {
+    closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = null, timeStr = "") {
         if (!this.activeOrder) return null;
 
         const pos = this.activeOrder;

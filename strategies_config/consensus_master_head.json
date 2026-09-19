@@ -5,13 +5,23 @@
   "description": "Advanced Quantitative Master Engine. Aggregates 16 Sub-Strategy Engines (ORB, Volume Surge, RSI, EMA50, PCR, ATR, Rangebox Fader, VWAP, Supertrend, Price Action, MACD, Bollinger Bands, Prev Day Levels, OBV Volume Flow, Candle Momentum, Bank Nifty Heavyweight Alignment) with High-Conviction Majority Voting Consensus (>= 11/16 YES Votes).",
   "author": "AlgoTrade Institutional Engine",
   "timeframe": "5",
-  "maxTradesPerDay": 4,
-  "riskRewardRatio": 3.0,
+  "maxTradesPerDay": 3,
+  "riskRewardRatio": 2.0,
   "consensusThreshold": 13,
   "indicators": {
     "orbMinutes": 15,
+    "orbBufferPts": 5.0,
+    "rvolMin": 1.25,
     "rsiPeriod": 14,
-    "emaTrendPeriod": 50
+    "rsiBullMin": 54,
+    "rsiBearMax": 46,
+    "emaTrendPeriod": 50,
+    "emaDistMin": 12.0,
+    "pcrBullMin": 1.05,
+    "pcrBearMax": 0.85,
+    "atrMin": 15.0,
+    "vwapDistMin": 10.0,
+    "macdHistMin": 0.45
   },
   "rules": {
     "buy": [
@@ -27,6 +37,6 @@
   },
   "target": {
     "type": "RISK_REWARD",
-    "multiplier": 3.0
+    "multiplier": 2.0
   }
 }
