@@ -26,10 +26,12 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     const c = candles[i];
     if (!c.date) return { type: "NONE" };
 
-    // ORB Range Protection: 9:15 AM to 9:30 AM is morning range build window. Breakouts valid >= 9:30 AM (570 mins)
+    // Trade Entry Time Window Filter: strictly between 09:15 AM (555 mins) and 3:00 PM (900 mins)
     if (c.time) {
         const mins = parseTimeToMins(c.time);
-        if (mins < 570) return { type: "NONE" };
+        const startMins = strategyConfig.entryStartMins || 555; // 09:15 AM
+        const endMins = strategyConfig.entryEndMins || 900;     // 3:00 PM
+        if (mins < startMins || mins >= endMins) return { type: "NONE" };
     }
 
     if (!ignoreMaxTradesCap) {
@@ -336,7 +338,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         buyVotes = 0; // Suppress buying CE at top of Resistance / Supply zone
     }
 
-    const minConsensusVotes = strategyConfig.consensusThreshold || 11; // Default 11 out of 16 High Conviction Vote
+    const minConsensusVotes = strategyConfig.consensusThreshold || 11; // Default 11 out of 17 High Conviction Vote
     let signalType = "NONE";
 
     if (buyVotes >= minConsensusVotes && buyVotes > sellVotes) {
@@ -370,9 +372,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         const targetPtsStr = dynamicTRPoints.toFixed(1);
         const ratioXXStr = `${riskPtsStr}:${targetPtsStr}`; // Exact X:X format (e.g. 22.5:33.8)
 
-        dailyTradeCounts[c.date] = (dailyTradeCounts[c.date] || 0) + 1;
-
-        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/16 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
+        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/17 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
 
         return {
             type: signalType,
@@ -395,7 +395,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         buyVotes: buyVotes,
         sellVotes: sellVotes,
         voteDetails: voteDetails,
-        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/16). Waiting for Sub-Strategy Majority.`,
+        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/17). Waiting for Sub-Strategy Majority.`,
         indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), orbHigh: orb?.high, orbLow: orb?.low, pcr: Number(pcrVal.toFixed(2)) }
     };
 }

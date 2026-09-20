@@ -6,6 +6,7 @@ const { loadAllStrategiesFromJSON, CONFIG_DIR } = require('../src/strategyLoader
 const { loadAllCandlesFromDir, getCandleDataDir } = require('../indicators/utils/dataLoader');
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('../src/dynamicStrategyEngine');
 const { candleDataHub } = require('../src/candleDataHub');
+const { evaluateConsensusEngine } = require('../src/consensusEngine');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
 const BacktestManager = require('../order_config/backtest/backtestManager');
 const { DhanSDK, ensureValidDhanToken } = require('../dhanAPI/index');
@@ -115,9 +116,9 @@ async function runPreMarketBootSync() {
         preMarketReadiness.checklist.push(`⚠️ Data Load Warning: ${e.message}`);
     }
 
-    // 3. 16-Engine Strategy Engine Warm-Up
+    // 3. 17-Engine Strategy Engine Warm-Up
     try {
-        console.log("🧠 [STEP 3/4] Pre-computing 16-Engine Indicators & Warmup...");
+        console.log("🧠 [STEP 3/4] Pre-computing 17-Engine Indicators & Warmup...");
         const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
         if (fs.existsSync(consensusMasterPath)) {
             const stratConfig = JSON.parse(fs.readFileSync(consensusMasterPath, 'utf8'));
@@ -129,7 +130,7 @@ async function runPreMarketBootSync() {
             }
         }
         preMarketReadiness.engineWarmedUp = true;
-        preMarketReadiness.checklist.push("✅ 16-Engine Consensus: Warmed Up in RAM");
+        preMarketReadiness.checklist.push("✅ 17-Engine Consensus: Warmed Up in RAM");
     } catch (e) {
         preMarketReadiness.engineWarmedUp = false;
         preMarketReadiness.checklist.push(`⚠️ Engine Warmup Warning: ${e.message}`);
@@ -277,10 +278,224 @@ app.post('/api/backtest/run', async (req, res) => {
         const capital = Number(initialCapital) || 100000;
 
         console.log(`📊 [API BACKTEST RUN] Date Range: ${start} to ${end} | Capital: ₹${capital}`);
-        const report = await backtestManager.runBacktest(start, end, capital);
+        const freshManager = new BacktestManager();
+        const report = await freshManager.runBacktest(start, end, capital);
+        console.log(`📊 [API BACKTEST RESULT] Total Trades: ${report.totalTrades} | Net PnL: ₹${report.netPnL} | Final Cap: ₹${report.finalCapital}`);
         res.json({ success: true, report });
     } catch (err) {
         console.error(`❌ [API BACKTEST ERROR] ${err.message}`);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Dedicated Tick-by-Tick Simulator API Endpoints
+const SpotRiskDeltaCalculator = require('../src/spotRiskDeltaCalculator');
+
+app.post('/api/simulator/init', async (req, res) => {
+    try {
+        const { date, initialCapital } = req.body || {};
+        const targetDate = date || '2026-09-11';
+        const capital = Number(initialCapital) || 10000;
+
+        const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
+        const stratConfig = JSON.parse(fs.readFileSync(consensusMasterPath, 'utf8'));
+
+        const candles = await candleDataHub.getCandlesWithWarmup(targetDate, targetDate, 300);
+        const preparedData = prepareJSONStrategyData(candles, stratConfig);
+
+        const dayCandles = [];
+        const dayIndices = [];
+        for (let i = 0; i < candles.length; i++) {
+            if (candles[i].date === targetDate) {
+                dayCandles.push(candles[i]);
+                dayIndices.push(i);
+            }
+        }
+
+        res.json({
+            success: true,
+            targetDate,
+            initialCapital: capital,
+            totalCandles: dayCandles.length,
+            dayCandles,
+            dayIndices,
+            stratConfig
+        });
+    } catch (err) {
+        console.error(`❌ [SIMULATOR INIT ERROR] ${err.message}`);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/simulator/step', async (req, res) => {
+    try {
+        const { targetDate, globalIndex, runningCapital, activeTrade, dailyTradeCount } = req.body || {};
+        const i = Number(globalIndex);
+        const capital = Number(runningCapital) || 10000;
+
+        const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
+        const stratConfig = JSON.parse(fs.readFileSync(consensusMasterPath, 'utf8'));
+
+        const candles = await candleDataHub.getCandlesWithWarmup(targetDate, targetDate, 300);
+        const preparedData = prepareJSONStrategyData(candles, stratConfig);
+        const dailyTradeCounts = { [targetDate]: Number(dailyTradeCount || 0) };
+
+        const c = candles[i];
+        if (!c) {
+            console.warn(`⚠️ Simulator Step Invalid Candle: i=${i}, globalIndex=${globalIndex}, candlesLen=${candles ? candles.length : 0}`);
+            return res.json({ success: false, error: `Invalid candle index ${i} (candles array len ${candles ? candles.length : 0})` });
+        }
+
+        const timeStr = c.time || '09:15';
+        const parts = timeStr.split(':').map(Number);
+        const totalMins = parts[0] * 60 + (parts[1] || 0);
+
+        let updatedActiveTrade = activeTrade ? { ...activeTrade } : null;
+        let updatedCapital = capital;
+        let tradeClosedEvent = null;
+        let tradeEnteredEvent = null;
+
+        // 1. Monitor Active Position Exit & Trailing SL
+        if (updatedActiveTrade) {
+            const currentSpotPrice = c.close;
+            const spotMove = currentSpotPrice - updatedActiveTrade.spotEntryPrice;
+            const deltaMove = updatedActiveTrade.optionType === "CE" ? (spotMove * 0.50) : (-spotMove * 0.50);
+            const currentOptionPremium = Math.max(0.5, Number((updatedActiveTrade.optionPremiumPrice + deltaMove).toFixed(2)));
+
+            if (currentOptionPremium > updatedActiveTrade.highestPremium) {
+                updatedActiveTrade.highestPremium = currentOptionPremium;
+            }
+
+            const targetDist = updatedActiveTrade.target - updatedActiveTrade.optionPremiumPrice;
+            let wasTrailed = false;
+            if (targetDist > 0 && (updatedActiveTrade.highestPremium - updatedActiveTrade.optionPremiumPrice) >= (targetDist * 0.50)) {
+                if (updatedActiveTrade.currentSL < updatedActiveTrade.optionPremiumPrice) {
+                    updatedActiveTrade.currentSL = updatedActiveTrade.optionPremiumPrice; // Trail to Cost!
+                    wasTrailed = true;
+                }
+            }
+
+            updatedActiveTrade.currentPremium = currentOptionPremium;
+
+            const dualExit = SpotRiskDeltaCalculator.evaluateDualLayerExit({
+                currentSpotPrice,
+                currentOptionPremium,
+                activePosition: updatedActiveTrade,
+                totalMins
+            });
+
+            if (dualExit.exitTriggered) {
+                const finalExitPremium = dualExit.exitPrice;
+                const ptsPnL = Number((finalExitPremium - updatedActiveTrade.optionPremiumPrice).toFixed(2));
+                const totalPnL = Number((ptsPnL * updatedActiveTrade.quantity).toFixed(2));
+
+                updatedCapital = Number((updatedCapital + totalPnL).toFixed(2));
+
+                tradeClosedEvent = {
+                    date: c.date,
+                    entryTime: updatedActiveTrade.entryTime,
+                    exitTime: timeStr,
+                    type: updatedActiveTrade.optionType,
+                    numLots: updatedActiveTrade.numLots,
+                    qty: updatedActiveTrade.quantity,
+                    spotEntry: updatedActiveTrade.spotEntryPrice,
+                    spotExit: currentSpotPrice,
+                    entryPremium: updatedActiveTrade.optionPremiumPrice,
+                    exitPremium: finalExitPremium,
+                    pnlRupees: totalPnL,
+                    pnlPoints: ptsPnL,
+                    exitReason: dualExit.exitReason,
+                    balanceAfter: updatedCapital
+                };
+
+                updatedActiveTrade = null;
+            }
+        }
+
+        // 2. Scan Signal & Evaluate Consensus
+        const vwapVal = preparedData.vwap ? preparedData.vwap[i] : null;
+        const consensusResult = evaluateConsensusEngine(candles, i, stratConfig, preparedData, dailyTradeCounts, false);
+
+        let vwapFilterPassed = true;
+        if (vwapVal !== null && vwapVal !== undefined) {
+            if (consensusResult.type === "BUY" && c.close < vwapVal) vwapFilterPassed = false;
+            if (consensusResult.type === "SELL" && c.close > vwapVal) vwapFilterPassed = false;
+        }
+
+        const startMins = stratConfig.entryStartMins || 555; // 09:15 AM
+        const endMins = stratConfig.entryEndMins || 900;     // 3:00 PM
+        const isTimeWindowPassed = totalMins >= startMins && totalMins < endMins;
+
+        if (!updatedActiveTrade && consensusResult && consensusResult.type !== "NONE" && vwapFilterPassed && isTimeWindowPassed) {
+            if ((dailyTradeCounts[targetDate] || 0) < 3) {
+                dailyTradeCounts[targetDate] = (dailyTradeCounts[targetDate] || 0) + 1;
+
+                const spotPrice = c.close;
+                const optionType = consensusResult.type === "BUY" ? "CE" : "PE";
+                const optionPremiumPrice = Math.max(20, Math.round(spotPrice * 0.005));
+
+                const numLots = Math.max(1, Math.floor(updatedCapital / 10000));
+                const qty = numLots * 65;
+
+                const spotStruct = SpotRiskDeltaCalculator.calculateSpotChartStructure({
+                    spotPrice,
+                    signalType: consensusResult.type,
+                    stopLoss: consensusResult.stopLoss,
+                    targetPrice: consensusResult.targetPrice,
+                    riskRewardRatio: 2.0
+                });
+
+                const optionDeltaMap = SpotRiskDeltaCalculator.mapSpotToOptionDelta({
+                    spotPrice,
+                    spotSL: spotStruct.spotSL,
+                    spotTarget: spotStruct.spotTarget,
+                    optionPremiumPrice,
+                    optionType,
+                    maxRiskPtsCap: 100,
+                    delta: 0.50
+                });
+
+                updatedActiveTrade = {
+                    extendedRiderEnabled: Boolean(stratConfig.extendedProfitRider?.enabled),
+                    date: c.date,
+                    entryTime: timeStr,
+                    optionType,
+                    spotEntryPrice: spotPrice,
+                    spotSL: spotStruct.spotSL,
+                    spotTarget: spotStruct.spotTarget,
+                    quantity: qty,
+                    numLots,
+                    optionPremiumPrice,
+                    currentPremium: optionPremiumPrice,
+                    highestPremium: optionPremiumPrice,
+                    initialSL: optionDeltaMap.optionSL,
+                    currentSL: optionDeltaMap.optionSL,
+                    target: optionDeltaMap.optionTarget,
+                    currentTarget: optionDeltaMap.optionTarget,
+                    consensusVotes: consensusResult.consensusVotes
+                };
+
+                tradeEnteredEvent = { ...updatedActiveTrade };
+            }
+        }
+
+        res.json({
+            success: true,
+            candle: c,
+            timeStr,
+            totalMins,
+            consensusResult,
+            vwapVal,
+            vwapFilterPassed,
+            isTimeWindowPassed,
+            updatedActiveTrade,
+            updatedCapital,
+            dailyTradeCount: dailyTradeCounts[targetDate] || 0,
+            tradeClosedEvent,
+            tradeEnteredEvent
+        });
+    } catch (err) {
+        console.error(`❌ [SIMULATOR STEP ERROR] ${err.message}`);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -441,7 +656,7 @@ setInterval(async () => {
             const strategies = loadAllStrategiesFromJSON();
             stratConfig = strategies.find(s => s.id === liveState.activeStrategyId) || strategies[0];
         }
-        const stratName = stratConfig ? stratConfig.name : "👑 Master Head Multi-Strategy Consensus Engine (16-Engine Voting)";
+        const stratName = stratConfig ? stratConfig.name : "👑 Master Head Multi-Strategy Consensus Engine (17-Engine Voting)";
 
         const rawHist = loadAllCandlesFromDir(getCandleDataDir()) || [];
         const histCandles = rawHist.filter(c => c.date !== todayStr);
@@ -481,13 +696,13 @@ setInterval(async () => {
 
             if (signal && signal.type === "BUY") {
                 status = "BUY_SIGNAL";
-                reason = signal.reasoning || `🚀 BULLISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 16-Engine Consensus Triggered BUY CE.`;
+                reason = signal.reasoning || `🚀 BULLISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 17-Engine Consensus Triggered BUY CE.`;
             } else if (signal && signal.type === "SELL") {
                 status = "SELL_SIGNAL";
-                reason = signal.reasoning || `🔻 BEARISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 16-Engine Consensus Triggered BUY PE.`;
+                reason = signal.reasoning || `🔻 BEARISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 17-Engine Consensus Triggered BUY PE.`;
             } else {
                 status = "FLAT";
-                reason = signal?.reasoning || `ℹ️ MASTER HEAD CONSENSUS EVALUATION [${stratName}]: Nifty Spot ₹${spot}. Waiting for >= 11/16 Majority Vote. Strategy is FLAT.`;
+                reason = signal?.reasoning || `ℹ️ MASTER HEAD CONSENSUS EVALUATION [${stratName}]: Nifty Spot ₹${spot}. Waiting for >= 11/17 Majority Vote. Strategy is FLAT.`;
             }
         } else {
             status = "FLAT";
@@ -506,7 +721,7 @@ setInterval(async () => {
                 if (!isDuplicateSignal) {
                     const optionType = status === "BUY_SIGNAL" ? "CE" : "PE";
                     const config = orderManager.loadConfig();
-                    const rr = config.riskRewardRatio !== undefined ? config.riskRewardRatio : 3.0;
+                    const rr = signal?.rrMultiplier || config.riskRewardRatio || 2.0;
                     const liveCapital = await orderManager.fetchLiveCapital();
                     const usagePct = config.capitalUsagePct !== undefined ? config.capitalUsagePct : 100;
                     const allocatedCapital = (liveCapital * usagePct) / 100;
@@ -516,9 +731,28 @@ setInterval(async () => {
                     if (!entryPremium || isNaN(entryPremium) || entryPremium <= 0) {
                         throw new Error(`Invalid contract price from Dhan for ${contract.tradingSymbol}: ${contract.price}`);
                     }
-                    const riskPts = Math.max(3, Math.min(20, Math.round(entryPremium * 0.15)));
-                    const optionSL = Math.max(1, Number((entryPremium - riskPts).toFixed(2)));
-                    const optionTarget = Number((entryPremium + (rr * riskPts)).toFixed(2));
+
+                    // Dynamic Spot & Option Risk Delta Calculator for Paper / Real trade execution (identical to Simulation)
+                    const SpotRiskDeltaCalculator = require('./src/spotRiskDeltaCalculator');
+                    const spotStruct = SpotRiskDeltaCalculator.calculateSpotChartStructure({
+                        spotPrice: spot,
+                        signalType: status,
+                        stopLoss: signal?.stopLoss,
+                        targetPrice: signal?.targetPrice,
+                        riskRewardRatio: rr
+                    });
+
+                    const deltaMap = SpotRiskDeltaCalculator.mapSpotToOptionDelta({
+                        spotPrice: spot,
+                        spotSL: spotStruct.spotSL,
+                        spotTarget: spotStruct.spotTarget,
+                        optionPremiumPrice: entryPremium,
+                        atmStrike: contract.strike,
+                        optionType
+                    });
+
+                    const optionSL = deltaMap.optionSL;
+                    const optionTarget = deltaMap.optionTarget;
                     const NIFTY_LOT_SIZE = 65;
                     const numLots = Math.max(1, Math.floor(allocatedCapital / (entryPremium * NIFTY_LOT_SIZE)));
                     const totalQty = numLots * NIFTY_LOT_SIZE;
@@ -529,15 +763,21 @@ setInterval(async () => {
                         signalType: status,
                         type: optionType,
                         spotPrice: spot,
+                        spotSL: spotStruct.spotSL,
+                        spotTarget: spotStruct.spotTarget,
+                        stopLoss: spotStruct.spotSL,
+                        targetPrice: spotStruct.spotTarget,
                         atmStrike: contract.strike,
                         optionSymbol: contract.tradingSymbol,
                         entryPremium: entryPremium,
                         optionSL: optionSL,
                         optionTarget: optionTarget,
                         riskRewardRatio: rr,
+                        rrMultiplier: rr,
                         numLots: numLots,
                         quantity: totalQty,
                         allocatedCapital: Number(allocatedCapital.toFixed(2)),
+                        extendedRiderEnabled: true,
                         orderSwitchOn: liveState.orderSwitchOn,
                         executionMode: config.executionMode || "PAPER",
                         timestamp: Date.now()
@@ -596,7 +836,7 @@ app.post('/api/backtest', (req, res) => {
         const strategies = loadAllStrategiesFromJSON();
 
         if (!candles || candles.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'No candle data found in C:\\candle data' });
+            return res.status(404).json({ status: 'error', message: `No candle data found in ${candlesDir}` });
         }
 
         const results = [];
@@ -854,7 +1094,7 @@ app.post('/api/backtest', (req, res) => {
         const strategies = loadAllStrategiesFromJSON();
 
         if (!candles || candles.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'No candle data found in C:\\candle data' });
+            return res.status(404).json({ status: 'error', message: `No candle data found in ${candlesDir}` });
         }
 
         const results = [];

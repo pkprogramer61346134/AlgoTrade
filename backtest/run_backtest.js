@@ -10,7 +10,8 @@ const { prepareMACDData, evaluateMACDDivergence } = require('./strategies/macdDi
 const { prepareComboData, evaluateComboStrategy } = require('./strategies/comboStrategy');
 const { prepareInstitutionalHighWinRateData, evaluateInstitutionalHighWinRate } = require('./strategies/institutionalHighWinRate');
 
-const DATA_DIR = "C:\\candle data";
+const { getCandleDataDir } = require('../indicators/utils/dataLoader');
+const DATA_DIR = getCandleDataDir();
 
 function runMasterBacktest() {
     console.log("=========================================================================================");

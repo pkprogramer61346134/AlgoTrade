@@ -1,13 +1,17 @@
 {
   "id": "consensus_master_head",
-  "name": "👑 Master Head Multi-Strategy Consensus Engine (16-Engine Voting)",
+  "name": "👑 Master Head Multi-Strategy Consensus Engine (17-Engine Voting)",
   "enabled": true,
-  "description": "Advanced Quantitative Master Engine. Aggregates 16 Sub-Strategy Engines (ORB, Volume Surge, RSI, EMA50, PCR, ATR, Rangebox Fader, VWAP, Supertrend, Price Action, MACD, Bollinger Bands, Prev Day Levels, OBV Volume Flow, Candle Momentum, Bank Nifty Heavyweight Alignment) with High-Conviction Majority Voting Consensus (>= 11/16 YES Votes).",
+  "description": "Advanced Quantitative Master Engine. Aggregates 17 Sub-Strategy Engines (ORB, Volume Surge, RSI, EMA50, PCR, ATR, Rangebox Fader, VWAP, Supertrend, Price Action, MACD, Bollinger Bands, Prev Day Levels, OBV Volume Flow, Candle Momentum, Bank Nifty Heavyweight Alignment, SMC Liquidity Sweep) with High-Conviction Majority Voting Consensus (>= 11/17 YES Votes).",
   "author": "AlgoTrade Institutional Engine",
   "timeframe": "5",
   "maxTradesPerDay": 3,
   "riskRewardRatio": 2.0,
-  "consensusThreshold": 13,
+  "consensusThreshold": 11,
+  "entryStartTime": "09:15",
+  "entryEndTime": "15:00",
+  "entryStartMins": 555,
+  "entryEndMins": 900,
   "indicators": {
     "orbMinutes": 15,
     "orbBufferPts": 5.0,
@@ -25,10 +29,10 @@
   },
   "rules": {
     "buy": [
-      { "field": "consensus", "operator": ">=", "target": 13 }
+      { "field": "consensus", "operator": ">=", "target": 11 }
     ],
     "sell": [
-      { "field": "consensus", "operator": ">=", "target": 13 }
+      { "field": "consensus", "operator": ">=", "target": 11 }
     ]
   },
   "stopLoss": {
@@ -38,5 +42,10 @@
   "target": {
     "type": "RISK_REWARD",
     "multiplier": 2.0
+  },
+  "extendedProfitRider": {
+    "enabled": true,
+    "mode": "TARGET_EXPANSION_RIDER",
+    "extendedTargetMultiplier": 3.0
   }
 }

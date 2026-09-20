@@ -33,6 +33,10 @@ class BacktestManager {
     }
 
     async runBacktest(startDate = '2026-09-01', endDate = '2026-09-18', initialCapital = 100000) {
+        if (fs.existsSync(this.stratPath)) {
+            this.stratConfig = JSON.parse(fs.readFileSync(this.stratPath, 'utf8'));
+        }
+
         let start = (startDate || '2026-09-01').trim();
         let end = (endDate || start).trim();
 
@@ -73,6 +77,18 @@ class BacktestManager {
                 const deltaMove = activeTrade.optionType === "CE" ? (spotMove * 0.50) : (-spotMove * 0.50);
                 const currentOptionPremium = Math.max(0.5, Number((activeTrade.optionPremiumPrice + deltaMove).toFixed(2)));
 
+                if (currentOptionPremium > activeTrade.highestPremium) {
+                    activeTrade.highestPremium = currentOptionPremium;
+                }
+
+                // DYNAMIC TRAILING SL TO BREAKEVEN: When profit reaches >= 50% of target distance, trail SL to Entry Price!
+                const targetDist = activeTrade.target - activeTrade.optionPremiumPrice;
+                if (targetDist > 0 && (activeTrade.highestPremium - activeTrade.optionPremiumPrice) >= (targetDist * 0.50)) {
+                    if (activeTrade.currentSL < activeTrade.optionPremiumPrice) {
+                        activeTrade.currentSL = activeTrade.optionPremiumPrice; // Trail to Cost!
+                    }
+                }
+
                 const dualExit = SpotRiskDeltaCalculator.evaluateDualLayerExit({
                     currentSpotPrice,
                     currentOptionPremium,
@@ -93,6 +109,8 @@ class BacktestManager {
                         entryTime: activeTrade.entryTime,
                         exitTime: timeStr,
                         optionType: activeTrade.optionType,
+                        numLots: activeTrade.numLots,
+                        quantity: activeTrade.quantity,
                         spotEntryPrice: activeTrade.spotEntryPrice,
                         spotExitPrice: currentSpotPrice,
                         spotSL: activeTrade.spotSL,
@@ -110,16 +128,30 @@ class BacktestManager {
                 }
             }
 
-            // Entry Signal Scanner
-            if (!activeTrade && totalMins >= 555 && totalMins < 900) {
+            // Entry Signal Scanner (Strictly between 09:15 AM and 3:00 PM)
+            const startMins = this.stratConfig.entryStartMins || 555; // 09:15 AM
+            const endMins = this.stratConfig.entryEndMins || 900;     // 3:00 PM
+            if (!activeTrade && totalMins >= startMins && totalMins < endMins) {
                 const todayTrades = dailyTradeCounts[c.date] || 0;
                 if (todayTrades < 3) {
+                    const vwapVal = preparedData.vwap ? preparedData.vwap[i] : null;
                     const signal = evaluateConsensusEngine(candles, i, this.stratConfig, preparedData, dailyTradeCounts, false);
-                    if (signal && signal.type !== "NONE") {
+
+                    let vwapFilterPassed = true;
+                    if (vwapVal !== null && vwapVal !== undefined) {
+                        if (signal.type === "BUY" && c.close < vwapVal) vwapFilterPassed = false;
+                        if (signal.type === "SELL" && c.close > vwapVal) vwapFilterPassed = false;
+                    }
+
+                    if (signal && signal.type !== "NONE" && vwapFilterPassed) {
+                        dailyTradeCounts[c.date] = (dailyTradeCounts[c.date] || 0) + 1;
                         const spotPrice = c.close;
                         const optionType = signal.type === "BUY" ? "CE" : "PE";
                         const optionPremiumPrice = Math.max(20, Math.round(spotPrice * 0.005));
-                        const qty = 65; // 1 Lot Nifty
+
+                        // Dynamic Compounding Lot Sizing: 1 Lot per ₹10,000 available balance
+                        const numLots = Math.max(1, Math.floor(capital / 10000));
+                        const qty = numLots * 65; // 65 Qty per Lot
 
                         const spotStruct = SpotRiskDeltaCalculator.calculateSpotChartStructure({
                             spotPrice,
@@ -143,6 +175,7 @@ class BacktestManager {
                             orderId: `BT_${trades.length + 1}`,
                             mode: "BACKTEST",
                             status: "ACTIVE",
+                            extendedRiderEnabled: Boolean(this.stratConfig.extendedProfitRider?.enabled),
                             date: c.date,
                             entryTime: timeStr,
                             optionType,
@@ -150,9 +183,10 @@ class BacktestManager {
                             spotSL: spotStruct.spotSL,
                             spotTarget: spotStruct.spotTarget,
                             quantity: qty,
-                            numLots: 1,
+                            numLots: numLots,
                             optionPremiumPrice,
                             currentPremium: optionPremiumPrice,
+                            highestPremium: optionPremiumPrice,
                             initialSL: optionDeltaMap.optionSL,
                             currentSL: optionDeltaMap.optionSL,
                             target: optionDeltaMap.optionTarget,

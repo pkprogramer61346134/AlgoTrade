@@ -20,7 +20,7 @@ function promptOptions() {
     showHeader();
 
     console.log("Please select Execution Mode:");
-    console.log("  [1] Option 1: Historical Data Mode (Backtest over C:\\candle data)");
+    console.log("  [1] Option 1: Historical Data Mode (Backtest over Candle Dataset)");
     console.log("  [2] Option 2: Live Market Signal Alert Only (Order Switch: 🔴 OFF)");
     console.log("  [3] Option 3: Live Market Real Trading Mode (Order Switch: 🟢 ON)\n");
 

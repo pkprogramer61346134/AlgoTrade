@@ -7,7 +7,8 @@ const BANKNIFTY_SECURITY_ID = "25";
 const EXCHANGE_SEGMENT = "IDX_I";
 const INSTRUMENT_TYPE = "INDEX";
 
-const CACHE_DIR = "C:\\candle data";
+const { getCandleDataDir } = require('../indicators/utils/dataLoader');
+const CACHE_DIR = getCandleDataDir();
 
 function ensureCacheDir() {
     if (!fs.existsSync(CACHE_DIR)) {

@@ -200,6 +200,9 @@ class RealTradeManager {
             target: target,
             target1: target,
             currentTarget: target,
+            extendedRiderEnabled: signal ? signal.extendedRiderEnabled !== false : true,
+            t1Hit: false,
+            t1EventEmitted: false,
             highestPremium: optionPremiumPrice,
             lowestPremium: optionPremiumPrice,
             pnlRupees: 0.0,
@@ -239,33 +242,41 @@ class RealTradeManager {
         if (currentPremium > pos.highestPremium) pos.highestPremium = currentPremium;
         if (currentPremium < pos.lowestPremium) pos.lowestPremium = currentPremium;
 
-        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+        // DYNAMIC TRAILING SL TO BREAKEVEN: When profit reaches >= 50% of target distance, trail SL to Entry Price!
+        const targetDist = pos.target - pos.optionPremiumPrice;
+        if (targetDist > 0 && (pos.highestPremium - pos.optionPremiumPrice) >= (targetDist * 0.50)) {
+            if (pos.currentSL < pos.optionPremiumPrice) {
+                pos.currentSL = pos.optionPremiumPrice; // Trail to Cost!
+                console.log(`🎯 [REAL TRAILING SL] #${pos.orderId} SL Trailed to Breakeven Cost Price: ₹${pos.currentSL}`);
+            }
+        }
 
-        let exitTriggered = false;
-        let exitReason = "";
-        let exitPrice = currentPremium;
+        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
 
         const nowKolkata = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
         const totalMins = nowKolkata.getHours() * 60 + nowKolkata.getMinutes();
 
-        const targetPrice = pos.target || pos.target1 || pos.currentTarget;
+        const SpotRiskDeltaCalculator = require('../../src/spotRiskDeltaCalculator');
+        const dualExit = SpotRiskDeltaCalculator.evaluateDualLayerExit({
+            currentSpotPrice,
+            currentOptionPremium: currentPremium,
+            activePosition: pos,
+            totalMins
+        });
 
-        if (totalMins >= 915) {
-            exitTriggered = true;
-            exitReason = "EOD_MARKET_CLOSE";
-            exitPrice = currentPremium;
-        } else if (currentPremium >= targetPrice) {
-            exitTriggered = true;
-            exitReason = "TARGET_HIT";
-            exitPrice = targetPrice;
-        } else if (currentPremium <= pos.currentSL) {
-            exitTriggered = true;
-            exitReason = "SL_HIT";
-            exitPrice = pos.currentSL;
+        if (dualExit.exitTriggered) {
+            return this.closePosition(dualExit.exitReason, dualExit.exitPrice, currentSpotPrice, timeStr);
         }
 
-        if (exitTriggered) {
-            return this.closePosition(exitReason, exitPrice, currentSpotPrice, timeStr);
+        if (pos.t1Hit && !pos.t1EventEmitted) {
+            pos.t1EventEmitted = true;
+            return {
+                status: "ACTIVE",
+                event: "T1_TRAILED",
+                currentPremium: currentPremium,
+                lockedSL: pos.currentSL,
+                target2: pos.target2
+            };
         }
 
         return null;

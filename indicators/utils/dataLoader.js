@@ -2,10 +2,26 @@ const fs = require('fs');
 const path = require('path');
 
 function getCandleDataDir() {
-    if (process.platform === 'win32' && fs.existsSync("C:\\candle data")) {
-        return "C:\\candle data";
+    // 1. Explicit Environment Variable Override (for Google Cloud VM / Docker / Linux)
+    if (process.env.CANDLE_DATA_DIR) {
+        const envDir = path.resolve(process.env.CANDLE_DATA_DIR);
+        if (!fs.existsSync(envDir)) {
+            try { fs.mkdirSync(envDir, { recursive: true }); } catch (e) {}
+        }
+        return envDir;
     }
-    const localDir = path.join(__dirname, '..', '..', 'candle_data');
+
+    // 2. Project Root Local Candle Data Directory (Cross-platform for Linux/VM/Windows)
+    const localDir = path.resolve(__dirname, '../../candle_data');
+
+    // 3. Fallback for Windows OS development if C:\candle data exists and localDir is empty
+    if (process.platform === 'win32' && fs.existsSync("C:\\candle data")) {
+        const localFiles = fs.existsSync(localDir) ? fs.readdirSync(localDir).filter(f => f.endsWith('.json')) : [];
+        if (localFiles.length === 0) {
+            return "C:\\candle data";
+        }
+    }
+
     if (!fs.existsSync(localDir)) {
         try { fs.mkdirSync(localDir, { recursive: true }); } catch (e) {}
     }

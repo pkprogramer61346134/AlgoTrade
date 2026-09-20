@@ -12,6 +12,12 @@ function switchTab(tabId) {
         const btContent = document.getElementById('tab-backtest');
         if (btContent) btContent.classList.add('active');
         window.location.hash = 'backtest';
+    } else if (tabId === 'simulator') {
+        const simBtn = document.getElementById('tab-btn-simulator');
+        if (simBtn) simBtn.classList.add('active');
+        const simContent = document.getElementById('tab-simulator');
+        if (simContent) simContent.classList.add('active');
+        window.location.hash = 'simulator';
     } else if (tabId === 'reports') {
         const repBtn = document.getElementById('tab-btn-reports');
         if (repBtn) repBtn.classList.add('active');
@@ -800,19 +806,20 @@ async function runUIBacktest() {
                     const isLoss = t.pnlRupees < 0;
                     const badgeClass = isWin ? 'badge-win' : (isLoss ? 'badge-loss' : 'badge-info');
                     const pnlColor = isWin ? '#10b981' : (isLoss ? '#ef4444' : '#94a3b8');
+                    const lotsInfo = `<div style="font-size: 0.72rem; color: #a7f3d0; margin-top: 2px;">${t.numLots || 1} Lot (${t.quantity || 65} Qty)</div>`;
 
                     return `
                         <tr>
                             <td>#${idx + 1}</td>
                             <td>${t.date} ${t.entryTime}</td>
                             <td>${t.exitTime}</td>
-                            <td><span class="badge ${t.optionType === 'CE' ? 'badge-win' : 'badge-loss'}">NIFTY ${t.optionType}</span></td>
-                            <td>₹${t.spotEntryPrice}</td>
+                            <td><span class="badge ${t.optionType === 'CE' ? 'badge-win' : 'badge-loss'}">NIFTY ${t.optionType}</span>${lotsInfo}</td>
+                            <td style="font-weight: 700; color: #fff;">₹${t.spotEntryPrice}</td>
                             <td style="font-size: 0.8rem;">SL: ₹${t.spotSL}<br>Target: ₹${t.spotTarget}</td>
-                            <td>Entry: ₹${t.optionPremiumPrice}<br>Exit: ₹${t.exitPremiumPrice}</td>
+                            <td style="font-weight: 600;">Entry: ₹${t.optionPremiumPrice}<br>Exit: ₹${t.exitPremiumPrice}</td>
                             <td><span class="badge ${badgeClass}">${t.exitReason}</span></td>
-                            <td style="font-weight: 700; color: ${pnlColor};">${t.pnlRupees >= 0 ? '+' : ''}₹${t.pnlRupees} (${t.pnlPoints >= 0 ? '+' : ''}${t.pnlPoints} pts)</td>
-                            <td style="font-weight: 700;">₹${t.balanceAfter.toLocaleString()}</td>
+                            <td style="font-weight: 800; color: ${pnlColor};">${t.pnlRupees >= 0 ? '+' : ''}₹${t.pnlRupees.toLocaleString()} (${t.pnlPoints >= 0 ? '+' : ''}${t.pnlPoints} pts)</td>
+                            <td style="font-weight: 800; color: #38bdf8;">₹${t.balanceAfter.toLocaleString()}</td>
                         </tr>
                     `;
                 }).join('');
@@ -836,6 +843,8 @@ window.onload = () => {
         switchTab('reports');
     } else if (window.location.hash === '#backtest') {
         switchTab('backtest');
+    } else if (window.location.hash === '#simulator') {
+        switchTab('simulator');
     } else {
         switchTab('live');
     }
@@ -843,3 +852,361 @@ window.onload = () => {
     fetchLiveStatus();
     setInterval(fetchLiveStatus, 2000);
 };
+
+// ==================== TICK-BY-TICK SIMULATOR ENGINE ====================
+let simState = {
+    targetDate: '2026-09-11',
+    initialCapital: 10000,
+    runningCapital: 10000,
+    activeTrade: null,
+    dailyTradeCount: 0,
+    dayCandles: [],
+    dayIndices: [],
+    currentStep: 0,
+    autoPlayTimer: null,
+    isAutoPlaying: false,
+    isStepping: false,
+    completedTrades: [],
+    logs: []
+};
+
+async function initSimulation() {
+    const dateInput = document.getElementById('sim-date')?.value || '2026-09-11';
+    const capInput = Number(document.getElementById('sim-capital')?.value || 10000);
+
+    const startBtn = document.getElementById('sim-start-btn');
+    const nextBtn = document.getElementById('sim-next-btn');
+    const autoBtn = document.getElementById('sim-auto-btn');
+
+    if (startBtn) startBtn.disabled = true;
+
+    try {
+        const res = await fetch('/api/simulator/init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dateInput, initialCapital: capInput })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            simState.targetDate = data.targetDate;
+            simState.initialCapital = data.initialCapital;
+            simState.runningCapital = data.initialCapital;
+            simState.activeTrade = null;
+            simState.dailyTradeCount = 0;
+            simState.dayCandles = data.dayCandles || [];
+            simState.dayIndices = data.dayIndices || [];
+            simState.currentStep = 0;
+            simState.completedTrades = [];
+            simState.logs = [`🎬 SIMULATION INITIALIZED: Date ${simState.targetDate} | Starting Balance: ₹${simState.initialCapital.toLocaleString()} (${simState.dayCandles.length} candles loaded)`];
+
+            if (nextBtn) nextBtn.disabled = false;
+            if (autoBtn) autoBtn.disabled = false;
+
+            updateSimHeaderUI(null, null, `Initialized (${simState.dayCandles.length} Candles Ready)`);
+            renderSimReasoningLog();
+            renderSimCompletedTradesTable();
+            await nextSimStep();
+        } else {
+            alert('Simulator Init Error: ' + (data.error || 'Failed to initialize dataset'));
+        }
+    } catch (e) {
+        alert('Simulator Init Fetch Error: ' + e.message);
+    } finally {
+        if (startBtn) startBtn.disabled = false;
+    }
+}
+
+async function nextSimStep() {
+    if (simState.isStepping) return;
+    if (simState.currentStep >= simState.dayCandles.length) {
+        if (simState.isAutoPlaying) toggleAutoPlay();
+        alert(`🏁 Simulation Complete for ${simState.targetDate}! Final Balance: ₹${simState.runningCapital.toLocaleString()}`);
+        return;
+    }
+
+    simState.isStepping = true;
+    const globalIdx = simState.dayIndices[simState.currentStep];
+
+    try {
+        const res = await fetch('/api/simulator/step', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                targetDate: simState.targetDate,
+                globalIndex: globalIdx,
+                runningCapital: simState.runningCapital,
+                activeTrade: simState.activeTrade,
+                dailyTradeCount: simState.dailyTradeCount
+            })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            simState.activeTrade = data.updatedActiveTrade;
+            simState.runningCapital = data.updatedCapital;
+            simState.dailyTradeCount = data.dailyTradeCount;
+
+            if (data.tradeEnteredEvent) {
+                simState.logs.unshift(`🚀 [${data.timeStr}] ORDER ENTERED: ${data.tradeEnteredEvent.optionType} @ Spot ₹${data.tradeEnteredEvent.spotEntryPrice} (${data.tradeEnteredEvent.numLots} Lot / ${data.tradeEnteredEvent.quantity} Qty). SL: ₹${data.tradeEnteredEvent.spotSL}, Target: ₹${data.tradeEnteredEvent.spotTarget}`);
+            }
+
+            if (data.tradeClosedEvent) {
+                const t = data.tradeClosedEvent;
+                const sign = t.pnlRupees >= 0 ? '+' : '';
+                simState.completedTrades.push(t);
+                simState.logs.unshift(`🏁 [${data.timeStr}] ORDER CLOSED: ${t.type} Exit Reason: ${t.exitReason}. PnL: ${sign}₹${t.pnlRupees} (${sign}${t.pnlPoints} pts). Balance: ₹${t.balanceAfter.toLocaleString()}`);
+                renderSimCompletedTradesTable();
+            }
+
+            const stepLog = `⏱️ [${data.timeStr}] Spot: ₹${data.candle.close} | Consensus: ${data.consensusResult.type === 'NONE' ? 'WAITING' : data.consensusResult.type} (${data.consensusResult.buyVotes || data.consensusResult.consensusVotes || 0}/17 Votes)`;
+            simState.logs.unshift(stepLog);
+
+            renderSimStep(data);
+            simState.currentStep++;
+        }
+    } catch (e) {
+        console.warn('Sim step error:', e.message);
+    } finally {
+        simState.isStepping = false;
+    }
+}
+
+function renderSimStep(data) {
+    updateSimHeaderUI(data.candle, data.consensusResult, `Candle ${simState.currentStep + 1} / ${simState.dayCandles.length}`);
+    renderEngineVotingGrid(data.consensusResult.voteDetails || []);
+    renderSimActiveTradeUI(data.updatedActiveTrade);
+    renderSimReasoningLog();
+}
+
+function updateSimHeaderUI(candle, consensus, statusText) {
+    const clockEl = document.getElementById('sim-clock-display');
+    const priceEl = document.getElementById('sim-price-display');
+    const votesEl = document.getElementById('sim-votes-display');
+    const statusEl = document.getElementById('sim-consensus-status');
+    const tradesEl = document.getElementById('sim-trades-count');
+    const balEl = document.getElementById('sim-balance-display');
+    const pnlEl = document.getElementById('sim-pnl-display');
+
+    if (candle) {
+        if (clockEl) clockEl.innerText = candle.time || '--:--';
+        if (priceEl) priceEl.innerText = `Nifty Spot: ₹${candle.close}`;
+    }
+
+    if (consensus) {
+        const votes = consensus.consensusVotes || consensus.buyVotes || consensus.sellVotes || 0;
+        if (votesEl) votesEl.innerText = `${votes} / 17 Votes`;
+        if (statusEl) {
+            if (consensus.type === 'BUY') {
+                statusEl.innerText = `🟢 BULLISH CE SIGNAL TRIGGERED (${votes}/17)`;
+                statusEl.style.color = '#10b981';
+            } else if (consensus.type === 'SELL') {
+                statusEl.innerText = `🔴 BEARISH PE SIGNAL TRIGGERED (${votes}/17)`;
+                statusEl.style.color = '#ef4444';
+            } else {
+                statusEl.innerText = `🟡 WAITING CONSENSUS (Required >= 11/17)`;
+                statusEl.style.color = '#f59e0b';
+            }
+        }
+    }
+
+    if (tradesEl) tradesEl.innerText = `${simState.dailyTradeCount} / 3 Trades`;
+    if (balEl) balEl.innerText = `₹${simState.runningCapital.toLocaleString()}`;
+
+    const diff = Number((simState.runningCapital - simState.initialCapital).toFixed(2));
+    if (pnlEl) pnlEl.innerText = `Daily PnL: ${diff >= 0 ? '+' : ''}₹${diff.toLocaleString()}`;
+}
+
+function renderEngineVotingGrid(voteDetails) {
+    const grid = document.getElementById('sim-engine-voting-grid');
+    if (!grid) return;
+
+    const engines = [
+        "Engine 1 [ORB Level]",
+        "Engine 2 [Volume Surge]",
+        "Engine 3 [RSI Momentum]",
+        "Engine 4 [EMA Trend]",
+        "Engine 5 [PCR Sentiment]",
+        "Engine 6 [ATR Volatility]",
+        "Engine 7 [Rangebox Squeeze]",
+        "Engine 8 [VWAP Benchmark]",
+        "Engine 9 [Supertrend]",
+        "Engine 10 [Price Action]",
+        "Engine 11 [MACD Histogram]",
+        "Engine 12 [Bollinger Bands]",
+        "Engine 13 [Prev Day Levels]",
+        "Engine 14 [OBV Accumulation]",
+        "Engine 15 [Body Velocity]",
+        "Engine 16 [Bank Nifty Alignment]",
+        "Engine 17 [SMC Liquidity Sweep]"
+    ];
+
+    grid.innerHTML = engines.map((engName, idx) => {
+        const matchingVote = voteDetails.find(v => v.toLowerCase().includes(`engine ${idx + 1}`));
+        let isYes = Boolean(matchingVote);
+        let voteType = 'NONE';
+        if (matchingVote) {
+            if (matchingVote.toLowerCase().includes('bullish') || matchingVote.toLowerCase().includes('ce')) voteType = 'BUY';
+            else if (matchingVote.toLowerCase().includes('bearish') || matchingVote.toLowerCase().includes('pe')) voteType = 'SELL';
+            else voteType = 'YES';
+        }
+
+        const bg = voteType === 'BUY' ? 'rgba(16, 185, 129, 0.15)' : (voteType === 'SELL' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.04)');
+        const border = voteType === 'BUY' ? '#10b981' : (voteType === 'SELL' ? '#ef4444' : 'rgba(255, 255, 255, 0.1)');
+        const textColor = voteType === 'BUY' ? '#6ee7b7' : (voteType === 'SELL' ? '#fca5a5' : '#94a3b8');
+        const badge = voteType === 'BUY' ? '🟢 YES (BUY)' : (voteType === 'SELL' ? '🔴 YES (SELL)' : '⚪ NO VOTE');
+
+        return `
+            <div style="background: ${bg}; border: 1px solid ${border}; border-radius: 8px; padding: 0.75rem; font-size: 0.8rem;">
+                <div style="font-weight: 700; color: #fff; margin-bottom: 0.25rem;">${engName}</div>
+                <div style="color: ${textColor}; font-weight: 600;">${badge}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderSimActiveTradeUI(pos) {
+    const badge = document.getElementById('sim-pos-badge');
+    const container = document.getElementById('sim-pos-details');
+
+    if (pos) {
+        const currPrem = pos.currentPremium || pos.optionPremiumPrice;
+        const ptsPnL = Number((currPrem - pos.optionPremiumPrice).toFixed(2));
+        const rupeePnL = Number((ptsPnL * pos.quantity).toFixed(2));
+        const isWin = rupeePnL >= 0;
+        const pnlColor = isWin ? '#10b981' : '#ef4444';
+        const sign = isWin ? '+' : '';
+
+        if (badge) {
+            badge.innerText = `⚡ ACTIVE ${pos.optionType} POSITION (${pos.numLots} Lot / ${pos.quantity} Qty)`;
+            badge.className = isWin ? 'badge badge-win' : 'badge badge-loss';
+        }
+        if (container) {
+            const isTrailed = pos.currentSL >= pos.optionPremiumPrice;
+            container.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; background: rgba(255,255,255,0.03); padding: 0.5rem 0.75rem; border-radius: 6px;">
+                    <div>
+                        <span style="font-size: 0.8rem; color: #94a3b8;">Contract:</span>
+                        <b style="color: #00f2fe; margin-left: 4px; font-size: 0.95rem;">NIFTY ${pos.optionType}</b>
+                        <span style="font-size: 0.75rem; color: #a7f3d0; margin-left: 6px;">(${pos.numLots} Lot / ${pos.quantity} Qty)</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 0.8rem; color: #94a3b8;">Live Trade PnL:</span>
+                        <b style="color: ${pnlColor}; font-size: 1.1rem; margin-left: 6px;">${sign}₹${rupeePnL.toLocaleString()} (${sign}${ptsPnL} pts)</b>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem; font-size: 0.85rem;">
+                    <span>Spot Entry: <b style="color:#fff;">₹${pos.spotEntryPrice}</b></span>
+                    <span>Entry Premium: <b style="color:#fff;">₹${pos.optionPremiumPrice}</b></span>
+                    <span>Live Premium: <b style="color: #f59e0b;">₹${currPrem}</b></span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem; font-size: 0.85rem;">
+                    <span>Spot SL / Target: <b style="color: #ef4444;">₹${pos.spotSL}</b> / <b style="color: #10b981;">₹${pos.spotTarget}</b></span>
+                    <span>Option SL / Target: <b style="color: #ef4444;">₹${pos.currentSL}</b> / <b style="color: #10b981;">₹${pos.target}</b></span>
+                </div>
+                <div style="margin-top: 0.6rem; text-align: center;">
+                    <span class="badge ${isTrailed ? 'badge-win' : 'badge-info'}" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">
+                        ${isTrailed ? '🎯 TRAILING SL AT COST (BREAKEVEN SAFE - NO RISK)' : '⏳ POSITION ACTIVE (SL AT INITIAL LEVEL)'}
+                    </span>
+                </div>
+            `;
+        }
+    } else {
+        if (badge) {
+            badge.innerText = 'No Active Trade';
+            badge.className = 'badge badge-info';
+        }
+        if (container) {
+            container.innerHTML = `No active intraday option trade open. Scanning candles step-by-step for >= 11/17 consensus votes...`;
+        }
+    }
+}
+
+function renderSimReasoningLog() {
+    const consoleDiv = document.getElementById('sim-reasoning-console');
+    if (consoleDiv && simState.logs) {
+        consoleDiv.innerHTML = simState.logs.map(log => `
+            <div style="margin-bottom: 0.4rem; border-bottom: 1px dashed rgba(255,255,255,0.06); padding-bottom: 0.3rem;">
+                ${log}
+            </div>
+        `).join('');
+    }
+}
+
+function toggleAutoPlay() {
+    const btn = document.getElementById('sim-auto-btn');
+    if (simState.isAutoPlaying) {
+        clearInterval(simState.autoPlayTimer);
+        simState.isAutoPlaying = false;
+        if (btn) btn.innerText = '⏯️ AUTO PLAY';
+    } else {
+        simState.isAutoPlaying = true;
+        if (btn) btn.innerText = '⏸️ PAUSE PLAY';
+        simState.autoPlayTimer = setInterval(nextSimStep, 1000);
+    }
+}
+
+function resetSimulation() {
+    if (simState.isAutoPlaying) toggleAutoPlay();
+    simState.currentStep = 0;
+    simState.runningCapital = simState.initialCapital;
+    simState.activeTrade = null;
+    simState.dailyTradeCount = 0;
+    simState.logs = ['🔄 SIMULATION RESET TO STARTING STATE'];
+
+    const nextBtn = document.getElementById('sim-next-btn');
+    const autoBtn = document.getElementById('sim-auto-btn');
+    if (nextBtn) nextBtn.disabled = true;
+    if (autoBtn) autoBtn.disabled = true;
+
+    updateSimHeaderUI(null, null, 'Reset Complete');
+    renderEngineVotingGrid([]);
+    renderSimActiveTradeUI(null);
+    simState.completedTrades = [];
+    renderSimCompletedTradesTable();
+    renderSimReasoningLog();
+}
+
+function renderSimCompletedTradesTable() {
+    const tbody = document.getElementById('sim-completed-trades-tbody');
+    const badge = document.getElementById('sim-completed-count-badge');
+    const trades = simState.completedTrades || [];
+
+    if (badge) badge.innerText = `${trades.length} Completed Trades`;
+
+    if (!tbody) return;
+
+    if (trades.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                    No completed simulation trades yet. As candles advance, closed trades will be logged here in real-time.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = trades.map((t, idx) => {
+        const isWin = t.pnlRupees > 0;
+        const isLoss = t.pnlRupees < 0;
+        const badgeClass = isWin ? 'badge-win' : (isLoss ? 'badge-loss' : 'badge-info');
+        const pnlColor = isWin ? '#10b981' : (isLoss ? '#ef4444' : '#94a3b8');
+        const pnlSign = t.pnlRupees >= 0 ? '+' : '';
+        const lotsInfo = `<div style="font-size: 0.72rem; color: #a7f3d0; margin-top: 2px;">${t.numLots || 1} Lot (${t.qty || t.quantity || 65} Qty)</div>`;
+
+        return `
+            <tr>
+                <td>#${idx + 1}</td>
+                <td>${t.date} ${t.entryTime} → ${t.exitTime}</td>
+                <td><span class="badge ${t.type === 'CE' ? 'badge-win' : 'badge-loss'}">NIFTY ${t.type}</span>${lotsInfo}</td>
+                <td style="font-weight: 700; color: #fff;">₹${t.spotEntry} → ₹${t.spotExit}</td>
+                <td style="font-weight: 600;">Entry: ₹${t.entryPremium}<br>Exit: ₹${t.exitPremium}</td>
+                <td><span class="badge ${badgeClass}">${t.exitReason}</span></td>
+                <td style="font-weight: 800; color: ${pnlColor};">${pnlSign}₹${t.pnlRupees.toLocaleString()} (${pnlSign}${t.pnlPoints} pts)</td>
+                <td style="font-weight: 800; color: #38bdf8;">₹${t.balanceAfter.toLocaleString()}</td>
+            </tr>
+        `;
+    }).join('');
+}

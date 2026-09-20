@@ -1,10 +1,10 @@
-const { loadAllCandlesFromDir } = require('../indicators/utils/dataLoader');
+const { getCandleDataDir, loadAllCandlesFromDir } = require('../indicators/utils/dataLoader');
 const { loadAllStrategiesFromJSON } = require('./strategyLoader');
 const { prepareJSONStrategyData, evaluateJSONStrategy } = require('./dynamicStrategyEngine');
 const BacktestEngine = require('../backtest/engine/backtestEngine');
 const { generateComparisonReport } = require('../backtest/engine/reportGenerator');
 
-const DATA_DIR = "C:\\candle data";
+const DATA_DIR = getCandleDataDir();
 
 function runHistoricalBacktestMode() {
     console.log("=========================================================================================");
@@ -23,11 +23,11 @@ function runHistoricalBacktestMode() {
 
     const allCandles = loadAllCandlesFromDir(DATA_DIR);
     if (!allCandles || allCandles.length === 0) {
-        console.error("❌ No candle data found in C:\\candle data!");
+        console.error(`❌ No candle data found in ${DATA_DIR}!`);
         return;
     }
 
-    console.log(`✅ Loaded ${allCandles.length} historical candles from C:\\candle data`);
+    console.log(`✅ Loaded ${allCandles.length} historical candles from ${DATA_DIR}`);
     console.log(`📅 Date Range: ${allCandles[0].date} to ${allCandles[allCandles.length - 1].date}\n`);
 
     const reports = [];

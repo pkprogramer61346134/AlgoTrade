@@ -16,7 +16,10 @@ const { DhanSDK } = require('../dhanAPI');
 class CentralCandleDataHub {
     constructor(dhanInstance = null) {
         this.dhan = dhanInstance || new DhanSDK();
-        this.cacheDir = getCandleDataDir();
+    }
+
+    get cacheDir() {
+        return getCandleDataDir();
     }
 
     /**
@@ -81,19 +84,38 @@ class CentralCandleDataHub {
     }
 
     /**
-     * Get candles with N prior warmup candles for accurate indicator calculation (EMA 200, ATR, RSI, etc.)
+     * Get candles with N prior warmup candles for optimal indicator calculation (EMA 50, ATR, RSI, etc.)
      */
     async getCandlesWithWarmup(startDate, endDate, warmupCount = 300, symbol = "NIFTY_50", interval = "5") {
-        const allCandles = loadAllCandlesFromDir(this.cacheDir);
+        let allCandles = loadAllCandlesFromDir(this.cacheDir);
         
         // Ensure requested dates are cached locally first
         await this.getCandles(startDate, endDate, symbol, interval);
 
-        const updatedAll = loadAllCandlesFromDir(this.cacheDir);
+        let updatedAll = loadAllCandlesFromDir(this.cacheDir);
         if (!startDate) return updatedAll;
 
-        const startIndex = updatedAll.findIndex(c => c.date >= startDate);
-        if (startIndex <= 0) return updatedAll;
+        let startIndex = updatedAll.findIndex(c => c.date >= startDate);
+
+        // If available warmup candles before startDate are less than warmupCount (e.g. < 300), auto-fetch prior 15 calendar days from Dhan API
+        if ((startIndex < 0 || startIndex < warmupCount) && startDate) {
+            try {
+                const sDateObj = new Date(startDate);
+                const priorDateObj = new Date(sDateObj.getTime() - 15 * 24 * 60 * 60 * 1000);
+                const priorStartStr = priorDateObj.toISOString().split('T')[0];
+                const dayBeforeStartObj = new Date(sDateObj.getTime() - 1 * 24 * 60 * 60 * 1000);
+                const dayBeforeStartStr = dayBeforeStartObj.toISOString().split('T')[0];
+
+                console.log(`🌐 [DATA HUB WARMUP] Sourced ${warmupCount} prior historical warmup candles (${priorStartStr} to ${dayBeforeStartStr}) from Dhan API...`);
+                await this.downloadAndCacheFromDhan(priorStartStr, dayBeforeStartStr, symbol, interval);
+                updatedAll = loadAllCandlesFromDir(this.cacheDir);
+                startIndex = updatedAll.findIndex(c => c.date >= startDate);
+            } catch (e) {
+                console.warn(`⚠️ [DATA HUB WARMUP] Sourcing warning: ${e.message}`);
+            }
+        }
+
+        if (startIndex < 0) return updatedAll;
 
         const warmupStart = Math.max(0, startIndex - warmupCount);
         const endIndex = endDate ? updatedAll.findLastIndex(c => c.date <= endDate) : updatedAll.length - 1;

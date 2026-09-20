@@ -147,10 +147,31 @@ class SpotRiskDeltaCalculator {
             exitTriggered = true;
             exitReason = currentOptionPremium >= pos.optionPremiumPrice ? "3:00 PM EOD PROFIT BOOKED" : "3:00 PM EOD LOSS BOOKED";
             exitPrice = currentOptionPremium;
+        } else if (pos.t1Hit) {
+            // T1 has already been hit and locked! Now riding for Extended Target T2
+            const t2Target = pos.target2 || pos.target;
+            if (currentOptionPremium >= t2Target) {
+                exitTriggered = true;
+                exitReason = "EXTENDED_TARGET_HIT";
+                exitPrice = Math.max(currentOptionPremium, t2Target);
+            } else if (currentOptionPremium <= pos.currentSL) {
+                exitTriggered = true;
+                exitReason = "T1_LOCKED_PROFIT";
+                exitPrice = pos.currentSL;
+            }
         } else if (currentOptionPremium >= targetPrice || isSpotTargetHit) {
-            exitTriggered = true;
-            exitReason = "TARGET_HIT";
-            exitPrice = Math.max(currentOptionPremium, targetPrice);
+            if (pos.extendedRiderEnabled) {
+                // Lock T1 Profit, trail SL to T1, and extend target to T2!
+                pos.t1Hit = true;
+                pos.currentSL = Math.max(pos.currentSL, targetPrice); // Lock T1!
+                const t1Pts = targetPrice - pos.optionPremiumPrice;
+                pos.target2 = Number((pos.optionPremiumPrice + (t1Pts * 1.5)).toFixed(2)); // Extend to T2 (1:3.0 R:R)
+                console.log(`🚀 [EXTENDED RIDER] Target T1 Hit! SL Locked at T1 (₹${pos.currentSL}). Extended Target T2 set to ₹${pos.target2}`);
+            } else {
+                exitTriggered = true;
+                exitReason = "TARGET_HIT";
+                exitPrice = Math.max(currentOptionPremium, targetPrice);
+            }
         } else if (currentOptionPremium <= pos.currentSL || isSpotSLHit) {
             exitTriggered = true;
             exitReason = "SL_HIT";
