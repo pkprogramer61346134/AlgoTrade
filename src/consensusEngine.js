@@ -341,10 +341,36 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     const minConsensusVotes = strategyConfig.consensusThreshold || 11; // Default 11 out of 17 High Conviction Vote
     let signalType = "NONE";
 
-    if (buyVotes >= minConsensusVotes && buyVotes > sellVotes) {
-        signalType = "BUY";
-    } else if (sellVotes >= minConsensusVotes && sellVotes > buyVotes) {
-        signalType = "SELL";
+    // Golden Pattern Filter Evaluation (High-Win-Rate Combo Validation)
+    const patternFilter = strategyConfig.goldenPatternFilter;
+    let patternBonusReason = "";
+
+    if (patternFilter && patternFilter.enabled) {
+        // Extract active YES engines from voteDetails
+        const activeEngineNums = [];
+        voteDetails.forEach(vStr => {
+            const match = vStr.match(/Engine\s+(\d+)/i);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                if (!activeEngineNums.includes(num)) activeEngineNums.push(num);
+            }
+        });
+
+        // Check required key engines (e.g. Engine 17 - SMC Liquidity Sweep)
+        if (patternFilter.requiredKeyEngines && Array.isArray(patternFilter.requiredKeyEngines)) {
+            const missingRequired = patternFilter.requiredKeyEngines.filter(reqEng => !activeEngineNums.includes(reqEng));
+            if (missingRequired.length > 0) {
+                patternBonusReason = ` [Pattern Filter: Suppressed - Missing Key Engine #${missingRequired.join(', #')}]`;
+            }
+        }
+    }
+
+    if (!patternBonusReason.includes("Suppressed")) {
+        if (buyVotes >= minConsensusVotes && buyVotes > sellVotes) {
+            signalType = "BUY";
+        } else if (sellVotes >= minConsensusVotes && sellVotes > buyVotes) {
+            signalType = "SELL";
+        }
     }
 
     if (signalType !== "NONE") {

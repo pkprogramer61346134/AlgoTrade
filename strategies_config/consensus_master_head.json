@@ -29,10 +29,18 @@
   },
   "rules": {
     "buy": [
-      { "field": "consensus", "operator": ">=", "target": 11 }
+      {
+        "field": "consensus",
+        "operator": ">=",
+        "target": 11
+      }
     ],
     "sell": [
-      { "field": "consensus", "operator": ">=", "target": 11 }
+      {
+        "field": "consensus",
+        "operator": ">=",
+        "target": 11
+      }
     ]
   },
   "stopLoss": {
@@ -47,5 +55,19 @@
     "enabled": true,
     "mode": "TARGET_EXPANSION_RIDER",
     "extendedTargetMultiplier": 3.0
+  },
+  "goldenPatternFilter": {
+    "enabled": true,
+    "mode": "KEY_ENGINE_AND_PATTERN_MATCH",
+    "minPatternWinRate": 75.0,
+    "requiredKeyEngines": [
+      17
+    ],
+    "preferredKeyEngines": [
+      1,
+      4,
+      16
+    ],
+    "goldenCombosFile": "server/data/golden_patterns.json"
   }
 }
