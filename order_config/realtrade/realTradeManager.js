@@ -65,8 +65,8 @@ class RealTradeManager {
                 for (const strKey of Object.keys(ocData)) {
                     const row = ocData[strKey];
                     const strikeNum = Number(strKey);
-                    const secId = row[targetSecIdKey];
-                    const ltp = Number(row[targetPremKey]) || 0;
+                    const secId = row[targetSecIdKey] || row[optionType === "CE" ? 'ce_sec_id' : 'pe_sec_id'];
+                    const ltp = Number(row[targetPremKey] || row[optionType === "CE" ? 'ce_ltp' : 'pe_ltp'] || row['last_price'] || row['ltp']) || 0;
 
                     if (secId && ltp > 0 && ltp <= maxAffordablePremium) {
                         const diff = Math.abs(strikeNum - atmStrike);
@@ -79,24 +79,21 @@ class RealTradeManager {
                     }
                 }
 
-                return {
-                    strike: bestStrike,
-                    tradingSymbol: `NIFTY-${nearestExpiry}-${bestStrike}-${optionType}`,
-                    securityId: bestSecId,
-                    price: bestPrice
-                };
+                if (bestSecId && bestPrice > 0 && minDiff !== Infinity) {
+                    return {
+                        strike: bestStrike,
+                        tradingSymbol: `NIFTY-${nearestExpiry}-${bestStrike}-${optionType}`,
+                        securityId: bestSecId,
+                        price: bestPrice
+                    };
+                }
             }
         } catch (err) {
-            console.warn(`⚠️ Warning fetching Option Chain from Dhan API: ${err.message}`);
+            console.error(`❌ REAL BROKER ERROR fetching Option Chain from Dhan API: ${err.message}`);
+            throw new Error(`Real Dhan Option Chain API error: ${err.message}`);
         }
 
-        const fallbackSecId = optionType === "CE" ? "47291" : "47286";
-        return {
-            strike: atmStrike,
-            tradingSymbol: `NIFTY-2026-09-15-${atmStrike}-${optionType}`,
-            securityId: fallbackSecId,
-            price: Math.max(10, Math.round(spotPrice * 0.005))
-        };
+        throw new Error(`❌ Real Option Contract for ${optionType} could not be resolved from Dhan Option Chain API. Real Order aborted to prevent fake/invalid order placement.`);
     }
 
     async executeRealOrder(orderParams) {
@@ -117,12 +114,31 @@ class RealTradeManager {
             timeStr
         } = orderParams;
 
+        // STRICT REAL ORDER PRE-FLIGHT VALIDATION (Zero Fake/Dummy Data Enforcement)
+        if (!optionSecurityId || String(optionSecurityId).length < 3 || optionSecurityId === "0") {
+            console.error(`❌ REAL ORDER ABORTED: Invalid Security ID (${optionSecurityId})`);
+            return { status: "failed", error: "Invalid Security ID", message: "Aborted: Fake/Invalid Security ID detected." };
+        }
+        if (!optionPremiumPrice || isNaN(optionPremiumPrice) || optionPremiumPrice <= 0) {
+            console.error(`❌ REAL ORDER ABORTED: Invalid Option Premium Price (₹${optionPremiumPrice})`);
+            return { status: "failed", error: "Invalid Premium Price", message: "Aborted: Invalid/Dummy Option Premium price detected." };
+        }
+        if (!optionSL || isNaN(optionSL) || optionSL <= 0 || !target || isNaN(target) || target <= 0) {
+            console.error(`❌ REAL ORDER ABORTED: Invalid Stop-Loss (₹${optionSL}) or Target (₹${target})`);
+            return { status: "failed", error: "Invalid Risk Parameters", message: "Aborted: Invalid Stop-Loss or Target parameters." };
+        }
+        if (!qty || isNaN(qty) || qty <= 0) {
+            console.error(`❌ REAL ORDER ABORTED: Invalid Quantity (${qty})`);
+            return { status: "failed", error: "Invalid Quantity", message: "Aborted: Invalid Quantity parameters." };
+        }
+
         console.log(`\n🚀 [REAL TRADE MANAGER] LIVE REAL BROKER ORDER INITIATED!`);
         console.log(`   - Symbol: ${optionSymbol} | SecurityId: ${optionSecurityId}`);
         console.log(`   - Qty: ${qty} | Option Entry Premium: ₹${optionPremiumPrice}`);
         console.log(`   - Target: ₹${target} | Initial SL: ₹${optionSL}`);
 
         let realResult = null;
+        let slOrderId = null;
 
         try {
             if (this.dhan && this.dhan.orders && typeof this.dhan.orders.placeSuperOrder === 'function') {
@@ -151,7 +167,6 @@ class RealTradeManager {
                 });
 
                 const primaryOrderId = realResult?.data?.orderId || realResult?.orderId;
-                let slOrderId = null;
                 if (primaryOrderId) {
                     try {
                         const slRes = await this.dhan.orders.placeOrder({
@@ -272,9 +287,27 @@ class RealTradeManager {
             return this.closePosition(dualExit.exitReason, dualExit.exitPrice, currentSpotPrice, timeStr);
         }
 
+        if (pos.t2Hit && !pos.t2EventEmitted) {
+            pos.t2EventEmitted = true;
+            this.syncBrokerSLWithDhan(pos.orderId, pos.currentSL, pos.slOrderId);
+            if (pos.target3) {
+                this.syncBrokerTargetWithDhan(pos.orderId, pos.target3);
+            }
+            return {
+                status: "ACTIVE",
+                event: "T2_TRAILED",
+                currentPremium: currentPremium,
+                lockedSL: pos.currentSL,
+                target3: pos.target3
+            };
+        }
+
         if (pos.t1Hit && !pos.t1EventEmitted) {
             pos.t1EventEmitted = true;
             this.syncBrokerSLWithDhan(pos.orderId, pos.currentSL, pos.slOrderId);
+            if (pos.target2) {
+                this.syncBrokerTargetWithDhan(pos.orderId, pos.target2);
+            }
             return {
                 status: "ACTIVE",
                 event: "T1_TRAILED",
@@ -309,11 +342,48 @@ class RealTradeManager {
         }
     }
 
-    closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = null, timeStr = "") {
+    async syncBrokerTargetWithDhan(orderId, newTargetPrice) {
+        try {
+            if (this.dhan && this.dhan.orders && typeof this.dhan.orders.modifySuperOrder === 'function') {
+                await this.dhan.orders.modifySuperOrder(orderId, {
+                    legName: 'TARGET_LEG',
+                    targetPrice: newTargetPrice
+                });
+                console.log(`📡 [DHAN API] Broker SuperOrder #${orderId} Target expanded on Exchange to ₹${newTargetPrice}`);
+            }
+        } catch (err) {
+            console.warn(`⚠️ Could not modify Target on Dhan Broker API: ${err.message}`);
+        }
+    }
+
+    async closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = null, timeStr = "") {
         if (!this.activeOrder) return null;
+        const pos = this.activeOrder;
+
+        try {
+            if (this.dhan && this.dhan.orders) {
+                if (reason.includes("EOD") || reason.includes("MANUAL")) {
+                    if (typeof this.dhan.orders.cancelSuperOrder === 'function') {
+                        await this.dhan.orders.cancelSuperOrder(pos.orderId, 'ENTRY_LEG');
+                    } else if (typeof this.dhan.orders.placeOrder === 'function') {
+                        await this.dhan.orders.placeOrder({
+                            securityId: String(pos.securityId),
+                            exchangeSegment: "NSE_FNO",
+                            transactionType: "SELL",
+                            quantity: pos.quantity,
+                            orderType: "MARKET",
+                            productType: "INTRADAY",
+                            price: 0
+                        });
+                    }
+                }
+            }
+        } catch (exitErr) {
+            console.warn(`⚠️ Warning executing broker exit on Dhan API: ${exitErr.message}`);
+        }
+
         const actualSpotExitPrice = spotExitPrice || (this.activeOrder ? this.activeOrder.spotPrice : 0);
 
-        const pos = this.activeOrder;
         const exitTime = timeStr || new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
         const finalExitPremium = exitPremiumPrice > 0 ? exitPremiumPrice : pos.optionPremiumPrice;
 
