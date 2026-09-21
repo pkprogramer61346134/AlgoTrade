@@ -205,6 +205,16 @@ function saveAppConfig(updates) {
     } catch (e) {
         console.warn(`⚠️ Failed to save app config: ${e.message}`);
     }
+let cachedHistCandles = [];
+let lastHistLoadTime = 0;
+
+function getCachedHistCandles() {
+    const now = Date.now();
+    if (!cachedHistCandles || cachedHistCandles.length === 0 || now - lastHistLoadTime > 300000) {
+        cachedHistCandles = loadAllCandlesFromDir(getCandleDataDir()) || [];
+        lastHistLoadTime = now;
+    }
+    return cachedHistCandles;
 }
 
 let todayCandlesCache = [];
@@ -658,7 +668,7 @@ setInterval(async () => {
         }
         const stratName = stratConfig ? stratConfig.name : "👑 Master Head Multi-Strategy Consensus Engine (17-Engine Voting)";
 
-        const rawHist = loadAllCandlesFromDir(getCandleDataDir()) || [];
+        let rawHist = getCachedHistCandles();
         const histCandles = rawHist.filter(c => c.date !== todayStr);
 
         let allCandles = [...histCandles, ...liveTodayCandles];
@@ -684,15 +694,17 @@ setInterval(async () => {
                 });
             }
 
-            const data = prepareJSONStrategyData(allCandles, stratConfig);
+            // Slice last 400 candles for instant 0ms indicator evaluation without event loop blocking
+            const evalCandles = allCandles.length > 400 ? allCandles.slice(-400) : allCandles;
+            const data = prepareJSONStrategyData(evalCandles, stratConfig);
             if (liveState.bankNiftySpotPrice) {
                 data.bankNiftySpot = liveState.bankNiftySpotPrice;
                 data.bankNiftyPrevClose = liveState.bankNiftyPrevClose;
                 data.bankNiftyOpen = liveState.bankNiftyOpen;
                 data.bankNiftyNetChange = liveState.bankNiftyNetChange;
             }
-            const lastIdx = allCandles.length - 1;
-            const signal = evaluateJSONStrategy(allCandles, lastIdx, stratConfig, data, {});
+            const lastIdx = evalCandles.length - 1;
+            const signal = evaluateJSONStrategy(evalCandles, lastIdx, stratConfig, data, {});
 
             if (signal && signal.type === "BUY") {
                 status = "BUY_SIGNAL";
