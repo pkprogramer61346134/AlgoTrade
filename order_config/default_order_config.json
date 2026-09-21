@@ -1,7 +1,7 @@
 {
   "id": "default_order_config",
   "name": "Master Head Consensus Strategy Order Execution Config",
-  "executionMode": "REAL",
+  "executionMode": "PAPER",
   "paperTrading": {
     "initialCapital": 100000,
     "riskRewardRatio": 2.0,
