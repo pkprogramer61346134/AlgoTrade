@@ -2,13 +2,23 @@ const fs = require('fs');
 const path = require('path');
 const SpotRiskDeltaCalculator = require('../../src/spotRiskDeltaCalculator');
 const { systemLogger } = require('../../src/systemLogger');
+const { DhanSDK } = require('../../dhanAPI/index');
 
 const JOURNAL_DIR = path.resolve(__dirname, '../../server/data');
 const JOURNAL_FILE = path.join(JOURNAL_DIR, 'trade_journal.json');
 const CONFIG_FILE = path.join(__dirname, 'configPaper.json');
 
+/**
+ * PAPER TRADE MANAGER COMPONENT
+ * Location: C:\AlgoTrade\order_config\papertrade\paperTradeManager.js
+ * 
+ * 100% Structural Mirror of RealTradeManager.js.
+ * Implements identical methods, parameters, state tracking, 3-stage dynamic protection,
+ * option contract resolution, and atomic trade journaling.
+ */
 class PaperTradeManager {
-    constructor(config = null) {
+    constructor(config = null, dhanSdk = null) {
+        this.dhan = dhanSdk || new DhanSDK();
         this.config = config || this.loadDefaultConfig();
         this.activeOrder = null;
         this.paperBalance = this.loadPaperBalance();
@@ -60,6 +70,7 @@ class PaperTradeManager {
                 }
             }
         } catch (e) {
+            systemLogger.logError("PAPER_TRADE_BALANCE", e);
             console.warn(`⚠️ Error reading paper balance from journal: ${e.message}`);
         }
         return initialCap;
@@ -68,6 +79,67 @@ class PaperTradeManager {
     resetPaperBalance(newCapital = 100000) {
         this.paperBalance = Number(newCapital);
         return this.paperBalance;
+    }
+
+    async resolveOptionContractFromDhan(spotPrice, optionType = "CE", allocatedCapital = 100000) {
+        if (!spotPrice || isNaN(spotPrice)) spotPrice = 24500;
+        const atmStrike = Math.round(spotPrice / 50) * 50;
+        const maxAffordablePremium = Math.max(20, Math.floor(allocatedCapital / 65));
+
+        try {
+            if (this.dhan && this.dhan.marketData && typeof this.dhan.marketData.getOptionChain === 'function') {
+                const expRes = await this.dhan.marketData.getOptionChainExpiries(13, 'IDX_I');
+                const expiries = expRes?.data?.data || expRes?.data || [];
+                const nearestExpiry = expiries.length > 0 ? expiries[0] : new Date().toISOString().split('T')[0];
+
+                const ocRes = await this.dhan.marketData.getOptionChain(13, 'IDX_I', nearestExpiry);
+                const ocData = ocRes?.data?.data?.oc || ocRes?.data?.oc || {};
+
+                let bestStrike = atmStrike;
+                let bestSecId = null;
+                let bestPrice = null;
+
+                const targetSecIdKey = optionType === "CE" ? 'ce_security_id' : 'pe_security_id';
+                const targetPremKey = optionType === "CE" ? 'ce_last_price' : 'pe_last_price';
+
+                let minDiff = Infinity;
+                for (const strKey of Object.keys(ocData)) {
+                    const row = ocData[strKey];
+                    const strikeNum = Number(strKey);
+                    const secId = row[targetSecIdKey] || row[optionType === "CE" ? 'ce_sec_id' : 'pe_sec_id'];
+                    const ltp = Number(row[targetPremKey] || row[optionType === "CE" ? 'ce_ltp' : 'pe_ltp'] || row['last_price'] || row['ltp']) || 0;
+
+                    if (secId && ltp > 0 && ltp <= maxAffordablePremium) {
+                        const diff = Math.abs(strikeNum - atmStrike);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            bestStrike = strikeNum;
+                            bestSecId = String(secId);
+                            bestPrice = ltp;
+                        }
+                    }
+                }
+
+                if (bestSecId && bestPrice && bestPrice > 0 && minDiff !== Infinity) {
+                    return {
+                        strike: bestStrike,
+                        tradingSymbol: `NIFTY-${nearestExpiry}-${bestStrike}-${optionType}`,
+                        securityId: bestSecId,
+                        price: bestPrice
+                    };
+                }
+            }
+        } catch (err) {
+            console.warn(`⚠️ Option chain fetch notice in Paper Manager: ${err.message}`);
+        }
+
+        const fallbackSecId = optionType === "CE" ? "47291" : "47286";
+        return {
+            strike: atmStrike,
+            tradingSymbol: `NIFTY-PAPER-${atmStrike}-${optionType}`,
+            securityId: fallbackSecId,
+            price: Math.max(10, Math.round(spotPrice * 0.005))
+        };
     }
 
     executePaperOrder(orderParams) {
@@ -90,6 +162,23 @@ class PaperTradeManager {
             timeStr
         } = orderParams;
 
+        // STRICT PAPER ORDER PRE-FLIGHT VALIDATION (Matching RealTradeManager)
+        if (!optionPremiumPrice || isNaN(optionPremiumPrice) || optionPremiumPrice <= 0) {
+            const err = `Invalid Option Premium Price (₹${optionPremiumPrice})`;
+            systemLogger.logWarn("PAPER_TRADE_VALIDATION", err, { optionSymbol, spotPrice });
+            return { status: "failed", error: "Invalid Premium Price", message: "Aborted: Invalid Option Premium price detected." };
+        }
+        if (!optionSL || isNaN(optionSL) || optionSL <= 0 || !target || isNaN(target) || target <= 0) {
+            const err = `Invalid Stop-Loss (₹${optionSL}) or Target (₹${target})`;
+            systemLogger.logWarn("PAPER_TRADE_VALIDATION", err, { optionSymbol, spotPrice });
+            return { status: "failed", error: "Invalid Risk Parameters", message: "Aborted: Invalid Stop-Loss or Target parameters." };
+        }
+        if (!qty || isNaN(qty) || qty <= 0) {
+            const err = `Invalid Quantity (${qty})`;
+            systemLogger.logWarn("PAPER_TRADE_VALIDATION", err, { optionSymbol, spotPrice });
+            return { status: "failed", error: "Invalid Quantity", message: "Aborted: Invalid Quantity parameters." };
+        }
+
         const paperOrderId = `PAPER_${Date.now()}`;
         console.log(`\n📄 [PAPER TRADE MANAGER] Paper Trade Executed!`);
         console.log(`   - Order ID: #${paperOrderId} | Symbol: ${optionSymbol}`);
@@ -99,6 +188,7 @@ class PaperTradeManager {
 
         this.activeOrder = {
             orderId: paperOrderId,
+            slOrderId: null,
             mode: "PAPER",
             status: "ACTIVE",
             date: dateStr,
@@ -111,7 +201,7 @@ class PaperTradeManager {
             spotTarget: spotTarget || (optionType === "CE" ? spotPrice + 40 : spotPrice - 40),
             atmStrike: atmStrike,
             optionSymbol: optionSymbol,
-            securityId: optionSecurityId,
+            securityId: optionSecurityId || (optionType === "CE" ? "47291" : "47286"),
             quantity: qty,
             numLots: numLots,
             optionPremiumPrice: optionPremiumPrice,
@@ -124,6 +214,8 @@ class PaperTradeManager {
             extendedRiderEnabled: signal ? signal.extendedRiderEnabled !== false : true,
             t1Hit: false,
             t1EventEmitted: false,
+            t2Hit: false,
+            t2EventEmitted: false,
             highestPremium: optionPremiumPrice,
             lowestPremium: optionPremiumPrice,
             pnlRupees: 0.0,
@@ -135,6 +227,7 @@ class PaperTradeManager {
             status: "success",
             handshake: "CONFIRMED_PAPER",
             mode: "PAPER",
+            orderId: paperOrderId,
             order: this.activeOrder
         };
     }
@@ -168,14 +261,11 @@ class PaperTradeManager {
             if (pos.currentSL < pos.optionPremiumPrice) {
                 pos.currentSL = pos.optionPremiumPrice; // Trail to Cost!
                 console.log(`🎯 [PAPER TRAILING SL] #${pos.orderId} SL Trailed to Breakeven Cost Price: ₹${pos.currentSL}`);
+                this.syncPaperSLWithSystem(pos.orderId, pos.currentSL);
             }
         }
 
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-
-        let exitTriggered = false;
-        let exitReason = "";
-        let exitPrice = currentPremium;
 
         const nowKolkata = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
         const totalMins = nowKolkata.getHours() * 60 + nowKolkata.getMinutes();
@@ -193,6 +283,10 @@ class PaperTradeManager {
 
         if (pos.t2Hit && !pos.t2EventEmitted) {
             pos.t2EventEmitted = true;
+            this.syncPaperSLWithSystem(pos.orderId, pos.currentSL);
+            if (pos.target3) {
+                this.syncPaperTargetWithSystem(pos.orderId, pos.target3);
+            }
             return {
                 status: "ACTIVE",
                 event: "T2_TRAILED",
@@ -204,6 +298,10 @@ class PaperTradeManager {
 
         if (pos.t1Hit && !pos.t1EventEmitted) {
             pos.t1EventEmitted = true;
+            this.syncPaperSLWithSystem(pos.orderId, pos.currentSL);
+            if (pos.target2) {
+                this.syncPaperTargetWithSystem(pos.orderId, pos.target2);
+            }
             return {
                 status: "ACTIVE",
                 event: "T1_TRAILED",
@@ -214,6 +312,14 @@ class PaperTradeManager {
         }
 
         return null;
+    }
+
+    syncPaperSLWithSystem(orderId, newSLPrice) {
+        console.log(`📡 [PAPER ENGINE] Paper Order #${orderId} SL modified to ₹${newSLPrice}`);
+    }
+
+    syncPaperTargetWithSystem(orderId, newTargetPrice) {
+        console.log(`📡 [PAPER ENGINE] Paper Order #${orderId} Target expanded to ₹${newTargetPrice}`);
     }
 
     closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = null, timeStr = "") {
@@ -278,6 +384,12 @@ class PaperTradeManager {
         };
     }
 
+    async cancelOrder(orderId = null) {
+        const targetId = orderId || this.activeOrder?.orderId;
+        if (!targetId) return { status: "failed", message: "No active paper order to cancel." };
+        return this.closePosition("MANUAL_CANCEL", this.activeOrder?.optionPremiumPrice || 0);
+    }
+
     saveTradeToJournal(tradeRecord) {
         try {
             this.ensureJournalStorage();
@@ -298,6 +410,7 @@ class PaperTradeManager {
             fs.renameSync(tmpFile, JOURNAL_FILE);
             console.log(`💾 Trade Journal Saved: #${tradeRecord.id} to ${JOURNAL_FILE}`);
         } catch (e) {
+            systemLogger.logError("PAPER_TRADE_JOURNAL", e);
             console.warn(`⚠️ Warning saving trade journal: ${e.message}`);
         }
     }
@@ -316,6 +429,7 @@ class PaperTradeManager {
                 }
             }
         } catch (e) {
+            systemLogger.logError("PAPER_TRADE_JOURNAL_READ", e);
             console.warn(`⚠️ Error reading trade journal: ${e.message}`);
         }
         return [];
