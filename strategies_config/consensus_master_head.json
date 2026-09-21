@@ -51,6 +51,11 @@
     "type": "RISK_REWARD",
     "multiplier": 2.0
   },
+  "breakevenCostLock": {
+    "enabled": true,
+    "triggerThresholdPct": 50.0,
+    "mode": "TRAIL_TO_ENTRY_COST"
+  },
   "extendedProfitRider": {
     "enabled": true,
     "mode": "TARGET_EXPANSION_RIDER",
