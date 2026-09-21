@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const SpotRiskDeltaCalculator = require('../../src/spotRiskDeltaCalculator');
+const { systemLogger } = require('../../src/systemLogger');
 
 const JOURNAL_DIR = path.resolve(__dirname, '../../server/data');
 const JOURNAL_FILE = path.join(JOURNAL_DIR, 'trade_journal.json');
@@ -188,6 +189,17 @@ class PaperTradeManager {
 
         if (dualExit.exitTriggered) {
             return this.closePosition(dualExit.exitReason, dualExit.exitPrice, currentSpotPrice, timeStr);
+        }
+
+        if (pos.t2Hit && !pos.t2EventEmitted) {
+            pos.t2EventEmitted = true;
+            return {
+                status: "ACTIVE",
+                event: "T2_TRAILED",
+                currentPremium: currentPremium,
+                lockedSL: pos.currentSL,
+                target3: pos.target3
+            };
         }
 
         if (pos.t1Hit && !pos.t1EventEmitted) {
