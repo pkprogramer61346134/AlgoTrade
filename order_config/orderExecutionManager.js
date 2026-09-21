@@ -95,12 +95,19 @@ class OrderExecutionManager {
             return this.paperManager.loadPaperBalance();
         }
         try {
-            if (this.dhan && this.dhan.user && typeof this.dhan.user.getFundLimits === 'function') {
-                const res = await this.dhan.user.getFundLimits();
-                const available = res?.data?.availabelBalance || res?.data?.availableBalance || res?.availabelBalance || 0;
-                if (available > 0) return available;
+            let res = null;
+            if (this.dhan && this.dhan.funds && typeof this.dhan.funds.getFundLimits === 'function') {
+                res = await this.dhan.funds.getFundLimits();
+            } else if (this.dhan && this.dhan.user && typeof this.dhan.user.getFundLimits === 'function') {
+                res = await this.dhan.user.getFundLimits();
             }
-        } catch (e) {}
+            const available = res?.data?.availabelBalance ?? res?.data?.availableBalance ?? res?.data?.sodLimit ?? res?.availabelBalance ?? res?.availableBalance ?? 0;
+            if (available !== undefined && available !== null && available >= 0 && (res?.status === 'success' || available > 0)) {
+                return available;
+            }
+        } catch (e) {
+            console.error("❌ Error fetching live Dhan capital:", e.message);
+        }
         return this.paperManager.loadPaperBalance();
     }
 
