@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { DhanSDK } = require('../../dhanAPI/index');
+const { systemLogger } = require('../../src/systemLogger');
 
 const JOURNAL_DIR = path.resolve(__dirname, '../../server/data');
 const JOURNAL_FILE = path.join(JOURNAL_DIR, 'trade_journal.json');
@@ -89,11 +90,14 @@ class RealTradeManager {
                 }
             }
         } catch (err) {
+            systemLogger.logError("REAL_TRADE_OPTION_CHAIN", err, { spotPrice, optionType });
             console.error(`❌ REAL BROKER ERROR fetching Option Chain from Dhan API: ${err.message}`);
             throw new Error(`Real Dhan Option Chain API error: ${err.message}`);
         }
 
-        throw new Error(`❌ Real Option Contract for ${optionType} could not be resolved from Dhan Option Chain API. Real Order aborted to prevent fake/invalid order placement.`);
+        const noContractMsg = `❌ Real Option Contract for ${optionType} could not be resolved from Dhan Option Chain API. Real Order aborted to prevent fake/invalid order placement.`;
+        systemLogger.logError("REAL_TRADE_OPTION_CHAIN", noContractMsg, { spotPrice, optionType });
+        throw new Error(noContractMsg);
     }
 
     async executeRealOrder(orderParams) {
@@ -116,19 +120,27 @@ class RealTradeManager {
 
         // STRICT REAL ORDER PRE-FLIGHT VALIDATION (Zero Fake/Dummy Data Enforcement)
         if (!optionSecurityId || String(optionSecurityId).length < 3 || optionSecurityId === "0") {
-            console.error(`❌ REAL ORDER ABORTED: Invalid Security ID (${optionSecurityId})`);
+            const err = `Invalid Security ID (${optionSecurityId})`;
+            systemLogger.logWarn("REAL_TRADE_VALIDATION", err, { optionSymbol, spotPrice });
+            console.error(`❌ REAL ORDER ABORTED: ${err}`);
             return { status: "failed", error: "Invalid Security ID", message: "Aborted: Fake/Invalid Security ID detected." };
         }
         if (!optionPremiumPrice || isNaN(optionPremiumPrice) || optionPremiumPrice <= 0) {
-            console.error(`❌ REAL ORDER ABORTED: Invalid Option Premium Price (₹${optionPremiumPrice})`);
+            const err = `Invalid Option Premium Price (₹${optionPremiumPrice})`;
+            systemLogger.logWarn("REAL_TRADE_VALIDATION", err, { optionSymbol, spotPrice });
+            console.error(`❌ REAL ORDER ABORTED: ${err}`);
             return { status: "failed", error: "Invalid Premium Price", message: "Aborted: Invalid/Dummy Option Premium price detected." };
         }
         if (!optionSL || isNaN(optionSL) || optionSL <= 0 || !target || isNaN(target) || target <= 0) {
-            console.error(`❌ REAL ORDER ABORTED: Invalid Stop-Loss (₹${optionSL}) or Target (₹${target})`);
+            const err = `Invalid Stop-Loss (₹${optionSL}) or Target (₹${target})`;
+            systemLogger.logWarn("REAL_TRADE_VALIDATION", err, { optionSymbol, spotPrice });
+            console.error(`❌ REAL ORDER ABORTED: ${err}`);
             return { status: "failed", error: "Invalid Risk Parameters", message: "Aborted: Invalid Stop-Loss or Target parameters." };
         }
         if (!qty || isNaN(qty) || qty <= 0) {
-            console.error(`❌ REAL ORDER ABORTED: Invalid Quantity (${qty})`);
+            const err = `Invalid Quantity (${qty})`;
+            systemLogger.logWarn("REAL_TRADE_VALIDATION", err, { optionSymbol, spotPrice });
+            console.error(`❌ REAL ORDER ABORTED: ${err}`);
             return { status: "failed", error: "Invalid Quantity", message: "Aborted: Invalid Quantity parameters." };
         }
 
@@ -180,11 +192,13 @@ class RealTradeManager {
                         });
                         slOrderId = slRes?.data?.orderId || slRes?.orderId;
                     } catch (slErr) {
+                        systemLogger.logWarn("REAL_TRADE_SL_ORDER", slErr, { optionSymbol, primaryOrderId });
                         console.warn(`⚠️ Warning placing Dhan SL order: ${slErr.message}`);
                     }
                 }
             }
         } catch (apiErr) {
+            systemLogger.logError("REAL_TRADE_BROKER_API", apiErr, { optionSymbol, optionSecurityId, qty });
             console.error(`❌ REAL BROKER ORDER ERROR: ${apiErr.message}`);
             return {
                 status: "failed",
@@ -197,6 +211,7 @@ class RealTradeManager {
         const isDhanSuccess = (realResult?.status === "success" || realResult?.statusCode === 200) && (realResult?.data?.orderId || realResult?.orderId || realResult?.data?.orderStatus === "SUCCESS");
 
         if (!isDhanSuccess && (realResult?.status === "error" || realResult?.statusCode >= 400 || realResult?.data?.errorData)) {
+            systemLogger.logError("REAL_TRADE_ORDER_REJECTED", dhanErrorMsg || 'API Error', { optionSymbol, optionSecurityId, qty, realResult });
             console.error(`❌ REAL BROKER ORDER REJECTED BY DHAN: ${dhanErrorMsg || 'API Error'}`);
             return {
                 status: "failed",

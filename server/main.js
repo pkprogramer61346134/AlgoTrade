@@ -10,13 +10,16 @@ const { evaluateConsensusEngine } = require('../src/consensusEngine');
 const OrderExecutionManager = require('../order_config/orderExecutionManager');
 const BacktestManager = require('../order_config/backtest/backtestManager');
 const { DhanSDK, ensureValidDhanToken } = require('../dhanAPI/index');
+const { systemLogger } = require('../src/systemLogger');
 
 // Global Process Crash Protector: Prevent background network errors from crashing Node.js
 process.on('uncaughtException', (err) => {
+    systemLogger.logError("SERVER_MAIN_UNCAUGHT", err);
     console.error('🛡️ [PROCESS GUARD] Uncaught Exception caught (Server active):', err.message);
 });
 
 process.on('unhandledRejection', (reason) => {
+    systemLogger.logError("SERVER_MAIN_REJECTION", reason);
     console.error('🛡️ [PROCESS GUARD] Unhandled Rejection caught (Server active):', reason);
 });
 
@@ -1254,6 +1257,24 @@ app.get('/api/live-status', async (req, res) => {
             lastSyncTimestamp: liveState.lastSyncTimestamp || Date.now(),
             isMarketOpen: isIndianMarketOpen(),
             preMarketReadiness: preMarketReadiness
+        });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// 3a. GET /api/system-errors - Fetch Centralized System Error Logs
+app.get('/api/system-errors', (req, res) => {
+    try {
+        const limit = Number(req.query.limit) || 100;
+        const moduleFilter = req.query.module || null;
+        const logs = systemLogger.getErrorLogs(limit, moduleFilter);
+        res.json({
+            status: 'success',
+            count: logs.length,
+            errorLogFile: "server/data/system_errors.log",
+            errorJsonFile: "server/data/system_errors.json",
+            logs: logs
         });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
