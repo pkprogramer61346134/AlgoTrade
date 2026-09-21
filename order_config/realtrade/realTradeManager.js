@@ -151,9 +151,10 @@ class RealTradeManager {
                 });
 
                 const primaryOrderId = realResult?.data?.orderId || realResult?.orderId;
+                let slOrderId = null;
                 if (primaryOrderId) {
                     try {
-                        await this.dhan.orders.placeOrder({
+                        const slRes = await this.dhan.orders.placeOrder({
                             securityId: String(optionSecurityId),
                             exchangeSegment: "NSE_FNO",
                             transactionType: "SELL",
@@ -162,6 +163,7 @@ class RealTradeManager {
                             productType: "INTRADAY",
                             triggerPrice: optionSL
                         });
+                        slOrderId = slRes?.data?.orderId || slRes?.orderId;
                     } catch (slErr) {
                         console.warn(`⚠️ Warning placing Dhan SL order: ${slErr.message}`);
                     }
@@ -180,6 +182,7 @@ class RealTradeManager {
 
         this.activeOrder = {
             orderId: realOrderId,
+            slOrderId: slOrderId || null,
             mode: "REAL",
             status: "ACTIVE",
             date: dateStr,
@@ -248,6 +251,7 @@ class RealTradeManager {
             if (pos.currentSL < pos.optionPremiumPrice) {
                 pos.currentSL = pos.optionPremiumPrice; // Trail to Cost!
                 console.log(`🎯 [REAL TRAILING SL] #${pos.orderId} SL Trailed to Breakeven Cost Price: ₹${pos.currentSL}`);
+                this.syncBrokerSLWithDhan(pos.orderId, pos.currentSL, pos.slOrderId);
             }
         }
 
@@ -270,6 +274,7 @@ class RealTradeManager {
 
         if (pos.t1Hit && !pos.t1EventEmitted) {
             pos.t1EventEmitted = true;
+            this.syncBrokerSLWithDhan(pos.orderId, pos.currentSL, pos.slOrderId);
             return {
                 status: "ACTIVE",
                 event: "T1_TRAILED",
@@ -280,6 +285,28 @@ class RealTradeManager {
         }
 
         return null;
+    }
+
+    async syncBrokerSLWithDhan(orderId, newSLPrice, slOrderId = null) {
+        try {
+            if (this.dhan && this.dhan.orders) {
+                if (typeof this.dhan.orders.modifySuperOrder === 'function') {
+                    await this.dhan.orders.modifySuperOrder(orderId, {
+                        legName: 'STOP_LOSS_LEG',
+                        stopLossPrice: newSLPrice
+                    });
+                    console.log(`📡 [DHAN API] Broker SuperOrder #${orderId} SL modified on Exchange to ₹${newSLPrice}`);
+                } else if (slOrderId && typeof this.dhan.orders.modifyOrder === 'function') {
+                    await this.dhan.orders.modifyOrder(slOrderId, {
+                        orderType: 'STOP_LOSS_MARKET',
+                        triggerPrice: newSLPrice
+                    });
+                    console.log(`📡 [DHAN API] Broker Order #${slOrderId} SL modified on Exchange to ₹${newSLPrice}`);
+                }
+            }
+        } catch (err) {
+            console.warn(`⚠️ Could not modify SL on Dhan Broker API: ${err.message}`);
+        }
     }
 
     closePosition(reason = "MANUAL_SQUAREOFF", exitPremiumPrice = 0, spotExitPrice = null, timeStr = "") {
