@@ -205,6 +205,8 @@ function saveAppConfig(updates) {
     } catch (e) {
         console.warn(`⚠️ Failed to save app config: ${e.message}`);
     }
+}
+
 let cachedHistCandles = [];
 let lastHistLoadTime = 0;
 
