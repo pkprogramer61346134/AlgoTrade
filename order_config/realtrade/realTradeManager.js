@@ -55,8 +55,8 @@ class RealTradeManager {
                 const ocData = ocRes?.data?.data?.oc || ocRes?.data?.oc || {};
 
                 let bestStrike = atmStrike;
-                let bestSecId = optionType === "CE" ? "47291" : "47286";
-                let bestPrice = Math.max(10, Math.round(spotPrice * 0.005));
+                let bestSecId = null;
+                let bestPrice = null;
 
                 const targetSecIdKey = optionType === "CE" ? 'ce_security_id' : 'pe_security_id';
                 const targetPremKey = optionType === "CE" ? 'ce_last_price' : 'pe_last_price';
@@ -79,7 +79,7 @@ class RealTradeManager {
                     }
                 }
 
-                if (bestSecId && bestPrice > 0 && minDiff !== Infinity) {
+                if (bestSecId && bestPrice && bestPrice > 0 && minDiff !== Infinity) {
                     return {
                         strike: bestStrike,
                         tradingSymbol: `NIFTY-${nearestExpiry}-${bestStrike}-${optionType}`,
@@ -190,6 +190,19 @@ class RealTradeManager {
                 status: "failed",
                 error: apiErr.message,
                 message: "Dhan API order execution failed."
+            };
+        }
+
+        const dhanErrorMsg = realResult?.data?.remarks?.error_message || realResult?.data?.message || realResult?.message || realResult?.data?.errorData?.errorMessage;
+        const isDhanSuccess = (realResult?.status === "success" || realResult?.statusCode === 200) && (realResult?.data?.orderId || realResult?.orderId || realResult?.data?.orderStatus === "SUCCESS");
+
+        if (!isDhanSuccess && (realResult?.status === "error" || realResult?.statusCode >= 400 || realResult?.data?.errorData)) {
+            console.error(`❌ REAL BROKER ORDER REJECTED BY DHAN: ${dhanErrorMsg || 'API Error'}`);
+            return {
+                status: "failed",
+                error: dhanErrorMsg || "Dhan Order Rejected",
+                dhanResponse: realResult,
+                message: "Dhan Broker rejected the live order."
             };
         }
 
