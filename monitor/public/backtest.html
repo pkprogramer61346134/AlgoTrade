@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoTrade - On-Demand Backtest Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Top Navbar -->
+    <div class="navbar">
+        <div class="nav-brand">
+            <div class="brand-badge">⚡</div>
+            <div>
+                <div class="brand-name">AlgoTrade Web Command Center</div>
+                <div class="brand-tagline">On-Demand Historical Backtest Lab & Quantitative Simulator</div>
+            </div>
+        </div>
+        <div class="connection-status">
+            <div id="statusDot" class="dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <a href="index.html" class="tab-btn">
+            📈 LIVE & PAPER TRADING
+        </a>
+        <a href="backtest.html" class="tab-btn active">
+            🧪 ON-DEMAND BACKTEST LAB
+        </a>
+    </div>
+
+    <!-- Key Metrics Summary Banner (Top KPI Row) -->
+    <div class="metrics-banner">
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Simulated Net Profit / Loss</span>
+                <span class="kpi-icon">💰</span>
+            </div>
+            <div class="kpi-value val-green" id="btNetPnl">+₹0.00</div>
+            <div class="kpi-subtext" id="btWinrateSub">Win Rate: 0.0%</div>
+        </div>
+
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Total Simulated Trades</span>
+                <span class="kpi-icon">📊</span>
+            </div>
+            <div class="kpi-value" id="btTotalTradesCount">0</div>
+            <div class="kpi-subtext" id="btTradeBreakdown">0 Wins / 0 Losses</div>
+        </div>
+
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Simulation Status</span>
+                <span class="kpi-icon">⚙️</span>
+            </div>
+            <div class="kpi-value" id="btStatusText" style="font-size: 18px; color: var(--brand-cyan);">IDLE / READY</div>
+            <div class="kpi-subtext" id="btBarDate">Current Bar: -</div>
+        </div>
+
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Active Backtest Position</span>
+                <span class="kpi-icon">🎯</span>
+            </div>
+            <div class="kpi-value" id="btActiveSymbol" style="font-size: 18px; color: var(--brand-amber);">None</div>
+            <div class="kpi-subtext" id="btActiveSub">LTP: - | Target: - | SL: -</div>
+        </div>
+    </div>
+
+    <!-- Backtest Control Form & Date Presets -->
+    <div class="backtest-panel">
+        <div class="backtest-header">🧪 On-Demand Backtest Setup & Parameters</div>
+        <div class="form-row">
+            <div class="field-group">
+                <label for="btStartDate">From Date:</label>
+                <input type="date" id="btStartDate" class="input-box" value="2026-09-01">
+            </div>
+            <div class="field-group">
+                <label for="btEndDate">To Date:</label>
+                <input type="date" id="btEndDate" class="input-box" value="2026-09-22">
+            </div>
+            <div class="field-group">
+                <label for="btSymbol">Symbol:</label>
+                <select id="btSymbol" class="select-box">
+                    <option value="NIFTY_50">NIFTY 50</option>
+                    <option value="BANKNIFTY">BANK NIFTY</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="btInterval">Timeframe:</label>
+                <select id="btInterval" class="select-box">
+                    <option value="5">5 Minutes</option>
+                    <option value="15">15 Minutes</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="btLots">Lot Size:</label>
+                <select id="btLots" class="select-box">
+                    <option value="1">1 Lot (50 Qty)</option>
+                    <option value="2">2 Lots (100 Qty)</option>
+                    <option value="4">4 Lots (200 Qty)</option>
+                    <option value="10">10 Lots (500 Qty)</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <button class="btn-launch" onclick="triggerBacktestFromUI()">🚀 Launch Backtest Now</button>
+            </div>
+        </div>
+
+        <!-- Preset Range Buttons -->
+        <div class="preset-group">
+            <span style="font-size: 12px; color: var(--text-secondary); align-self: center; font-weight: 600;">⚡ Quick Presets:</span>
+            <button class="btn-preset" onclick="setPresetRange('2026-09-15', '2026-09-22')">Last 7 Days</button>
+            <button class="btn-preset" onclick="setPresetRange('2026-09-01', '2026-09-22')">September 2026 (15 Days)</button>
+            <button class="btn-preset" onclick="setPresetRange('2026-08-01', '2026-09-22')">Last 2 Months</button>
+        </div>
+    </div>
+
+    <!-- Main Backtest Grid: Progress Bar & Active Position Tracker -->
+    <div class="dashboard-grid">
+        
+        <!-- Left: Progress & Simulation Details -->
+        <div class="card">
+            <div class="card-title-bar">
+                <div class="card-title-text">📊 Progress & Simulation Metrics</div>
+                <span class="pill-blue" id="btBadgeProgress">0.0%</span>
+            </div>
+            
+            <div class="progress-bg">
+                <div class="progress-fill" id="btProgressFill"></div>
+            </div>
+
+            <div class="row-item">
+                <span class="row-label">Simulated Net PnL</span>
+                <span class="row-value val-green" id="btRowPnl">+₹0.00</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Strategy Win Rate</span>
+                <span class="row-value" id="btRowWinrate">0.0%</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Current Bar Date & Time</span>
+                <span class="row-value" id="btRowBarDate">-</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Simulated Account Balance</span>
+                <span class="row-value" id="btRowBalance">₹100,000.00</span>
+            </div>
+        </div>
+
+        <!-- Right: Active Trade Tracker -->
+        <div class="card" style="border-color: rgba(16, 185, 129, 0.35);">
+            <div class="card-title-bar">
+                <div class="card-title-text">🎯 Active Position Tracker</div>
+                <span class="pill-green" id="btActiveStatusPill">NO ACTIVE POSITION</span>
+            </div>
+
+            <div class="row-item">
+                <span class="row-label">Option Contract</span>
+                <span class="row-value" id="btPosSymbol" style="color: var(--brand-amber);">None</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Entry Premium / Current LTP</span>
+                <span class="row-value" id="btPosEntryLtp">₹- / ₹-</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">🎯 Target Profit (TP)</span>
+                <span class="row-value val-green" id="btPosTp">₹-</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">🛑 Initial SL / Trailing SL</span>
+                <span class="row-value val-red" id="btPosSlStats">₹- / ₹-</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Unrealized Position PnL</span>
+                <span class="row-value val-green" id="btPosUnrealizedPnl">+₹0.00</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Console Terminal Log -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card-title-bar">
+            <div class="card-title-text">💻 Real-Time Console Log Stream</div>
+        </div>
+        <div id="btConsoleLog" class="terminal-box">
+            <div>[SYSTEM] Ready. Select backtest parameters above and click 'Launch Backtest Now'...</div>
+        </div>
+    </div>
+
+    <!-- Trade Execution Journal Table -->
+    <div class="table-card">
+        <div class="table-header-title">🧪 Backtest Execution Journal</div>
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Opened At</th>
+                        <th>Symbol / Contract</th>
+                        <th>Option Type</th>
+                        <th>Entry ₹</th>
+                        <th>🎯 Target TP ₹</th>
+                        <th>🛑 Stop SL ₹</th>
+                        <th>Exit ₹</th>
+                        <th>Net PnL ₹</th>
+                        <th>Exit Reason</th>
+                    </tr>
+                </thead>
+                <tbody id="btTradeTableBody">
+                    <tr>
+                        <td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 24px;">Click 'Launch Backtest Now' to stream bar-by-bar trade executions.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        initWebMonitorSocket((msg) => {
+            if (!msg) return;
+
+            // Handle BACKTEST_MONITOR_UPDATE
+            if (msg.type === 'BACKTEST_MONITOR_UPDATE' && msg.data) {
+                const eventName = msg.data.event;
+                const innerData = msg.data.data || msg.data;
+
+                // 1. Status Events
+                if (eventName === 'BACKTEST_COMPLETED') {
+                    document.getElementById('btStatusText').innerText = 'COMPLETED';
+                    document.getElementById('btStatusText').style.color = '#10b981';
+                    document.getElementById('btActiveStatusPill').innerText = 'COMPLETED';
+                }
+
+                // 2. Log Events
+                if (eventName === 'BACKTEST_LOG_EVENT' && innerData.text) {
+                    appendConsoleLog(innerData.text);
+                }
+
+                // 3. Progress Updates & Active Trade Tracker
+                if (innerData.progressPercent) {
+                    document.getElementById('btBadgeProgress').innerText = innerData.progressPercent;
+                    document.getElementById('btProgressFill').style.width = innerData.progressPercent;
+                    if (document.getElementById('btStatusText').innerText !== 'COMPLETED') {
+                        document.getElementById('btStatusText').innerText = 'RUNNING...';
+                        document.getElementById('btStatusText').style.color = '#38bdf8';
+                    }
+                }
+                if (innerData.currentDate) {
+                    document.getElementById('btBarDate').innerText = `Current Bar: ${innerData.currentDate}`;
+                    document.getElementById('btRowBarDate').innerText = innerData.currentDate;
+                }
+                if (innerData.summary) {
+                    const pnl = innerData.summary.realizedPnl || 0;
+                    const formattedPnl = formatRupee(pnl);
+                    
+                    document.getElementById('btNetPnl').innerText = formattedPnl;
+                    document.getElementById('btNetPnl').className = `kpi-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
+                    document.getElementById('btWinrateSub').innerText = `Win Rate: ${innerData.summary.winratePercent}`;
+                    
+                    document.getElementById('btTotalTradesCount').innerText = innerData.summary.totalTrades;
+                    document.getElementById('btTradeBreakdown').innerText = `${innerData.summary.wins || 0} Wins / ${innerData.summary.losses || 0} Losses`;
+
+                    document.getElementById('btRowPnl').innerText = formattedPnl;
+                    document.getElementById('btRowPnl').className = `row-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
+                    document.getElementById('btRowWinrate').innerText = innerData.summary.winratePercent;
+                    
+                    if (innerData.summary.virtualBalance) {
+                        document.getElementById('btRowBalance').innerText = formatRupee(innerData.summary.virtualBalance).replace('+', '');
+                    }
+                }
+
+                // Active Trade Box Update
+                if (innerData.activePosition) {
+                    const pos = innerData.activePosition;
+                    document.getElementById('btActiveStatusPill').innerText = 'TRADE IN POSITION';
+                    document.getElementById('btActiveStatusPill').className = 'pill-green';
+                    
+                    document.getElementById('btActiveSymbol').innerText = pos.symbol;
+                    document.getElementById('btActiveSub').innerText = `LTP: ₹${pos.currentLtp} | Target: ₹${pos.targetProfit || 146.4} | SL: ₹${pos.currentTrailingSL || pos.initialSL}`;
+
+                    document.getElementById('btPosSymbol').innerText = pos.symbol;
+                    document.getElementById('btPosEntryLtp').innerText = `₹${pos.entryPrice} / ₹${pos.currentLtp}`;
+                    document.getElementById('btPosTp').innerText = pos.targetProfit ? `₹${pos.targetProfit}` : '₹146.40';
+                    document.getElementById('btPosSlStats').innerText = `₹${pos.initialSL} / ₹${pos.currentTrailingSL}`;
+                    
+                    const pnl = pos.unrealizedPnl || 0;
+                    const pnlElem = document.getElementById('btPosUnrealizedPnl');
+                    pnlElem.innerText = formatRupee(pnl);
+                    pnlElem.className = `row-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
+                } else {
+                    document.getElementById('btActiveStatusPill').innerText = 'NO ACTIVE POSITION';
+                    document.getElementById('btActiveStatusPill').className = 'pill-blue';
+                    document.getElementById('btActiveSymbol').innerText = 'None';
+                    document.getElementById('btActiveSub').innerText = 'LTP: - | Target: - | SL: -';
+
+                    document.getElementById('btPosSymbol').innerText = 'None';
+                    document.getElementById('btPosEntryLtp').innerText = '₹- / ₹-';
+                    document.getElementById('btPosTp').innerText = '₹-';
+                    document.getElementById('btPosSlStats').innerText = '₹- / ₹-';
+                    document.getElementById('btPosUnrealizedPnl').innerText = '+₹0.00';
+                    document.getElementById('btPosUnrealizedPnl').className = 'row-value val-green';
+                }
+
+                // Closed Position Row
+                if (eventName === 'BACKTEST_POSITION_CLOSED' && innerData) {
+                    addBtTradeRow(innerData);
+                }
+            }
+        });
+
+        function setPresetRange(start, end) {
+            document.getElementById('btStartDate').value = start;
+            document.getElementById('btEndDate').value = end;
+        }
+
+        function triggerBacktestFromUI() {
+            const startDate = document.getElementById('btStartDate').value;
+            const endDate = document.getElementById('btEndDate').value;
+            const symbol = document.getElementById('btSymbol').value;
+            const interval = document.getElementById('btInterval').value;
+            const lots = document.getElementById('btLots') ? document.getElementById('btLots').value : 1;
+
+            if (!startDate || !endDate) {
+                alert('Please select both From Date and To Date!');
+                return;
+            }
+
+            document.getElementById('btStatusText').innerText = 'RUNNING...';
+            document.getElementById('btStatusText').style.color = '#38bdf8';
+            document.getElementById('btBadgeProgress').innerText = '0.0%';
+            document.getElementById('btProgressFill').style.width = '0%';
+            document.getElementById('btConsoleLog').innerHTML = '';
+            document.getElementById('btTradeTableBody').innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 24px;">Backtest running bar-by-bar...</td></tr>';
+            btTradeCount = 0;
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'FORWARD_MESSAGE',
+                    recipientId: 'backtestClient',
+                    payload: {
+                        action: 'START_BACKTEST',
+                        startDate: startDate,
+                        endDate: endDate,
+                        symbol: symbol,
+                        interval: interval,
+                        lots: lots
+                    }
+                }));
+                console.log(`Sent START_BACKTEST request for ${startDate} to ${endDate} (Lots: ${lots})`);
+            } else {
+                alert('❌ WebSocket is not connected!');
+            }
+        }
+
+        function appendConsoleLog(text) {
+            const consoleBox = document.getElementById('btConsoleLog');
+            const line = document.createElement('div');
+            line.innerText = text;
+            consoleBox.appendChild(line);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        let btTradeCount = 0;
+        function addBtTradeRow(trade) {
+            const tbody = document.getElementById('btTradeTableBody');
+            if (btTradeCount === 0) tbody.innerHTML = '';
+            btTradeCount++;
+
+            const row = document.createElement('tr');
+            const pnlClass = trade.netPnl >= 0 ? 'val-green' : 'val-red';
+            const reasonPill = trade.netPnl >= 0 ? 'pill-green' : 'pill-red';
+            const optPill = trade.optionType === 'CE' ? 'pill-green' : 'pill-red';
+            const tpVal = trade.targetProfit ? `₹${trade.targetProfit}` : `₹${(trade.entryPrice + 26.4).toFixed(2)}`;
+            const slVal = trade.initialSL ? `₹${trade.initialSL}` : `₹${(trade.entryPrice - 12.0).toFixed(2)}`;
+            row.innerHTML = `
+                <td>${trade.openedAt}</td>
+                <td><strong style="color: var(--text-primary);">${trade.symbol}</strong></td>
+                <td><span class="${optPill}">${trade.optionType}</span></td>
+                <td>₹${trade.entryPrice}</td>
+                <td style="color: var(--bull-green-light); font-weight:700;">${tpVal}</td>
+                <td style="color: var(--bear-red-light); font-weight:700;">${slVal}</td>
+                <td>₹${trade.exitPrice}</td>
+                <td class="${pnlClass}">${formatRupee(trade.netPnl)}</td>
+                <td><span class="${reasonPill}">${cleanExitReason(trade.reason)}</span></td>
+            `;
+            tbody.prepend(row);
+        }
+    </script>
+</body>
+</html>

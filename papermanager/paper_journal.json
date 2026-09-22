@@ -1,0 +1,35 @@
+{
+  "virtualBalance": 102700,
+  "todaySummary": {
+    "totalTrades": 1,
+    "wins": 1,
+    "losses": 0,
+    "realizedPnl": 2700
+  },
+  "tradeHistory": [
+    {
+      "orderId": "PAPER_ORD_1790098671332",
+      "mode": "PAPER_TRADING",
+      "symbol": "NIFTY_24500_CE",
+      "optionType": "CE",
+      "strikePrice": 24500,
+      "qty": 50,
+      "entryPrice": 120.5,
+      "currentLtp": 175,
+      "initialSL": 105.5,
+      "currentTrailingSL": 180.5,
+      "highestPriceSeen": 195.5,
+      "riskPoints": 15,
+      "currentMilestoneIndex": 6,
+      "currentRatioText": "1:5",
+      "unrealizedPnl": 2725,
+      "openedAt": "11:07:51 PM",
+      "exitPrice": 174.5,
+      "slippageApplied": 0.5,
+      "netPnl": 2700,
+      "reason": "PAPER_TRAILING_SL_HIT",
+      "closedAt": "11:07:56 PM"
+    }
+  ],
+  "lastUpdated": "2026-09-22T17:37:56.488Z"
+}

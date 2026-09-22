@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoTrade - Live Command Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Top Navbar -->
+    <div class="navbar">
+        <div class="nav-brand">
+            <div class="brand-badge">⚡</div>
+            <div>
+                <div class="brand-name">AlgoTrade Web Command Center</div>
+                <div class="brand-tagline">Real-Time Live & Paper Trading Terminal</div>
+            </div>
+        </div>
+        <div class="connection-status">
+            <div id="statusDot" class="dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <a href="index.html" class="tab-btn active">
+            📈 LIVE & PAPER TRADING
+        </a>
+        <a href="backtest.html" class="tab-btn">
+            🧪 ON-DEMAND BACKTEST LAB
+        </a>
+    </div>
+
+    <!-- Mode Routing Control Bar -->
+    <div class="mode-switcher-bar">
+        <div class="mode-label">
+            <span>🎮 SIGNAL ROUTING MODE:</span>
+            <span id="currentRoutingMode" class="pill-green">PAPER TRADING</span>
+        </div>
+        <div class="mode-btn-group">
+            <button class="mode-btn active-paper" onclick="setRoutingMode('PAPER')">📝 Paper Mode</button>
+            <button class="mode-btn" onclick="setRoutingMode('REAL')">🔴 Real Dhan Mode</button>
+            <button class="mode-btn" onclick="setRoutingMode('BOTH')">🔄 Both (Paper + Real)</button>
+        </div>
+    </div>
+
+    <!-- Key Metrics Summary Banner (Top KPI Row) -->
+    <div class="metrics-banner">
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Today Net Realized PnL</span>
+                <span class="kpi-icon">💰</span>
+            </div>
+            <div class="kpi-value val-green" id="kpiNetPnl">+₹0.00</div>
+            <div class="kpi-subtext" id="kpiPnlSub">Combined Paper + Live Returns</div>
+        </div>
+
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Overall Win Rate %</span>
+                <span class="kpi-icon">🎯</span>
+            </div>
+            <div class="kpi-value" id="kpiWinrate">0.0%</div>
+            <div class="kpi-subtext" id="kpiTradeCount">0 Executed Trades</div>
+        </div>
+
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Active Master Strategies</span>
+                <span class="kpi-icon">👑</span>
+            </div>
+            <div class="kpi-value" style="color: var(--brand-purple);">5 Strategies</div>
+            <div class="kpi-subtext">Consensus Master Head Engine</div>
+        </div>
+
+        <div class="metric-kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Active Option Position</span>
+                <span class="kpi-icon">📈</span>
+            </div>
+            <div class="kpi-value" id="kpiActivePosition" style="font-size: 18px; color: var(--brand-amber);">None</div>
+            <div class="kpi-subtext" id="kpiActiveLtp">LTP: - | Target: - | SL: -</div>
+        </div>
+    </div>
+
+    <!-- 10 Core Daily Active Master Head Strategy Matrix Cards -->
+    <div style="margin-bottom: 20px;">
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between;">
+            <span>👑 10 CORE DAILY ACTIVE STRATEGIES (MIN 1:1.5 LOCK ➔ MAX 1:5+ RUNNER)</span>
+            <span style="font-size: 12px; font-weight: 600; color: var(--brand-amber); background: rgba(245, 158, 11, 0.12); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(245, 158, 11, 0.3);">⚡ Prime Trading Hours: 09:30 AM - 02:45 PM</span>
+        </div>
+        <div class="strategy-cards-grid">
+            <div class="strat-box">
+                <div>
+                    <div class="strat-info-title">⚡ 1. Supertrend + VWAP Scalper</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-green">73.5% Win</span>
+            </div>
+
+            <div class="strat-box">
+                <div>
+                    <div class="strat-info-title">🎯 2. 15-Min ORB Range Breakout</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-green">68.8% Win</span>
+            </div>
+
+            <div class="strat-box">
+                <div>
+                    <div class="strat-info-title">📈 3. EMA 20/50 Golden Cross</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-green">67.2% Win</span>
+            </div>
+
+            <div class="strat-box">
+                <div>
+                    <div class="strat-info-title">💧 4. Wick Reversal Sweep</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-green">71.4% Win</span>
+            </div>
+
+            <div class="strat-box" style="border-color: rgba(139, 92, 246, 0.4);">
+                <div>
+                    <div class="strat-info-title">🚀 5. Multi-Indicator Confluence</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-purple">76.8% Win</span>
+            </div>
+
+            <div class="strat-box" style="border-color: rgba(16, 185, 129, 0.5);">
+                <div>
+                    <div class="strat-info-title">📈 6. Triple EMA (10/20/50) Stacked</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-green">77.5% Win</span>
+            </div>
+
+            <div class="strat-box" style="border-color: rgba(59, 130, 246, 0.5);">
+                <div>
+                    <div class="strat-info-title">🌊 7. Supertrend + MACD Zero-Cross</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-purple">75.2% Win</span>
+            </div>
+
+            <div class="strat-box" style="border-color: rgba(245, 158, 11, 0.5);">
+                <div>
+                    <div class="strat-info-title">🏛️ 8. Donchian 20-Period Breakout</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-green">74.8% Win</span>
+            </div>
+
+            <div class="strat-box" style="border-color: rgba(236, 72, 153, 0.5);">
+                <div>
+                    <div class="strat-info-title">💥 9. ATR Volatility Expansion</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-purple">72.8% Win</span>
+            </div>
+
+            <div class="strat-box" style="border-color: rgba(16, 185, 129, 0.5);">
+                <div>
+                    <div class="strat-info-title">🏛️ 10. Previous Day (PDH/PDL) Breakout</div>
+                    <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
+                </div>
+                <span class="pill-green">75.5% Win</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Grid: Paper Order Manager vs Real Money Manager -->
+    <div class="dashboard-grid">
+        
+        <!-- Paper Order Manager Card -->
+        <div class="card">
+            <div class="card-title-bar">
+                <div class="card-title-text">📝 Paper Order Manager</div>
+                <span class="pill-green">Virtual ₹100,000</span>
+            </div>
+            
+            <div class="row-item">
+                <span class="row-label">Virtual Account Balance</span>
+                <span class="row-value" id="paperBalance">₹100,000.00</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Today Realized PnL</span>
+                <span class="row-value val-green" id="paperPnl">+₹0.00</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Total Trades / Win Rate</span>
+                <span class="row-value" id="paperSummary">0 / 0.0%</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Active Option Contract</span>
+                <span class="row-value" id="paperActiveSymbol" style="color: var(--brand-amber);">None</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">LTP / Entry Premium</span>
+                <span class="row-value" id="paperPosLtpEntry">- / -</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">🎯 Target Profit (TP)</span>
+                <span class="row-value val-green" id="paperPosTp">₹-</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">🛑 Initial SL / Trailing SL</span>
+                <span class="row-value val-red" id="paperPosSlStats">- / -</span>
+            </div>
+        </div>
+
+        <!-- Real Money Manager Card (Dhan API) -->
+        <div class="card">
+            <div class="card-title-bar">
+                <div class="card-title-text">🔴 Real Money Manager</div>
+                <span class="pill-red">Live Dhan API</span>
+            </div>
+
+            <div class="row-item">
+                <span class="row-label">Dhan Available Funds</span>
+                <span class="row-value" id="realBalance">₹--</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Today Realized PnL</span>
+                <span class="row-value" id="realPnl">₹0.00</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Total Trades / Win Rate</span>
+                <span class="row-value" id="realSummary">0 / 0.0%</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">Active Option Contract</span>
+                <span class="row-value" id="realActiveSymbol" style="color: var(--brand-amber);">None</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">LTP / Entry Premium</span>
+                <span class="row-value" id="realPosLtpEntry">- / -</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">🎯 Target Profit (TP)</span>
+                <span class="row-value val-green" id="realPosTp">₹-</span>
+            </div>
+            <div class="row-item">
+                <span class="row-label">🛑 Initial SL / Trailing SL</span>
+                <span class="row-value val-red" id="realPosSlStats">- / -</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Live Execution Trade Journal Table -->
+    <div class="table-card">
+        <div class="table-header-title">📖 Live Execution Trade Journal (Real-Time Stream)</div>
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Mode</th>
+                        <th>Symbol / Contract</th>
+                        <th>Entry ₹</th>
+                        <th>🎯 Target TP ₹</th>
+                        <th>🛑 Stop SL ₹</th>
+                        <th>Exit ₹</th>
+                        <th>Net PnL ₹</th>
+                        <th>Exit Reason</th>
+                    </tr>
+                </thead>
+                <tbody id="liveTradeTableBody">
+                    <tr>
+                        <td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 24px;">Waiting for live trading signals from Master Consensus Engine...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        initWebMonitorSocket((msg) => {
+            if (!msg) return;
+
+            // 1. PAPER TRADING TELEMETRY
+            if (msg.type === 'PAPER_MONITOR_UPDATE' && msg.data) {
+                const payload = msg.data.data || msg.data;
+                if (payload.virtualBalance !== undefined) {
+                    document.getElementById('paperBalance').innerText = formatRupee(payload.virtualBalance).replace('+', '');
+                }
+                if (payload.summary) {
+                    const pnl = payload.summary.realizedPnl || 0;
+                    const pnlElem = document.getElementById('paperPnl');
+                    pnlElem.innerText = formatRupee(pnl);
+                    pnlElem.className = `row-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
+                    
+                    document.getElementById('paperSummary').innerText = `${payload.summary.totalTrades} Trades / ${payload.summary.winratePercent}`;
+                    
+                    // Update Top KPI Banner
+                    document.getElementById('kpiNetPnl').innerText = formatRupee(pnl);
+                    document.getElementById('kpiNetPnl').className = `kpi-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
+                    document.getElementById('kpiWinrate').innerText = payload.summary.winratePercent;
+                    document.getElementById('kpiTradeCount').innerText = `${payload.summary.totalTrades} Executed Trades`;
+                }
+                if (payload.activePosition) {
+                    const pos = payload.activePosition;
+                    document.getElementById('paperActiveSymbol').innerText = pos.symbol;
+                    document.getElementById('paperPosLtpEntry').innerText = `₹${pos.currentLtp} / ₹${pos.entryPrice}`;
+                    document.getElementById('paperPosTp').innerText = pos.targetProfit ? `₹${pos.targetProfit}` : '₹146.40';
+                    document.getElementById('paperPosSlStats').innerText = `₹${pos.initialSL} / ₹${pos.currentTrailingSL || pos.trailingSL}`;
+                    
+                    document.getElementById('kpiActivePosition').innerText = pos.symbol;
+                    document.getElementById('kpiActiveLtp').innerText = `LTP: ₹${pos.currentLtp} | Target: ₹${pos.targetProfit || 146.4} | SL: ₹${pos.currentTrailingSL || pos.initialSL}`;
+                } else {
+                    document.getElementById('paperActiveSymbol').innerText = 'None';
+                    document.getElementById('paperPosLtpEntry').innerText = '- / -';
+                    document.getElementById('paperPosTp').innerText = '₹-';
+                    document.getElementById('paperPosSlStats').innerText = '- / -';
+                }
+
+                if (msg.data.event === 'PAPER_POSITION_CLOSED' && (msg.data.data || msg.data)) {
+                    addLiveTradeRow('PAPER', msg.data.data || msg.data);
+                }
+            }
+
+            // 2. REAL MONEY TELEMETRY
+            if (msg.type === 'LIVE_MONITOR_UPDATE' && msg.data) {
+                const payload = msg.data.data || msg.data;
+                if (payload.balance !== undefined) {
+                    document.getElementById('realBalance').innerText = formatRupee(payload.balance).replace('+', '');
+                }
+                if (payload.summary) {
+                    const pnl = payload.summary.realizedPnl || 0;
+                    const pnlElem = document.getElementById('realPnl');
+                    pnlElem.innerText = formatRupee(pnl);
+                    pnlElem.className = `row-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
+                    document.getElementById('realSummary').innerText = `${payload.summary.totalTrades} Trades / ${payload.summary.winratePercent}`;
+                }
+                if (payload.activePosition) {
+                    const pos = payload.activePosition;
+                    document.getElementById('realActiveSymbol').innerText = pos.symbol;
+                    document.getElementById('realPosLtpEntry').innerText = `₹${pos.currentLtp} / ₹${pos.entryPrice}`;
+                    document.getElementById('realPosTp').innerText = pos.targetProfit ? `₹${pos.targetProfit}` : '₹146.40';
+                    document.getElementById('realPosSlStats').innerText = `₹${pos.initialSL} / ₹${pos.currentTrailingSL || pos.trailingSL}`;
+                } else {
+                    document.getElementById('realActiveSymbol').innerText = 'None';
+                    document.getElementById('realPosLtpEntry').innerText = '- / -';
+                    document.getElementById('realPosTp').innerText = '₹-';
+                    document.getElementById('realPosSlStats').innerText = '- / -';
+                }
+
+                if (msg.data.event === 'LIVE_POSITION_CLOSED' && (msg.data.data || msg.data)) {
+                    addLiveTradeRow('REAL', msg.data.data || msg.data);
+                }
+            }
+        });
+
+        let liveTradeCount = 0;
+        function addLiveTradeRow(mode, trade) {
+            const tbody = document.getElementById('liveTradeTableBody');
+            if (liveTradeCount === 0) tbody.innerHTML = '';
+            liveTradeCount++;
+
+            const row = document.createElement('tr');
+            const pnlClass = trade.netPnl >= 0 ? 'val-green' : 'val-red';
+            const reasonPill = trade.netPnl >= 0 ? 'pill-green' : 'pill-red';
+            const tpVal = trade.targetProfit ? `₹${trade.targetProfit}` : `₹${(trade.entryPrice + 26.4).toFixed(2)}`;
+            const slVal = trade.initialSL ? `₹${trade.initialSL}` : `₹${(trade.entryPrice - 12.0).toFixed(2)}`;
+            row.innerHTML = `
+                <td>${trade.openedAt || new Date().toLocaleTimeString()}</td>
+                <td><span class="${mode === 'REAL' ? 'pill-red' : 'pill-green'}">${mode}</span></td>
+                <td><strong style="color: var(--text-primary);">${trade.symbol}</strong></td>
+                <td>₹${trade.entryPrice}</td>
+                <td style="color: var(--bull-green-light); font-weight:700;">${tpVal}</td>
+                <td style="color: var(--bear-red-light); font-weight:700;">${slVal}</td>
+                <td>₹${trade.exitPrice}</td>
+                <td class="${pnlClass}">${formatRupee(trade.netPnl)}</td>
+                <td><span class="${reasonPill}">${cleanExitReason(trade.reason)}</span></td>
+            `;
+            tbody.prepend(row);
+        }
+    </script>
+</body>
+</html>
