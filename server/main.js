@@ -841,6 +841,7 @@ setInterval(async () => {
             spotPrice: spot,
             status: status,
             reasoning: reason,
+            subEngineVotes: signal?.subEngineVotes || liveState.subEngineVotes || [],
             strategyId: stratConfig?.id || "consensus_master_head",
             strategyName: stratName,
             orderSwitch: liveState.orderSwitchOn ? `ON (${(orderManager.loadConfig().executionMode || "PAPER")} Mode Active)` : "OFF (Signal Alert Only)"
@@ -1281,7 +1282,7 @@ app.get('/api/live-status', async (req, res) => {
             lastSyncTimestamp: liveState.lastSyncTimestamp || Date.now(),
             isMarketOpen: isIndianMarketOpen(),
             preMarketReadiness: preMarketReadiness,
-            subEngineVotes: liveState.subEngineVotes || [],
+            subEngineVotes: (liveState.subEngineVotes && liveState.subEngineVotes.length > 0) ? liveState.subEngineVotes : (liveState.liveEngineLogs[0]?.subEngineVotes || []),
             lastSystemError: systemLogger.getErrorLogs(1)[0] || null,
             recentSystemErrors: systemLogger.getErrorLogs(5)
         });

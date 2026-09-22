@@ -276,13 +276,14 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
             };
         }
 
+        const voteDetailsStr = voteDetails.length > 0 ? ` | Active Votes: ${voteDetails.join(" | ")}` : "";
         return {
             type: "NONE",
             buyVotes: buyVotes,
             sellVotes: sellVotes,
             voteDetails: voteDetails,
             subEngineVotes: subEngineVotes,
-            reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/10). Waiting for Sub-Strategy Majority.`,
+            reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/10)${voteDetailsStr}. Waiting for Sub-Strategy Majority.`,
             indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
         };
     } catch (err) {
