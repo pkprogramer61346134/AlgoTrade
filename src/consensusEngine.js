@@ -251,7 +251,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         
         let sl = signalType === "BUY" ? (spotPrice - dynamicSLPoints) : (spotPrice + dynamicSLPoints);
         const risk = Math.abs(spotPrice - sl);
-        const rrMultiplier = config.riskRewardRatio || 2.0;
+        const rrMultiplier = (strategyConfig && strategyConfig.riskRewardRatio) ? strategyConfig.riskRewardRatio : 2.0;
         const dynamicTRPoints = risk * rrMultiplier;
         let tp = signalType === "BUY" ? (spotPrice + dynamicTRPoints) : (spotPrice - dynamicTRPoints);
 
