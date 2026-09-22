@@ -250,10 +250,14 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         const dynamicSLPoints = Math.max(minSLDistance, Math.min(maxSLDistance, atrVal * 1.5));
         
         let sl = signalType === "BUY" ? (spotPrice - dynamicSLPoints) : (spotPrice + dynamicSLPoints);
+        const risk = Math.abs(spotPrice - sl);
+        const rrMultiplier = config.riskRewardRatio || 2.0;
+        const dynamicTRPoints = risk * rrMultiplier;
+        let tp = signalType === "BUY" ? (spotPrice + dynamicTRPoints) : (spotPrice - dynamicTRPoints);
 
-            const riskPtsStr = risk.toFixed(1);
-            const targetPtsStr = dynamicTRPoints.toFixed(1);
-            const ratioXXStr = `${riskPtsStr}:${targetPtsStr}`;
+        const riskPtsStr = risk.toFixed(1);
+        const targetPtsStr = dynamicTRPoints.toFixed(1);
+        const ratioXXStr = `${riskPtsStr}:${targetPtsStr}`;
 
             const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/10 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
 
