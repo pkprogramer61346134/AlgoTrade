@@ -20,9 +20,15 @@
                 <div class="brand-tagline">Real-Time Live & Paper Trading Terminal</div>
             </div>
         </div>
-        <div class="connection-status">
-            <div id="statusDot" class="dot"></div>
-            <span id="statusText">Connecting...</span>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div id="niftyTickerCard" style="display: flex; align-items: center; gap: 10px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); padding: 8px 16px; border-radius: 12px; box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);">
+                <span style="font-size: 11px; font-weight: 800; color: var(--bull-green-light); letter-spacing: 0.8px;">NIFTY 50 SPOT</span>
+                <span id="niftyHeaderLtp" style="font-family: var(--font-mono); font-size: 17px; font-weight: 800; color: #ffffff;">₹--.--</span>
+            </div>
+            <div class="connection-status">
+                <div id="statusDot" class="dot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
         </div>
     </div>
 
@@ -287,6 +293,13 @@
     <script>
         initWebMonitorSocket((msg) => {
             if (!msg) return;
+
+            // 0. LIVE NIFTY 50 INDEX TICKER UPDATE
+            if (msg.type === 'LIVE_NIFTY_TICK' && msg.ltp) {
+                const ltpVal = typeof msg.ltp === 'number' ? msg.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : msg.ltp;
+                const headerElem = document.getElementById('niftyHeaderLtp');
+                if (headerElem) headerElem.innerText = `₹${ltpVal}`;
+            }
 
             // 1. PAPER TRADING TELEMETRY
             if (msg.type === 'PAPER_MONITOR_UPDATE' && msg.data) {

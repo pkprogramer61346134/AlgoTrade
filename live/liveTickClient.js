@@ -153,6 +153,16 @@ class LiveTickClient {
 
         // Forward updated live candle array to assigned consensusEngine over WebSocket
         this.forwardToConsensusEngine();
+
+        // Broadcast live tick to monitorClient for real-time web dashboard display
+        if (this.wsClient && this.wsClient.connected) {
+            this.wsClient.sendMessage({
+                type: 'LIVE_NIFTY_TICK',
+                symbol: this.symbol,
+                ltp: ltp,
+                timeStr: timeStr
+            }, 'monitorClient');
+        }
     }
 
     /**
