@@ -575,11 +575,17 @@ async function fetchLiveStatus() {
                                 </div>
                             </div>
                         `;
+                    }).join('');
+                }
+            }
+
             // Render System Error Alert Card & 10-Engine Voting Grid
             updateSystemErrorUI(data);
             renderEngineVotingGrid(data);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.warn("fetchLiveStatus error:", e);
+    }
 }
 
 function updateSystemErrorUI(data) {
@@ -626,7 +632,15 @@ function renderEngineVotingGrid(data) {
     const gridDiv = document.getElementById('live-engine-voting-grid');
     if (!gridDiv) return;
 
-    const latestLog = data.engineLogs && data.engineLogs[0] ? data.engineLogs[0].reasoning : "";
+    let targetLog = "";
+    if (data.engineLogs && Array.isArray(data.engineLogs)) {
+        const foundLog = data.engineLogs.find(l => l.reasoning && l.reasoning.includes("Engine 1"));
+        if (foundLog) {
+            targetLog = foundLog.reasoning;
+        } else if (data.engineLogs[0]) {
+            targetLog = data.engineLogs[0].reasoning || "";
+        }
+    }
 
     const engines = [
         { id: 1, name: "Volume Surge", desc: "RVOL >= 1.25x Institutional Volume", keyword: "Engine 1" },
@@ -642,8 +656,8 @@ function renderEngineVotingGrid(data) {
     ];
 
     gridDiv.innerHTML = engines.map(eng => {
-        let isBull = latestLog.includes(`${eng.keyword}`) && (latestLog.includes("BULLISH") || latestLog.includes("CONFIRMED"));
-        let isBear = latestLog.includes(`${eng.keyword}`) && (latestLog.includes("BEARISH") || latestLog.includes("CONFIRMED"));
+        let isBull = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BULLISH") || targetLog.includes("CONFIRMED"));
+        let isBear = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BEARISH") || targetLog.includes("CONFIRMED"));
 
         let statusText = "NEUTRAL / WAITING";
         let statusBadgeClass = "badge-info";
