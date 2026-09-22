@@ -39,9 +39,6 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
     }
 
-    const orb = data.dayORB[c.date];
-    if (!orb || orb.high === -Infinity || orb.low === Infinity) return { type: "NONE" };
-
     const r = (data.rvol && data.rvol[i] !== null && data.rvol[i] !== undefined) ? Number(data.rvol[i]) : 1.0;
     const rsiVal = (data.rsi && data.rsi[i] !== null && data.rsi[i] !== undefined) ? Number(data.rsi[i]) : 50.0;
     const emaVal = (data.emaTrend && data.emaTrend[i] !== null) ? Number(data.emaTrend[i]) : null;
@@ -51,16 +48,6 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     let buyVotes = 0;
     let sellVotes = 0;
     const voteDetails = [];
-
-    // Sub-Engine 1: ORB Breakout Level
-    if (c.high >= orb.high || c.close >= orb.high) {
-        buyVotes++;
-        voteDetails.push("Engine 1 [ORB Breakout]: BULLISH (+1)");
-    }
-    if (c.low <= orb.low || c.close <= orb.low) {
-        sellVotes++;
-        voteDetails.push("Engine 1 [ORB Breakdown]: BEARISH (+1)");
-    }
 
     // Sub-Engine 2: Relative Volume Surge (RVOL >= 1.25x Data-Mined Threshold)
     const minRVOL = strategyConfig.indicators?.rvolMin || 1.25;
@@ -114,7 +101,8 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     const adxVal = (adxObj && adxObj.adx !== null && adxObj.adx !== undefined) ? Number(adxObj.adx) : null;
     const isRangebox = adxVal !== null && adxVal < 20;
 
-    if (isRangebox) {
+    const orb = (data.dayORB && data.dayORB[c.date]) ? data.dayORB[c.date] : null;
+    if (isRangebox && orb && orb.high !== -Infinity && orb.low !== Infinity) {
         const rangeHeight = orb.high - orb.low;
         if (rangeHeight > 0) {
             const distToHigh = Math.abs(c.high - orb.high);
@@ -376,13 +364,12 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     if (signalType !== "NONE") {
         const spotPrice = c.close;
 
-        // 1. Dynamic Stop Loss (SL) Calculation (ATR Volatility + ORB Structural Adaptive)
-        const orbLevelRisk = Math.abs(spotPrice - (signalType === "BUY" ? orb.low : orb.high));
+        // 1. Dynamic Stop Loss (SL) Calculation (Pure ATR Adaptive Volatility)
         const minSLDistance = Math.max(15.0, atrVal * 1.0); // Min SL bounded by 1.0x ATR or 15 pts
         const maxSLDistance = Math.max(35.0, atrVal * 2.5); // Max SL capped by 2.5x ATR or 35 pts
         
         // Dynamic SL distance (points)
-        const dynamicSLPoints = Math.max(minSLDistance, Math.min(maxSLDistance, orbLevelRisk));
+        const dynamicSLPoints = Math.max(minSLDistance, Math.min(maxSLDistance, atrVal * 1.5));
         
         let sl = signalType === "BUY" ? (spotPrice - dynamicSLPoints) : (spotPrice + dynamicSLPoints);
 
@@ -398,7 +385,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         const targetPtsStr = dynamicTRPoints.toFixed(1);
         const ratioXXStr = `${riskPtsStr}:${targetPtsStr}`; // Exact X:X format (e.g. 22.5:33.8)
 
-        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/17 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
+        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/16 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
 
         return {
             type: signalType,
@@ -412,7 +399,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
             reasoning: reasoning,
             consensusVotes: totalVotes,
             voteDetails: voteDetails,
-            indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), orbHigh: orb?.high, orbLow: orb?.low, pcr: Number(pcrVal.toFixed(2)), dynamicSLPts: Number(riskPtsStr), dynamicTRPts: Number(targetPtsStr), dynamicRR: Number(rrMultiplier.toFixed(1)), ratioXX: ratioXXStr }
+            indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)), dynamicSLPts: Number(riskPtsStr), dynamicTRPts: Number(targetPtsStr), dynamicRR: Number(rrMultiplier.toFixed(1)), ratioXX: ratioXXStr }
         };
     }
 
@@ -421,8 +408,8 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         buyVotes: buyVotes,
         sellVotes: sellVotes,
         voteDetails: voteDetails,
-        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/17). Waiting for Sub-Strategy Majority.`,
-        indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), orbHigh: orb?.high, orbLow: orb?.low, pcr: Number(pcrVal.toFixed(2)) }
+        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/16). Waiting for Sub-Strategy Majority.`,
+        indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
     };
 }
 
