@@ -634,17 +634,19 @@ function renderEngineVotingGrid(data) {
 
     let subVotes = (data && Array.isArray(data.subEngineVotes) && data.subEngineVotes.length > 0) ? data.subEngineVotes : null;
 
-    // Fallback: Parse voteDetails from engineLogs if subEngineVotes is missing
+    // Fallback: Parse voteDetails from engineLogs per engine chunk if subEngineVotes is missing
     if (!subVotes) {
         let targetLog = "";
         if (data && data.engineLogs && Array.isArray(data.engineLogs)) {
-            const foundLog = data.engineLogs.find(l => l.reasoning && l.reasoning.includes("Engine 1"));
+            const foundLog = data.engineLogs.find(l => l.reasoning && l.reasoning.includes("Engine"));
             if (foundLog) {
                 targetLog = foundLog.reasoning;
             } else if (data.engineLogs[0]) {
                 targetLog = data.engineLogs[0].reasoning || "";
             }
         }
+
+        const logParts = targetLog ? targetLog.split('|').map(p => p.trim()) : [];
 
         const enginesDef = [
             { id: 1, name: "Volume Surge", desc: "RVOL >= 1.25x Institutional Volume", keyword: "Engine 1" },
@@ -655,19 +657,27 @@ function renderEngineVotingGrid(data) {
             { id: 6, name: "Price Action", desc: "Bullish / Bearish Engulfing Pattern", keyword: "Engine 6" },
             { id: 7, name: "MACD Momentum", desc: "MACD Line & Signal Histogram Crossover", keyword: "Engine 7" },
             { id: 8, name: "Prev Day Levels", desc: "Previous Day High / Low Level Breakout", keyword: "Engine 8" },
-            { id: 9, name: "Bank Nifty Heavyweight", desc: "~34% Nifty Weight Alignment Check", keyword: "Engine 9" },
+            { id: 9, name: "Bank Nifty Alignment", desc: "~34% Nifty Weight Alignment Check", keyword: "Engine 9" },
             { id: 10, name: "SMC Liquidity Sweep", desc: "Institutional Sweep Reversal & Zone Guard", keyword: "Engine 10" }
         ];
 
         subVotes = enginesDef.map(eng => {
-            let isBull = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BULLISH") || targetLog.includes("CONFIRMED"));
-            let isBear = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BEARISH") || targetLog.includes("CONFIRMED"));
+            const engPart = logParts.find(p => p.includes(eng.keyword)) || "";
+            const isBull = engPart.includes("BULLISH") || engPart.includes("CONFIRMED");
+            const isBear = engPart.includes("BEARISH");
+
+            let extractedDetail = eng.desc;
+            const matchBracket = engPart.match(/\[(.*?)\]/);
+            if (matchBracket && matchBracket[1]) {
+                extractedDetail = matchBracket[1];
+            }
+
             return {
                 id: eng.id,
                 name: eng.name,
                 type: isBull ? "BUY" : (isBear ? "SELL" : "NONE"),
                 voteLabel: isBull ? "YES (BUY)" : (isBear ? "YES (SELL)" : "NO VOTE"),
-                detail: eng.desc
+                detail: extractedDetail
             };
         });
     }
@@ -678,8 +688,8 @@ function renderEngineVotingGrid(data) {
 
         let statusText = eng.voteLabel || "NO VOTE";
         let statusBadgeClass = "badge-info";
-        let cardBorder = "rgba(255,255,255,0.1)";
-        let cardBg = "rgba(15, 23, 42, 0.75)";
+        let cardBorder = "rgba(255,255,255,0.08)";
+        let cardBg = "rgba(15, 23, 42, 0.6)";
         let titleColor = "#94a3b8";
 
         if (isBuy) {
