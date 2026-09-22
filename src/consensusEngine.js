@@ -184,7 +184,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     }
 
     // Sub-Engine 13: Previous Day High / Low Institutional Level Break Engine (Connected to Candle Data Hub)
-    if (!prevDay) prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
+    let prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
     if (!prevDay && candles && i > 0) {
         // Fallback: search prior candles in dataset for previous day high/low
         const currDate = c.date;
