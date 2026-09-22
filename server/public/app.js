@@ -632,7 +632,7 @@ function renderEngineVotingGrid(data) {
     const gridDiv = document.getElementById('live-engine-voting-grid');
     if (!gridDiv) return;
 
-    let subVotes = (data && Array.isArray(data.subEngineVotes) && data.subEngineVotes.length > 0) ? data.subEngineVotes : null;
+    let subVotes = Array.isArray(data) ? (data.length > 0 ? data : null) : ((data && Array.isArray(data.subEngineVotes) && data.subEngineVotes.length > 0) ? data.subEngineVotes : null);
 
     // Fallback: Parse voteDetails from engineLogs per engine chunk if subEngineVotes is missing
     if (!subVotes) {
