@@ -1,30 +1,21 @@
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, fork } = require('child_process');
 const { ensureValidDhanToken } = require('./dhanAPI/autoTokenRefresh');
-
-/**
- * ALGOTRADE MASTER SYSTEM LAUNCHER (VM MULTI-TERMINAL MODE)
- * 
- * Step 0: Dhan TOTP Token Verification & Auto-Refresh (TOP PRIORITY)
- * Step 1: Central WebSocket Server (server/main.js :8080) -> Separate Terminal
- * Step 2: Master Consensus Engine (head/consensusEngine.js) -> Separate Terminal
- * Step 3: Candle Data Hub (Candlehub/candleDataHub.js) -> Separate Terminal
- * Step 4: Paper Order Manager (papermanager/paperOrderManager.js) -> Separate Terminal
- * Step 5: Live Market Feed (live/liveTickClient.js) -> Separate Terminal
- * Step 6: Central Monitor Client & Web Dashboard (monitor/monitorClient.js :3000) -> Separate Terminal
- * Step 7: Backtest Engine Client (backtest/backtestClient.js) -> Separate Terminal
- */
 
 function openTerminalWindow(title, scriptPath) {
     const fullPath = path.resolve(__dirname, scriptPath);
-    console.log(`⏳ Opening Separate Terminal: [${title}] (${scriptPath})...`);
+    console.log(`⏳ Launching Service: [${title}] (${scriptPath})...`);
     
     if (process.platform === 'win32') {
         const cmd = `start "${title}" cmd /k "title ${title} && node "${fullPath}""`;
         exec(cmd, { cwd: __dirname });
     } else {
-        const cmd = `xterm -T "${title}" -e "node ${fullPath}" &`;
-        exec(cmd, { cwd: __dirname });
+        try {
+            const child = fork(fullPath, [], { cwd: __dirname, stdio: 'inherit' });
+            child.on('error', (err) => console.error(`❌ [${title}] Fork Error:`, err.message));
+        } catch (e) {
+            console.error(`❌ [${title}] Failed to fork service:`, e.message);
+        }
     }
 }
 
