@@ -1,22 +1,33 @@
 {
   "id": "consensus_master_head",
-  "name": "👑 Master Head Consensus Engine (Top 5 Institutional Engines)",
+  "name": "👑 Master Head Consensus Engine (Institutional Architecture)",
   "enabled": true,
-  "description": "Advanced Quantitative Master Engine. Aggregates Top 5 Core Sub-Strategy Engines (Volume Surge, RSI Momentum, 50 EMA Trend, Intraday VWAP, Supertrend & Price Action) with High-Conviction Majority Voting Consensus (>= 3/5 YES Votes).",
+  "description": "Recommended Quantitative Master Head Strategy Engine. Implements ADX Market Regime Filtering, AI Neural Weight Matrix Scoring (>= 60%), Strict Daily Risk Loss Cap (-₹2,500), Target Lock (+₹6,000), and 1:2.0 Risk-Reward Ratio.",
   "author": "AlgoTrade Institutional Engine",
   "timeframe": "5",
-  "maxTradesPerDay": 3,
+  "maxTradesPerDay": 2,
   "riskRewardRatio": 2.0,
   "consensusThreshold": 3,
+  "weightedThreshold": 0.60,
   "entryStartTime": "10:10",
-  "entryEndTime": "15:00",
+  "entryEndTime": "14:30",
   "entryStartMins": 610,
-  "entryEndMins": 900,
+  "entryEndMins": 870,
+  "dailyMaxLossCap": -2500,
+  "dailyTargetProfitLock": 6000,
+  "engineWeights": {
+    "w1": 0.2812,
+    "w2": 0.2464,
+    "w3": 0.0676,
+    "w4": 0.0755,
+    "w5": 0.3292
+  },
   "indicators": {
-    "rvolMin": 1,
+    "rvolMin": 1.25,
     "rsiPeriod": 14,
     "rsiBullMin": 54,
     "rsiBearMax": 46,
-    "emaTrendPeriod": 50
+    "emaTrendPeriod": 50,
+    "adxMin": 20
   }
 }

@@ -45,8 +45,16 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         }
 
         if (!ignoreMaxTradesCap) {
-            const maxTrades = strategyConfig.maxTradesPerDay || 4;
+            const maxTrades = strategyConfig.maxTradesPerDay || 2;
             if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
+        }
+
+        // Market Regime Filter: ADX Check (Skip trading if market is sideways chop ADX < adxMin)
+        const adxObj = (data.adx && data.adx[i]) ? data.adx[i] : null;
+        const adxVal = adxObj && adxObj.adx !== undefined ? Number(adxObj.adx) : 25.0;
+        const minADX = strategyConfig.indicators?.adxMin || 20;
+        if (adxVal < minADX) {
+            return { type: "NONE", reasoning: `ℹ️ MASTER HEAD REGIME FILTER: Market ADX ${adxVal.toFixed(1)} < ${minADX} (Sideways Chop). Flat position for capital protection.` };
         }
 
     const r = (data.rvol && data.rvol[i] !== null && data.rvol[i] !== undefined) ? Number(data.rvol[i]) : 1.0;
