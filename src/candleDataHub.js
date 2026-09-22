@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { getCandleDataDir, loadAllCandlesFromDir } = require('../indicators/utils/dataLoader');
 const { DhanSDK } = require('../dhanAPI');
+const { systemLogger } = require('./systemLogger');
 
 /**
  * CENTRAL CANDLE DATA HUB
@@ -178,6 +179,7 @@ class CentralCandleDataHub {
                 }
             }
         } catch (e) {
+            systemLogger.logError("CANDLE_DATA_HUB", `Failed to fetch candles from Dhan API for date ${fromDate} to ${toDate}: ${e.message}`, { fromDate, toDate, symbol, stack: e.stack });
             console.warn(`⚠️ [DATA HUB] Failed to fetch from Dhan API: ${e.message}`);
         }
         return [];

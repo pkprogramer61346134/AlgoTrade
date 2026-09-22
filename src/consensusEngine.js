@@ -6,6 +6,7 @@
 
 const { candleDataHub } = require('./candleDataHub');
 const LiquiditySweepStrategy = require('./liquiditySweepStrategy');
+const { systemLogger } = require('./systemLogger');
 
 function parseTimeToMins(tStr) {
     if (!tStr) return 0;
@@ -22,22 +23,31 @@ function parseTimeToMins(tStr) {
 }
 
 function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCounts, ignoreMaxTradesCap = false) {
+    if (!candles || !Array.isArray(candles) || candles.length === 0) {
+        systemLogger.logError("CONSENSUS_ENGINE", "Master Head Error: Candles dataset is empty or undefined. Cannot evaluate strategy.", { candlesCount: candles ? candles.length : 0 });
+        return { type: "NONE", error: "Candles dataset empty or invalid" };
+    }
+
     if (i < 3) return { type: "NONE" };
     const c = candles[i];
-    if (!c.date) return { type: "NONE" };
-
-    // Trade Entry Time Window Filter: strictly between 09:15 AM (555 mins) and 3:00 PM (900 mins)
-    if (c.time) {
-        const mins = parseTimeToMins(c.time);
-        const startMins = strategyConfig.entryStartMins || 555; // 09:15 AM
-        const endMins = strategyConfig.entryEndMins || 900;     // 3:00 PM
-        if (mins < startMins || mins >= endMins) return { type: "NONE" };
+    if (!c || !c.date) {
+        systemLogger.logWarn("CONSENSUS_ENGINE", `Master Head Warning: Missing candle structure or candle date at index ${i}`, { candle: c });
+        return { type: "NONE" };
     }
 
-    if (!ignoreMaxTradesCap) {
-        const maxTrades = strategyConfig.maxTradesPerDay || 4;
-        if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
-    }
+    try {
+        // Trade Entry Time Window Filter: strictly between 09:15 AM (555 mins) and 3:00 PM (900 mins)
+        if (c.time) {
+            const mins = parseTimeToMins(c.time);
+            const startMins = strategyConfig.entryStartMins || 555; // 09:15 AM
+            const endMins = strategyConfig.entryEndMins || 900;     // 3:00 PM
+            if (mins < startMins || mins >= endMins) return { type: "NONE" };
+        }
+
+        if (!ignoreMaxTradesCap) {
+            const maxTrades = strategyConfig.maxTradesPerDay || 4;
+            if ((dailyTradeCounts[c.date] || 0) >= maxTrades) return { type: "NONE" };
+        }
 
     const r = (data.rvol && data.rvol[i] !== null && data.rvol[i] !== undefined) ? Number(data.rvol[i]) : 1.0;
     const rsiVal = (data.rsi && data.rsi[i] !== null && data.rsi[i] !== undefined) ? Number(data.rsi[i]) : 50.0;
@@ -265,6 +275,14 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/10). Waiting for Sub-Strategy Majority.`,
         indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
     };
+    } catch (err) {
+        systemLogger.logError("CONSENSUS_ENGINE", `Master Head Strategy Exception: ${err.message}`, { index: i, date: c?.date, time: c?.time, stack: err.stack });
+        return {
+            type: "NONE",
+            error: err.message,
+            reasoning: `🚨 MASTER HEAD STRATEGY ERROR: ${err.message}`
+        };
+    }
 }
 
 module.exports = {

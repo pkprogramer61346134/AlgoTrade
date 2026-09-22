@@ -81,6 +81,22 @@
                 </div>
             </div>
 
+            <!-- System Error Alert Banner Card (Active on Error) -->
+            <div id="system-error-alert-card" class="card" style="display: none; margin-bottom: 1.25rem; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.5);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 1.5rem;">⚠️</span>
+                        <div>
+                            <strong style="font-size: 0.95rem; color: #ef4444;" id="system-error-title">SYSTEM ERROR DETECTED</strong>
+                            <div id="system-error-message" style="font-size: 0.85rem; color: #fca5a5; font-family: var(--font-mono); margin-top: 0.25rem;">
+                                Error details will appear here.
+                            </div>
+                        </div>
+                    </div>
+                    <span class="badge badge-loss" id="system-error-time">System Error Logged</span>
+                </div>
+            </div>
+
             <!-- Pre-Market 9:15 AM Readiness Checklist Card -->
             <div id="premarket-readiness-card" class="card" style="margin-bottom: 1.25rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3);">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
@@ -91,8 +107,8 @@
                         </div>
                         <div id="premarket-checklist-details" style="font-size: 0.82rem; color: #cbd5e1; display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.35rem;">
                             <span>✅ Dhan Token: Active</span>
-                            <span>✅ Historical Candles: 2,18,443 Loaded</span>
-                            <span>✅ 17-Engine Consensus: Warmed Up</span>
+                            <span>✅ Historical Candles: Loaded</span>
+                            <span>✅ 10-Engine Consensus: Warmed Up</span>
                             <span>✅ Market Feed: Connected</span>
                         </div>
                     </div>
@@ -193,6 +209,22 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- 10-Sub-Engine Real-Time Institutional Voting Grid Box -->
+            <div class="table-container" style="margin-top: 1.5rem; background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden;">
+                <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; background: rgba(30, 41, 59, 0.6);">
+                    <div>
+                        <h3 style="display: inline-block; margin-right: 0.5rem; color: #fff;">🗳️ Top 10 Sub-Engine Real-Time Consensus Voting Grid</h3>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">(Requires 6 out of 10 Majority YES Votes to Trigger Trade)</span>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; align-items: center;">
+                        <span class="badge badge-info" id="consensus-threshold-badge" style="font-size: 0.8rem; font-weight: 700;">Consensus Threshold: 6/10 YES Votes</span>
+                    </div>
+                </div>
+                <div id="live-engine-voting-grid" style="padding: 1.25rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+                    <div style="color: var(--text-muted); font-style: italic; grid-column: 1 / -1;">Initializing 10-Sub-Engine Voting Status...</div>
+                </div>
             </div>
 
             <!-- Live Background Activity & Strategy Reasoning Log Console -->

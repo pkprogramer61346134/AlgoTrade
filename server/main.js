@@ -218,6 +218,9 @@ function getCachedHistCandles() {
     if (!cachedHistCandles || cachedHistCandles.length === 0 || now - lastHistLoadTime > 300000) {
         cachedHistCandles = loadAllCandlesFromDir(getCandleDataDir()) || [];
         lastHistLoadTime = now;
+        if (cachedHistCandles.length === 0) {
+            systemLogger.logError("CANDLE_LOADER", "Previous date historical candles dataset empty or failed to load from disk", { path: getCandleDataDir() });
+        }
     }
     return cachedHistCandles;
 }
@@ -263,8 +266,12 @@ async function syncTodayCandlesFromDhan() {
             }
             todayCandlesCache = list;
             lastDhanCandleSyncTime = now;
+        } else if (rootData.remarks || rootData.status === "failure") {
+            systemLogger.logError("DHAN_CANDLE_SYNC", `Dhan API returned error remarks for today's candle fetch: ${JSON.stringify(rootData)}`, { module: "DHAN_API" });
         }
-    } catch (e) {}
+    } catch (e) {
+        systemLogger.logError("DHAN_CANDLE_SYNC", `Failed to sync today's candles from Dhan API: ${e.message}`, { module: "DHAN_API", stack: e.stack });
+    }
     return todayCandlesCache;
 }
 
@@ -737,6 +744,7 @@ setInterval(async () => {
         } else {
             status = "FLAT";
             reason = `ℹ️ STRATEGY EVALUATION [${stratName}]: Nifty Spot ₹${spot}. Waiting for market data candles stream. Strategy is FLAT.`;
+            systemLogger.logWarn("CANDLE_STREAM", `Master Head Warning: Insufficient candles to evaluate consensus engine (Loaded: ${allCandles.length} candles).`, { histCount: histCandles.length, todayCount: liveTodayCandles.length });
         }
 
         if (status !== "FLAT") {
@@ -1269,7 +1277,9 @@ app.get('/api/live-status', async (req, res) => {
             lastDhanError: liveState.lastDhanError || null,
             lastSyncTimestamp: liveState.lastSyncTimestamp || Date.now(),
             isMarketOpen: isIndianMarketOpen(),
-            preMarketReadiness: preMarketReadiness
+            preMarketReadiness: preMarketReadiness,
+            lastSystemError: systemLogger.getErrorLogs(1)[0] || null,
+            recentSystemErrors: systemLogger.getErrorLogs(5)
         });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });

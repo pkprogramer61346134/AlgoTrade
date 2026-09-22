@@ -575,11 +575,103 @@ async function fetchLiveStatus() {
                                 </div>
                             </div>
                         `;
-                    }).join('');
-                }
-            }
+            // Render System Error Alert Card & 10-Engine Voting Grid
+            updateSystemErrorUI(data);
+            renderEngineVotingGrid(data);
         }
     } catch (e) {}
+}
+
+function updateSystemErrorUI(data) {
+    const errorCard = document.getElementById('system-error-alert-card');
+    const errorTitle = document.getElementById('system-error-title');
+    const errorMsg = document.getElementById('system-error-message');
+    const errorTime = document.getElementById('system-error-time');
+
+    if (!errorCard) return;
+
+    const lastErr = data.lastSystemError || (data.recentSystemErrors && data.recentSystemErrors[0]);
+
+    if (lastErr) {
+        errorCard.style.display = 'block';
+        if (errorTitle) {
+            errorTitle.innerText = `🚨 SYSTEM ERROR DETECTED [MODULE: ${lastErr.module || 'SYSTEM'}]`;
+        }
+        if (errorMsg) {
+            const stackSnippet = (lastErr.stack && lastErr.stack[0]) ? ` (${lastErr.stack[0]})` : '';
+            errorMsg.innerText = `${lastErr.message || 'System operation warning'}${stackSnippet}`;
+        }
+        if (errorTime) {
+            errorTime.innerText = `${lastErr.timestamp || lastErr.time || 'Logged Recently'}`;
+            errorTime.className = 'badge badge-loss';
+        }
+    } else if (data.dhanTokenStatus === "ERROR" || data.dhanTokenStatus === "COOLDOWN") {
+        errorCard.style.display = 'block';
+        if (errorTitle) {
+            errorTitle.innerText = `⚠️ BROKER API ERROR [${data.dhanTokenStatus}]`;
+        }
+        if (errorMsg) {
+            errorMsg.innerText = data.dhanTokenMessage || data.lastDhanError || 'Dhan broker API connection error.';
+        }
+        if (errorTime) {
+            errorTime.innerText = 'Live Feed Error';
+            errorTime.className = 'badge badge-loss';
+        }
+    } else {
+        errorCard.style.display = 'none';
+    }
+}
+
+function renderEngineVotingGrid(data) {
+    const gridDiv = document.getElementById('live-engine-voting-grid');
+    if (!gridDiv) return;
+
+    const latestLog = data.engineLogs && data.engineLogs[0] ? data.engineLogs[0].reasoning : "";
+
+    const engines = [
+        { id: 1, name: "Volume Surge", desc: "RVOL >= 1.25x Institutional Volume", keyword: "Engine 1" },
+        { id: 2, name: "RSI Momentum", desc: "RSI > 54 (Bull) / RSI < 46 (Bear)", keyword: "Engine 2" },
+        { id: 3, name: "EMA 50 Trend", desc: "Spot Price relative to 50 EMA", keyword: "Engine 3" },
+        { id: 4, name: "Intraday VWAP", desc: "Institutional Volume Weighted Avg Price", keyword: "Engine 4" },
+        { id: 5, name: "Supertrend", desc: "ATR Volatility Trailing Direction", keyword: "Engine 5" },
+        { id: 6, name: "Price Action", desc: "Bullish / Bearish Engulfing Pattern", keyword: "Engine 6" },
+        { id: 7, name: "MACD Momentum", desc: "MACD Line & Signal Histogram Crossover", keyword: "Engine 7" },
+        { id: 8, name: "Prev Day Levels", desc: "Previous Day High / Low Level Breakout", keyword: "Engine 8" },
+        { id: 9, name: "Bank Nifty Heavyweight", desc: "~34% Nifty Weight Alignment Check", keyword: "Engine 9" },
+        { id: 10, name: "SMC Liquidity Sweep", desc: "Institutional Sweep Reversal & Zone Guard", keyword: "Engine 10" }
+    ];
+
+    gridDiv.innerHTML = engines.map(eng => {
+        let isBull = latestLog.includes(`${eng.keyword}`) && (latestLog.includes("BULLISH") || latestLog.includes("CONFIRMED"));
+        let isBear = latestLog.includes(`${eng.keyword}`) && (latestLog.includes("BEARISH") || latestLog.includes("CONFIRMED"));
+
+        let statusText = "NEUTRAL / WAITING";
+        let statusBadgeClass = "badge-info";
+        let cardBorder = "rgba(255,255,255,0.08)";
+        let cardBg = "rgba(15, 23, 42, 0.6)";
+
+        if (isBull) {
+            statusText = "🟢 YES (BULLISH)";
+            statusBadgeClass = "badge-win";
+            cardBorder = "rgba(16, 185, 129, 0.4)";
+            cardBg = "rgba(16, 185, 129, 0.08)";
+        } else if (isBear) {
+            statusText = "🔴 YES (BEARISH)";
+            statusBadgeClass = "badge-loss";
+            cardBorder = "rgba(239, 68, 68, 0.4)";
+            cardBg = "rgba(239, 68, 68, 0.08)";
+        }
+
+        return `
+            <div style="background: ${cardBg}; border: 1px solid ${cardBorder}; padding: 1rem; border-radius: 10px; transition: all 0.2s ease;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+                    <strong style="font-size: 0.9rem; color: #fff;">#${eng.id} ${eng.name}</strong>
+                    <span class="badge ${statusBadgeClass}" style="font-size: 0.7rem;">${statusText}</span>
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;">${eng.desc}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 // 3. Load & Render Performance Reports & Trade Journal
