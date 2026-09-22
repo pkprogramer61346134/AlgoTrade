@@ -1,1 +1,66 @@
-[]
+[
+  {
+    "id": "ERR_1790069125724_438",
+    "timestamp": "22/9/2026, 14:55:25.723 IST",
+    "date": "2026-09-22",
+    "time": "14:55:25",
+    "level": "ERROR",
+    "module": "CONSENSUS_ENGINE",
+    "message": "Master Head Strategy Exception: risk is not defined",
+    "metadata": {
+      "index": 399,
+      "date": "2026-09-22",
+      "time": "14:55",
+      "stack": "ReferenceError: risk is not defined\n    at evaluateConsensusEngine (C:\\AlgoTrade\\src\\consensusEngine.js:254:32)\n    at evaluateJSONStrategy (C:\\AlgoTrade\\src\\dynamicStrategyEngine.js:67:16)\n    at Timeout._onTimeout (C:\\AlgoTrade\\server\\main.js:733:22)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)"
+    },
+    "stack": []
+  },
+  {
+    "id": "ERR_1790069110106_341",
+    "timestamp": "22/9/2026, 14:55:10.105 IST",
+    "date": "2026-09-22",
+    "time": "14:55:10",
+    "level": "ERROR",
+    "module": "CONSENSUS_ENGINE",
+    "message": "Master Head Strategy Exception: config is not defined",
+    "metadata": {
+      "index": 399,
+      "date": "2026-09-22",
+      "time": "14:55",
+      "stack": "ReferenceError: config is not defined\n    at evaluateConsensusEngine (C:\\AlgoTrade\\src\\consensusEngine.js:254:30)\n    at evaluateJSONStrategy (C:\\AlgoTrade\\src\\dynamicStrategyEngine.js:67:16)\n    at Timeout._onTimeout (C:\\AlgoTrade\\server\\main.js:733:22)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)"
+    },
+    "stack": []
+  },
+  {
+    "id": "ERR_1790069108385_885",
+    "timestamp": "22/9/2026, 14:55:08.373 IST",
+    "date": "2026-09-22",
+    "time": "14:55:08",
+    "level": "ERROR",
+    "module": "CONSENSUS_ENGINE",
+    "message": "Master Head Strategy Exception: risk is not defined",
+    "metadata": {
+      "index": 399,
+      "date": "2026-09-22",
+      "time": "14:55",
+      "stack": "ReferenceError: risk is not defined\n    at evaluateConsensusEngine (C:\\AlgoTrade\\src\\consensusEngine.js:254:32)\n    at evaluateJSONStrategy (C:\\AlgoTrade\\src\\dynamicStrategyEngine.js:67:16)\n    at Timeout._onTimeout (C:\\AlgoTrade\\server\\main.js:733:22)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)"
+    },
+    "stack": []
+  },
+  {
+    "id": "ERR_1790069106390_745",
+    "timestamp": "22/9/2026, 14:55:06.389 IST",
+    "date": "2026-09-22",
+    "time": "14:55:06",
+    "level": "ERROR",
+    "module": "CONSENSUS_ENGINE",
+    "message": "Master Head Strategy Exception: risk is not defined",
+    "metadata": {
+      "index": 399,
+      "date": "2026-09-22",
+      "time": "14:55",
+      "stack": "ReferenceError: risk is not defined\n    at evaluateConsensusEngine (C:\\AlgoTrade\\src\\consensusEngine.js:254:32)\n    at evaluateJSONStrategy (C:\\AlgoTrade\\src\\dynamicStrategyEngine.js:67:16)\n    at Timeout._onTimeout (C:\\AlgoTrade\\server\\main.js:733:22)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)"
+    },
+    "stack": []
+  }
+]

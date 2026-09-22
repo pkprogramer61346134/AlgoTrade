@@ -212,20 +212,27 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     const zoneProt = (sweepRes.blockPE !== undefined) ? 
                      sweepRes : 
                      LiquiditySweepStrategy.checkZoneProtection(candles, i);
+
+    const rawBuyVotes = buyVotes;
+    const rawSellVotes = sellVotes;
+
+    let effectiveBuyVotes = buyVotes;
+    let effectiveSellVotes = sellVotes;
+
     if (zoneProt.blockPE && !sweepRes.isSweep) {
-        sellVotes = 0;
+        effectiveSellVotes = 0;
     }
     if (zoneProt.blockCE && !sweepRes.isSweep) {
-        buyVotes = 0;
+        effectiveBuyVotes = 0;
     }
 
     const minConsensusVotes = strategyConfig.consensusThreshold || 6; // Default 6 out of 10 Majority Vote for optimal trade frequency
     let signalType = "NONE";
-    const totalVotes = Math.max(buyVotes, sellVotes);
+    const totalVotes = Math.max(effectiveBuyVotes, effectiveSellVotes);
 
-    if (buyVotes >= minConsensusVotes && buyVotes > sellVotes) {
+    if (effectiveBuyVotes >= minConsensusVotes && effectiveBuyVotes > effectiveSellVotes) {
         signalType = "BUY";
-    } else if (sellVotes >= minConsensusVotes && sellVotes > buyVotes) {
+    } else if (effectiveSellVotes >= minConsensusVotes && effectiveSellVotes > effectiveBuyVotes) {
         signalType = "SELL";
     }
 
@@ -273,22 +280,28 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
                 rrMultiplier: Number(rrMultiplier.toFixed(1)),
                 reasoning: reasoning,
                 consensusVotes: totalVotes,
-                buyVotes: buyVotes,
-                sellVotes: sellVotes,
+                buyVotes: rawBuyVotes,
+                sellVotes: rawSellVotes,
+                effectiveBuyVotes: effectiveBuyVotes,
+                effectiveSellVotes: effectiveSellVotes,
                 voteDetails: voteDetails,
                 subEngineVotes: subEngineVotes,
                 indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)), dynamicSLPts: Number(riskPtsStr), dynamicTRPts: Number(targetPtsStr), dynamicRR: Number(rrMultiplier.toFixed(1)), ratioXX: ratioXXStr }
             };
         }
 
+        const ceBlockedStr = (zoneProt.blockCE && !sweepRes.isSweep && rawBuyVotes > 0) ? " (CE Blocked by Zone Guard)" : "";
+        const peBlockedStr = (zoneProt.blockPE && !sweepRes.isSweep && rawSellVotes > 0) ? " (PE Blocked by Zone Guard)" : "";
         const voteDetailsStr = voteDetails.length > 0 ? ` | Active Votes: ${voteDetails.join(" | ")}` : "";
         return {
             type: "NONE",
-            buyVotes: buyVotes,
-            sellVotes: sellVotes,
+            buyVotes: rawBuyVotes,
+            sellVotes: rawSellVotes,
+            effectiveBuyVotes: effectiveBuyVotes,
+            effectiveSellVotes: effectiveSellVotes,
             voteDetails: voteDetails,
             subEngineVotes: subEngineVotes,
-            reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/10)${voteDetailsStr}. Waiting for Sub-Strategy Majority.`,
+            reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${rawBuyVotes}${ceBlockedStr}, Sell Votes=${rawSellVotes}${peBlockedStr} (Required: ${minConsensusVotes}/10)${voteDetailsStr}. Waiting for Sub-Strategy Majority.`,
             indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
         };
     } catch (err) {

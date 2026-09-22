@@ -26,6 +26,33 @@
             color: #f87171;
             border-color: #f87171;
         }
+
+        /* Real-Time Active Engine Voting Grid Pulse Glow Animations */
+        @keyframes votePulseBuy {
+            0% { box-shadow: 0 0 8px rgba(16, 185, 129, 0.4), inset 0 0 5px rgba(16, 185, 129, 0.15); border-color: #10b981; }
+            50% { box-shadow: 0 0 22px rgba(16, 185, 129, 0.9), inset 0 0 15px rgba(16, 185, 129, 0.35); border-color: #34d399; transform: translateY(-2px); }
+            100% { box-shadow: 0 0 8px rgba(16, 185, 129, 0.4), inset 0 0 5px rgba(16, 185, 129, 0.15); border-color: #10b981; }
+        }
+        @keyframes votePulseSell {
+            0% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4), inset 0 0 5px rgba(239, 68, 68, 0.15); border-color: #ef4444; }
+            50% { box-shadow: 0 0 22px rgba(239, 68, 68, 0.9), inset 0 0 15px rgba(239, 68, 68, 0.35); border-color: #f87171; transform: translateY(-2px); }
+            100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4), inset 0 0 5px rgba(239, 68, 68, 0.15); border-color: #ef4444; }
+        }
+        .voting-card-active-buy {
+            animation: votePulseBuy 2s infinite ease-in-out;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(6, 78, 59, 0.45) 100%) !important;
+            border: 2px solid #10b981 !important;
+        }
+        .voting-card-active-sell {
+            animation: votePulseSell 2s infinite ease-in-out;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(127, 29, 29, 0.45) 100%) !important;
+            border: 2px solid #ef4444 !important;
+        }
+        .voting-card-dimmed {
+            opacity: 0.45;
+            border: 1px dashed rgba(255, 255, 255, 0.1) !important;
+            background: rgba(15, 23, 42, 0.4) !important;
+        }
     </style>
 </head>
 <body>

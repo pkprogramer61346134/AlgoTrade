@@ -119,9 +119,9 @@ async function runPreMarketBootSync() {
         preMarketReadiness.checklist.push(`⚠️ Data Load Warning: ${e.message}`);
     }
 
-    // 3. 17-Engine Strategy Engine Warm-Up
+    // 3. 10-Engine Strategy Engine Warm-Up
     try {
-        console.log("🧠 [STEP 3/4] Pre-computing 17-Engine Indicators & Warmup...");
+        console.log("🧠 [STEP 3/4] Pre-computing 10-Engine Indicators & Warmup...");
         const consensusMasterPath = path.join(__dirname, '..', 'strategies_config', 'consensus_master_head.json');
         if (fs.existsSync(consensusMasterPath)) {
             const stratConfig = JSON.parse(fs.readFileSync(consensusMasterPath, 'utf8'));
@@ -133,7 +133,7 @@ async function runPreMarketBootSync() {
             }
         }
         preMarketReadiness.engineWarmedUp = true;
-        preMarketReadiness.checklist.push("✅ 17-Engine Consensus: Warmed Up in RAM");
+        preMarketReadiness.checklist.push("✅ Top 10 Sub-Engine Consensus: Warmed Up in RAM");
     } catch (e) {
         preMarketReadiness.engineWarmedUp = false;
         preMarketReadiness.checklist.push(`⚠️ Engine Warmup Warning: ${e.message}`);
@@ -688,6 +688,7 @@ setInterval(async () => {
         let allCandles = [...histCandles, ...liveTodayCandles];
         let status = "FLAT";
         let reason = "";
+        let signal = null;
 
         if (allCandles.length > 5 && spot > 0) {
             const nowKolkata = new Date();
@@ -729,20 +730,20 @@ setInterval(async () => {
                 data.bankNiftyNetChange = liveState.bankNiftyNetChange;
             }
             const lastIdx = evalCandles.length - 1;
-            const signal = evaluateJSONStrategy(evalCandles, lastIdx, stratConfig, data, {});
+            signal = evaluateJSONStrategy(evalCandles, lastIdx, stratConfig, data, {});
             if (signal && signal.subEngineVotes) {
                 liveState.subEngineVotes = signal.subEngineVotes;
             }
 
             if (signal && signal.type === "BUY") {
                 status = "BUY_SIGNAL";
-                reason = signal.reasoning || `🚀 BULLISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 17-Engine Consensus Triggered BUY CE.`;
+                reason = signal.reasoning || `🚀 BULLISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. Top 10 Engine Consensus Triggered BUY CE.`;
             } else if (signal && signal.type === "SELL") {
                 status = "SELL_SIGNAL";
-                reason = signal.reasoning || `🔻 BEARISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. 17-Engine Consensus Triggered BUY PE.`;
+                reason = signal.reasoning || `🔻 BEARISH CONSENSUS [${stratName}]: Nifty Spot ₹${spot}. Top 10 Engine Consensus Triggered BUY PE.`;
             } else {
                 status = "FLAT";
-                reason = signal?.reasoning || `ℹ️ MASTER HEAD CONSENSUS EVALUATION [${stratName}]: Nifty Spot ₹${spot}. Waiting for >= 11/17 Majority Vote. Strategy is FLAT.`;
+                reason = signal?.reasoning || `ℹ️ MASTER HEAD CONSENSUS EVALUATION [${stratName}]: Nifty Spot ₹${spot}. Waiting for >= 6/10 Majority Vote. Strategy is FLAT.`;
             }
         } else {
             status = "FLAT";
@@ -762,76 +763,36 @@ setInterval(async () => {
                 if (!isDuplicateSignal) {
                     const optionType = status === "BUY_SIGNAL" ? "CE" : "PE";
                     const config = orderManager.loadConfig();
-                    const rr = signal?.rrMultiplier || config.riskRewardRatio || 2.0;
                     const liveCapital = await orderManager.fetchLiveCapital();
-                    const usagePct = config.capitalUsagePct !== undefined ? config.capitalUsagePct : 100;
-                    const allocatedCapital = (liveCapital * usagePct) / 100;
-
-                    const contract = await orderManager.resolveOptionContractFromDhan(spot, optionType, allocatedCapital);
-                    const entryPremium = Number(contract.price);
-                    if (!entryPremium || isNaN(entryPremium) || entryPremium <= 0) {
-                        throw new Error(`Invalid contract price from Dhan for ${contract.tradingSymbol}: ${contract.price}`);
-                    }
-
-                    // Dynamic Spot & Option Risk Delta Calculator for Paper / Real trade execution (identical to Simulation)
-                    const SpotRiskDeltaCalculator = require('./src/spotRiskDeltaCalculator');
-                    const spotStruct = SpotRiskDeltaCalculator.calculateSpotChartStructure({
-                        spotPrice: spot,
-                        signalType: status,
-                        stopLoss: signal?.stopLoss,
-                        targetPrice: signal?.targetPrice,
-                        riskRewardRatio: rr
-                    });
-
-                    const deltaMap = SpotRiskDeltaCalculator.mapSpotToOptionDelta({
-                        spotPrice: spot,
-                        spotSL: spotStruct.spotSL,
-                        spotTarget: spotStruct.spotTarget,
-                        optionPremiumPrice: entryPremium,
-                        atmStrike: contract.strike,
-                        optionType
-                    });
-
-                    const optionSL = deltaMap.optionSL;
-                    const optionTarget = deltaMap.optionTarget;
-                    const NIFTY_LOT_SIZE = 65;
-                    const numLots = Math.max(1, Math.floor(allocatedCapital / (entryPremium * NIFTY_LOT_SIZE)));
-                    const totalQty = numLots * NIFTY_LOT_SIZE;
 
                     const newSignal = {
                         time: timeStr,
                         strategyName: stratName,
                         signalType: status,
                         type: optionType,
+                        entryPrice: spot,
                         spotPrice: spot,
-                        spotSL: spotStruct.spotSL,
-                        spotTarget: spotStruct.spotTarget,
-                        stopLoss: spotStruct.spotSL,
-                        targetPrice: spotStruct.spotTarget,
-                        atmStrike: contract.strike,
-                        optionSymbol: contract.tradingSymbol,
-                        entryPremium: entryPremium,
-                        optionSL: optionSL,
-                        optionTarget: optionTarget,
-                        riskRewardRatio: rr,
-                        rrMultiplier: rr,
-                        numLots: numLots,
-                        quantity: totalQty,
-                        allocatedCapital: Number(allocatedCapital.toFixed(2)),
-                        extendedRiderEnabled: true,
+                        stopLoss: signal?.stopLoss,
+                        spotSL: signal?.stopLoss,
+                        targetPrice: signal?.targetPrice,
+                        spotTarget: signal?.targetPrice,
+                        riskRewardRatio: signal?.rrMultiplier || config.riskRewardRatio || 2.0,
                         orderSwitchOn: liveState.orderSwitchOn,
                         executionMode: config.executionMode || "PAPER",
                         timestamp: Date.now()
                     };
 
-                    liveState.liveSignals.unshift(newSignal);
-                    if (liveState.liveSignals.length > 20) liveState.liveSignals.pop();
-
-                    // Submit signal to Order Manager (Handshake verification)
+                    // Submit minimal signal to Order Manager (Order Manager resolves Dhan contract, Qty & SL/Target automatically)
                     if (liveState.orderSwitchOn && !orderManager.isPositionActive()) {
                         const execRes = await orderManager.executeOrder(newSignal, spot, liveCapital);
-                        console.log(`🤝 2-Way Handshake Confirmation: Signal Engine -> Order Manager (${execRes.mode} Mode). Status: ${execRes.status}`);
+                        console.log(`🤝 Minimal Signal Handshake Confirmation: Signal Engine -> Order Manager (${execRes.mode || 'PAPER'} Mode). Status: ${execRes.status}`);
+                        if (execRes && execRes.order) {
+                            Object.assign(newSignal, execRes.order);
+                        }
                     }
+
+                    liveState.liveSignals.unshift(newSignal);
+                    if (liveState.liveSignals.length > 20) liveState.liveSignals.pop();
                 }
             }
         }
@@ -847,6 +808,11 @@ setInterval(async () => {
             orderSwitch: liveState.orderSwitchOn ? `ON (${(orderManager.loadConfig().executionMode || "PAPER")} Mode Active)` : "OFF (Signal Alert Only)"
         });
 
+        liveState.lastDhanError = null;
+        if (liveState.dhanTokenStatus === "ERROR") {
+            liveState.dhanTokenStatus = "VALID";
+            liveState.dhanTokenMessage = "🟢 Dhan API Token Active & Verified";
+        }
         if (liveState.liveEngineLogs.length > 50) liveState.liveEngineLogs.pop();
     } catch (e) {
         liveState.lastDhanError = e.message || String(e);

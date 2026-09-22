@@ -1101,7 +1101,7 @@ async function nextSimStep() {
                 renderSimCompletedTradesTable();
             }
 
-            const stepLog = `⏱️ [${data.timeStr}] Spot: ₹${data.candle.close} | Consensus: ${data.consensusResult.type === 'NONE' ? 'WAITING' : data.consensusResult.type} (${data.consensusResult.buyVotes || data.consensusResult.consensusVotes || 0}/17 Votes)`;
+            const stepLog = `⏱️ [${data.timeStr}] Spot: ₹${data.candle.close} | Consensus: ${data.consensusResult.type === 'NONE' ? 'WAITING' : data.consensusResult.type} (${data.consensusResult.buyVotes || data.consensusResult.consensusVotes || 0}/10 Votes)`;
             simState.logs.unshift(stepLog);
 
             renderSimStep(data);
@@ -1116,7 +1116,7 @@ async function nextSimStep() {
 
 function renderSimStep(data) {
     updateSimHeaderUI(data.candle, data.consensusResult, `Candle ${simState.currentStep + 1} / ${simState.dayCandles.length}`);
-    renderEngineVotingGrid(data.consensusResult.voteDetails || []);
+    renderSimEngineVotingGrid(data.consensusResult.voteDetails || []);
     renderSimActiveTradeUI(data.updatedActiveTrade);
     renderSimReasoningLog();
 }
@@ -1137,16 +1137,16 @@ function updateSimHeaderUI(candle, consensus, statusText) {
 
     if (consensus) {
         const votes = consensus.consensusVotes || consensus.buyVotes || consensus.sellVotes || 0;
-        if (votesEl) votesEl.innerText = `${votes} / 17 Votes`;
+        if (votesEl) votesEl.innerText = `${votes} / 10 Votes`;
         if (statusEl) {
             if (consensus.type === 'BUY') {
-                statusEl.innerText = `🟢 BULLISH CE SIGNAL TRIGGERED (${votes}/17)`;
+                statusEl.innerText = `🟢 BULLISH CE SIGNAL TRIGGERED (${votes}/10)`;
                 statusEl.style.color = '#10b981';
             } else if (consensus.type === 'SELL') {
-                statusEl.innerText = `🔴 BEARISH PE SIGNAL TRIGGERED (${votes}/17)`;
+                statusEl.innerText = `🔴 BEARISH PE SIGNAL TRIGGERED (${votes}/10)`;
                 statusEl.style.color = '#ef4444';
             } else {
-                statusEl.innerText = `🟡 WAITING CONSENSUS (Required >= 11/17)`;
+                statusEl.innerText = `🟡 WAITING CONSENSUS (Required >= 6/10)`;
                 statusEl.style.color = '#f59e0b';
             }
         }
@@ -1159,7 +1159,7 @@ function updateSimHeaderUI(candle, consensus, statusText) {
     if (pnlEl) pnlEl.innerText = `Daily PnL: ${diff >= 0 ? '+' : ''}₹${diff.toLocaleString()}`;
 }
 
-function renderEngineVotingGrid(voteDetails) {
+function renderSimEngineVotingGrid(voteDetails) {
     const grid = document.getElementById('sim-engine-voting-grid');
     if (!grid) return;
 
@@ -1260,7 +1260,7 @@ function renderSimActiveTradeUI(pos) {
             badge.className = 'badge badge-info';
         }
         if (container) {
-            container.innerHTML = `No active intraday option trade open. Scanning candles step-by-step for >= 11/17 consensus votes...`;
+            container.innerHTML = `No active intraday option trade open. Scanning candles step-by-step for >= 6/10 consensus votes...`;
         }
     }
 }
@@ -1303,7 +1303,7 @@ function resetSimulation() {
     if (autoBtn) autoBtn.disabled = true;
 
     updateSimHeaderUI(null, null, 'Reset Complete');
-    renderEngineVotingGrid([]);
+    renderSimEngineVotingGrid([]);
     renderSimActiveTradeUI(null);
     simState.completedTrades = [];
     renderSimCompletedTradesTable();
