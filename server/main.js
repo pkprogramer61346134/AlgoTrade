@@ -245,9 +245,11 @@ async function syncTodayCandlesFromDhan() {
         if (rootData.open && Array.isArray(rootData.open) && rootData.open.length > 0) {
             const list = [];
             for (let i = 0; i < rootData.open.length; i++) {
-                const ts = rootData.timestamp[i];
+                const ts = (rootData.start_Time && rootData.start_Time[i]) || (rootData.timestamp && rootData.timestamp[i]) || 0;
                 const dateObj = new Date(ts * 1000);
-                const tStr = dateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+                const hh = String(dateObj.getHours()).padStart(2, '0');
+                const mm = String(dateObj.getMinutes()).padStart(2, '0');
+                const tStr = `${hh}:${mm}`;
                 list.push({
                     date: todayStr,
                     time: tStr,
