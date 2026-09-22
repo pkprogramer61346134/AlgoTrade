@@ -134,14 +134,38 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     let effectiveBuyVotes = buyVotes;
     let effectiveSellVotes = sellVotes;
 
-    const minConsensusVotes = strategyConfig.consensusThreshold || 3; // Default 3 out of 5 Majority Vote
+    // Neural Weight Matrix Evaluation
+    const weights = strategyConfig.engineWeights || { w1: 0.20, w2: 0.20, w3: 0.20, w4: 0.20, w5: 0.20 };
+    const isE1Active = r >= minRVOL;
+    const isE2Bull = rsiVal > rsiBull || isRsiBullTurnover;
+    const isE2Bear = rsiVal < rsiBear || (isRsiBearTurnover && isUpperWickRejection);
+    const isE3Bull = !isUpperWickRejection && emaVal !== null && c.close > emaVal;
+    const isE3Bear = isUpperWickRejection || (emaVal !== null && c.close < emaVal);
+    const isE4Bull = !isUpperWickRejection && vwapVal !== null && c.close > vwapVal;
+    const isE4Bear = isUpperWickRejection || (vwapVal !== null && c.close < vwapVal);
+    const isE5Bull = isStBull || isBullEngulf;
+    const isE5Bear = isStBear || isBearEngulf || isUpperWickRejection;
+
+    const weightedBuyScore = Number(((isE1Active ? weights.w1 : 0) + (isE2Bull ? weights.w2 : 0) + (isE3Bull ? weights.w3 : 0) + (isE4Bull ? weights.w4 : 0) + (isE5Bull ? weights.w5 : 0)).toFixed(4));
+    const weightedSellScore = Number(((isE1Active ? weights.w1 : 0) + (isE2Bear ? weights.w2 : 0) + (isE3Bear ? weights.w3 : 0) + (isE4Bear ? weights.w4 : 0) + (isE5Bear ? weights.w5 : 0)).toFixed(4));
+
+    const minConsensusVotes = strategyConfig.consensusThreshold || 3;
+    const weightedThreshold = strategyConfig.weightedThreshold || 0.55; // 55% weighted confidence threshold
     let signalType = "NONE";
     const totalVotes = Math.max(effectiveBuyVotes, effectiveSellVotes);
 
-    if (effectiveBuyVotes >= minConsensusVotes && effectiveBuyVotes > effectiveSellVotes) {
-        signalType = "BUY";
-    } else if (effectiveSellVotes >= minConsensusVotes && effectiveSellVotes > effectiveBuyVotes) {
-        signalType = "SELL";
+    if (strategyConfig.engineWeights) {
+        if (weightedBuyScore >= weightedThreshold && weightedBuyScore > weightedSellScore) {
+            signalType = "BUY";
+        } else if (weightedSellScore >= weightedThreshold && weightedSellScore > weightedBuyScore) {
+            signalType = "SELL";
+        }
+    } else {
+        if (effectiveBuyVotes >= minConsensusVotes && effectiveBuyVotes > effectiveSellVotes) {
+            signalType = "BUY";
+        } else if (effectiveSellVotes >= minConsensusVotes && effectiveSellVotes > effectiveBuyVotes) {
+            signalType = "SELL";
+        }
     }
 
     const isRsiBullActive = rsiVal > rsiBull || isRsiBullTurnover;
