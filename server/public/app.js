@@ -649,16 +649,11 @@ function renderEngineVotingGrid(data) {
         const logParts = targetLog ? targetLog.split('|').map(p => p.trim()) : [];
 
         const enginesDef = [
-            { id: 1, name: "Volume Surge", desc: "RVOL >= 1.25x Institutional Volume", keyword: "Engine 1" },
+            { id: 1, name: "Volume Surge", desc: "RVOL >= 1.15x Institutional Volume", keyword: "Engine 1" },
             { id: 2, name: "RSI Momentum", desc: "RSI > 54 (Bull) / RSI < 46 (Bear)", keyword: "Engine 2" },
             { id: 3, name: "EMA 50 Trend", desc: "Spot Price relative to 50 EMA", keyword: "Engine 3" },
             { id: 4, name: "Intraday VWAP", desc: "Institutional Volume Weighted Avg Price", keyword: "Engine 4" },
-            { id: 5, name: "Supertrend", desc: "ATR Volatility Trailing Direction", keyword: "Engine 5" },
-            { id: 6, name: "Price Action", desc: "Bullish / Bearish Engulfing Pattern", keyword: "Engine 6" },
-            { id: 7, name: "MACD Momentum", desc: "MACD Line & Signal Histogram Crossover", keyword: "Engine 7" },
-            { id: 8, name: "Prev Day Levels", desc: "Previous Day High / Low Level Breakout", keyword: "Engine 8" },
-            { id: 9, name: "Bank Nifty Alignment", desc: "~34% Nifty Weight Alignment Check", keyword: "Engine 9" },
-            { id: 10, name: "SMC Liquidity Sweep", desc: "Institutional Sweep Reversal & Zone Guard", keyword: "Engine 10" }
+            { id: 5, name: "Supertrend & PA", desc: "ATR Trailing Direction & Engulfing Pattern", keyword: "Engine 5" }
         ];
 
         subVotes = enginesDef.map(eng => {
@@ -1164,23 +1159,11 @@ function renderSimEngineVotingGrid(voteDetails) {
     if (!grid) return;
 
     const engines = [
-        "Engine 1 [ORB Level]",
-        "Engine 2 [Volume Surge]",
-        "Engine 3 [RSI Momentum]",
-        "Engine 4 [EMA Trend]",
-        "Engine 5 [PCR Sentiment]",
-        "Engine 6 [ATR Volatility]",
-        "Engine 7 [Rangebox Squeeze]",
-        "Engine 8 [VWAP Benchmark]",
-        "Engine 9 [Supertrend]",
-        "Engine 10 [Price Action]",
-        "Engine 11 [MACD Histogram]",
-        "Engine 12 [Bollinger Bands]",
-        "Engine 13 [Prev Day Levels]",
-        "Engine 14 [OBV Accumulation]",
-        "Engine 15 [Body Velocity]",
-        "Engine 16 [Bank Nifty Alignment]",
-        "Engine 17 [SMC Liquidity Sweep]"
+        "Engine 1 [Volume Surge]",
+        "Engine 2 [RSI Momentum]",
+        "Engine 3 [EMA 50 Trend]",
+        "Engine 4 [Intraday VWAP]",
+        "Engine 5 [Supertrend & PA]"
     ];
 
     grid.innerHTML = engines.map((engName, idx) => {

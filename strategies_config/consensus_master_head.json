@@ -1,78 +1,22 @@
 {
   "id": "consensus_master_head",
-  "name": "👑 Master Head Consensus Engine (Top 10 Institutional Engines)",
+  "name": "👑 Master Head Consensus Engine (Top 5 Institutional Engines)",
   "enabled": true,
-  "description": "Advanced Quantitative Master Engine. Aggregates Top 10 Best Sub-Strategy Engines (Volume Surge, RSI, EMA 50, VWAP, Supertrend, Price Action Engulfing, MACD, Prev Day Levels, Bank Nifty Alignment, SMC Liquidity Sweep) with High-Conviction Majority Voting Consensus (>= 6/10 YES Votes).",
+  "description": "Advanced Quantitative Master Engine. Aggregates Top 5 Core Sub-Strategy Engines (Volume Surge, RSI Momentum, 50 EMA Trend, Intraday VWAP, Supertrend & Price Action) with High-Conviction Majority Voting Consensus (>= 3/5 YES Votes).",
   "author": "AlgoTrade Institutional Engine",
   "timeframe": "5",
   "maxTradesPerDay": 3,
   "riskRewardRatio": 2.0,
-  "consensusThreshold": 6,
-  "entryStartTime": "09:15",
+  "consensusThreshold": 3,
+  "entryStartTime": "10:10",
   "entryEndTime": "15:00",
-  "entryStartMins": 555,
+  "entryStartMins": 610,
   "entryEndMins": 900,
   "indicators": {
-    "orbMinutes": 15,
-    "orbBufferPts": 5.0,
-    "rvolMin": 1.25,
+    "rvolMin": 1,
     "rsiPeriod": 14,
     "rsiBullMin": 54,
     "rsiBearMax": 46,
-    "emaTrendPeriod": 50,
-    "emaDistMin": 12.0,
-    "pcrBullMin": 1.05,
-    "pcrBearMax": 0.85,
-    "atrMin": 15.0,
-    "vwapDistMin": 10.0,
-    "macdHistMin": 0.45
-  },
-  "rules": {
-    "buy": [
-      {
-        "field": "consensus",
-        "operator": ">=",
-        "target": 11
-      }
-    ],
-    "sell": [
-      {
-        "field": "consensus",
-        "operator": ">=",
-        "target": 11
-      }
-    ]
-  },
-  "stopLoss": {
-    "type": "ORB_LEVEL",
-    "fallbackATRMultiplier": 1.2
-  },
-  "target": {
-    "type": "RISK_REWARD",
-    "multiplier": 2.0
-  },
-  "breakevenCostLock": {
-    "enabled": true,
-    "triggerThresholdPct": 50.0,
-    "mode": "TRAIL_TO_ENTRY_COST"
-  },
-  "extendedProfitRider": {
-    "enabled": true,
-    "mode": "TARGET_EXPANSION_RIDER",
-    "extendedTargetMultiplier": 3.0
-  },
-  "goldenPatternFilter": {
-    "enabled": true,
-    "mode": "KEY_ENGINE_AND_PATTERN_MATCH",
-    "minPatternWinRate": 75.0,
-    "requiredKeyEngines": [
-      17
-    ],
-    "preferredKeyEngines": [
-      1,
-      4,
-      16
-    ],
-    "goldenCombosFile": "server/data/golden_patterns.json"
+    "emaTrendPeriod": 50
   }
 }

@@ -39,7 +39,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         // Trade Entry Time Window Filter: strictly between 09:15 AM (555 mins) and 3:00 PM (900 mins)
         if (c.time) {
             const mins = parseTimeToMins(c.time);
-            const startMins = strategyConfig.entryStartMins || 555; // 09:15 AM
+            const startMins = strategyConfig.entryStartMins || 610; // 10:10 AM
             const endMins = strategyConfig.entryEndMins || 900;     // 3:00 PM
             if (mins < startMins || mins >= endMins) return { type: "NONE" };
         }
@@ -51,6 +51,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
 
     const r = (data.rvol && data.rvol[i] !== null && data.rvol[i] !== undefined) ? Number(data.rvol[i]) : 1.0;
     const rsiVal = (data.rsi && data.rsi[i] !== null && data.rsi[i] !== undefined) ? Number(data.rsi[i]) : 50.0;
+    const prevRsi = (data.rsi && i > 0 && data.rsi[i - 1] !== null && data.rsi[i - 1] !== undefined) ? Number(data.rsi[i - 1]) : rsiVal;
     const emaVal = (data.emaTrend && data.emaTrend[i] !== null) ? Number(data.emaTrend[i]) : null;
     const atrVal = (data.atr && data.atr[i] !== null) ? Number(data.atr[i]) : 15.0;
     const pcrVal = data.livePCR !== undefined ? data.livePCR : (rsiVal > 50 ? 1.15 : 0.75);
@@ -59,27 +60,39 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     let sellVotes = 0;
     const voteDetails = [];
 
-    // ENGINE 1: Relative Volume Surge (RVOL >= 1.25x)
-    const minRVOL = strategyConfig.indicators?.rvolMin || 1.25;
+    // Intraday Upper Wick Resistance Rejection Check
+    const candleRange = c.high - c.low;
+    const upperWick = c.high - Math.max(c.open, c.close);
+    const isUpperWickRejection = candleRange > 0 && (upperWick / candleRange) >= 0.25 && c.close < c.open;
+
+    // ENGINE 1: Relative Volume Surge (RVOL >= 1.0x)
+    const minRVOL = strategyConfig.indicators?.rvolMin || 1.0;
     if (r >= minRVOL) {
         buyVotes++;
         sellVotes++;
         voteDetails.push(`Engine 1 [Volume Surge ${r.toFixed(2)}x >= ${minRVOL}x]: CONFIRMED (+1 Both)`);
     }
 
-    // ENGINE 2: RSI Momentum Velocity (RSI > 54 / RSI < 46)
+    // ENGINE 2: RSI Momentum Velocity & Reversal Slope
     const rsiBull = strategyConfig.indicators?.rsiBullMin || 54;
     const rsiBear = strategyConfig.indicators?.rsiBearMax || 46;
-    if (rsiVal > rsiBull) {
+    const isRsiBearTurnover = (prevRsi >= 52.0 && rsiVal < prevRsi) || rsiVal < rsiBear;
+    const isRsiBullTurnover = (prevRsi <= 48.0 && rsiVal > prevRsi) || rsiVal > rsiBull;
+
+    if (rsiVal > rsiBull || isRsiBullTurnover) {
         buyVotes++;
-        voteDetails.push(`Engine 2 [RSI ${rsiVal.toFixed(1)} > ${rsiBull}]: BULLISH (+1)`);
-    } else if (rsiVal < rsiBear) {
+        voteDetails.push(`Engine 2 [RSI ${rsiVal.toFixed(1)}]: BULLISH (+1)`);
+    }
+    if (rsiVal < rsiBear || (isRsiBearTurnover && isUpperWickRejection)) {
         sellVotes++;
-        voteDetails.push(`Engine 2 [RSI ${rsiVal.toFixed(1)} < ${rsiBear}]: BEARISH (+1)`);
+        voteDetails.push(`Engine 2 [RSI Turnover (${prevRsi.toFixed(1)} -> ${rsiVal.toFixed(1)})]: BEARISH (+1)`);
     }
 
-    // ENGINE 3: EMA 50 Major Trend Alignment
-    if (emaVal !== null && c.close > emaVal) {
+    // ENGINE 3: EMA 50 Major Trend Alignment & Resistance Rejection
+    if (isUpperWickRejection) {
+        sellVotes++;
+        voteDetails.push(`Engine 3 [Resistance Rejection Upper Wick ${(upperWick / candleRange * 100).toFixed(0)}%]: BEARISH (+1)`);
+    } else if (emaVal !== null && c.close > emaVal) {
         buyVotes++;
         voteDetails.push(`Engine 3 [Price ₹${c.close} > EMA ₹${emaVal.toFixed(1)}]: BULLISH TREND (+1)`);
     } else if (emaVal !== null && c.close < emaVal) {
@@ -90,128 +103,30 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     // ENGINE 4: Intraday VWAP Institutional Benchmark
     const vwapVal = (data.vwap && data.vwap[i]) ? Number(data.vwap[i]) : null;
     if (vwapVal !== null) {
-        if (c.close > vwapVal) {
+        if (c.close > vwapVal && !isUpperWickRejection) {
             buyVotes++;
             voteDetails.push(`Engine 4 [Price ₹${c.close} > VWAP ₹${vwapVal.toFixed(1)}]: BULLISH VWAP (+1)`);
-        } else if (c.close < vwapVal) {
+        } else if (c.close < vwapVal || isUpperWickRejection) {
             sellVotes++;
-            voteDetails.push(`Engine 4 [Price ₹${c.close} < VWAP ₹${vwapVal.toFixed(1)}]: BEARISH VWAP (+1)`);
+            voteDetails.push(`Engine 4 [VWAP / Rejection]: BEARISH VWAP (+1)`);
         }
     }
 
-    // ENGINE 5: Supertrend Trailing Direction
+    // ENGINE 5: Supertrend Trailing & Price Action Candlestick Engulfing
     const stObj = (data.supertrend && data.supertrend[i]) ? data.supertrend[i] : null;
-    if (stObj && stObj.direction !== undefined && stObj.direction !== null) {
-        if (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY") {
-            buyVotes++;
-            voteDetails.push(`Engine 5 [Supertrend ${stObj.supertrend?.toFixed ? stObj.supertrend.toFixed(1) : ''}]: BULLISH (+1)`);
-        } else if (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL") {
-            sellVotes++;
-            voteDetails.push(`Engine 5 [Supertrend ${stObj.supertrend?.toFixed ? stObj.supertrend.toFixed(1) : ''}]: BEARISH (+1)`);
-        }
-    }
-
-    // ENGINE 6: Price Action Candlestick Pattern (Bullish/Bearish Engulfing)
     const prevC = i > 0 ? candles[i - 1] : null;
-    if (prevC) {
-        const isBullishEngulfing = c.close > c.open && c.close > prevC.high;
-        const isBearishEngulfing = c.close < c.open && c.close < prevC.low;
-        if (isBullishEngulfing) {
-            buyVotes++;
-            voteDetails.push("Engine 6 [Price Action]: BULLISH ENGULFING (+1)");
-        } else if (isBearishEngulfing) {
-            sellVotes++;
-            voteDetails.push("Engine 6 [Price Action]: BEARISH ENGULFING (+1)");
-        }
+    const isStBull = stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY");
+    const isStBear = stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL");
+    const isBullEngulf = prevC && c.close > c.open && c.close > prevC.high;
+    const isBearEngulf = prevC && c.close < c.open && c.close < prevC.low;
+
+    if (isStBull || isBullEngulf) {
+        buyVotes++;
+        voteDetails.push(`Engine 5 [Supertrend/PA ${isStBull ? 'ST Bullish' : 'Bullish Engulfing'}]: BULLISH (+1)`);
+    } else if (isStBear || isBearEngulf || isUpperWickRejection) {
+        sellVotes++;
+        voteDetails.push(`Engine 5 [Supertrend/PA ${isStBear ? 'ST Bearish' : (isUpperWickRejection ? 'Top Wick Rejection' : 'Bearish Engulfing')}]: BEARISH (+1)`);
     }
-
-    // ENGINE 7: MACD Histogram & Signal Crossover
-    const macdObj = (data.macd && data.macd[i]) ? data.macd[i] : null;
-    if (macdObj && macdObj.macd !== null && macdObj.signal !== null) {
-        if (macdObj.macd > macdObj.signal && macdObj.histogram > 0) {
-            buyVotes++;
-            voteDetails.push(`Engine 7 [MACD Bullish Histogram ${macdObj.histogram.toFixed(2)}]: BULLISH (+1)`);
-        } else if (macdObj.macd < macdObj.signal && macdObj.histogram < 0) {
-            sellVotes++;
-            voteDetails.push(`Engine 7 [MACD Bearish Histogram ${macdObj.histogram.toFixed(2)}]: BEARISH (+1)`);
-        }
-    }
-
-    // ENGINE 8: Previous Day High / Low Institutional Level Break (PDH / PDL)
-    let prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
-    if (!prevDay && candles && i > 0) {
-        const currDate = c.date;
-        let pHigh = -Infinity;
-        let pLow = Infinity;
-        for (let k = i - 1; k >= 0; k--) {
-            if (candles[k].date !== currDate) {
-                const targetPrevDate = candles[k].date;
-                for (let m = k; m >= 0 && candles[m].date === targetPrevDate; m--) {
-                    if (candles[m].high > pHigh) pHigh = candles[m].high;
-                    if (candles[m].low < pLow) pLow = candles[m].low;
-                }
-                if (pHigh !== -Infinity) {
-                    prevDay = { high: pHigh, low: pLow };
-                }
-                break;
-            }
-        }
-    }
-
-    if (prevDay && prevDay.high !== -Infinity) {
-        if (c.close > prevDay.high) {
-            buyVotes++;
-            voteDetails.push(`Engine 8 [Prev Day High Break ₹${prevDay.high}]: BULLISH (+1)`);
-        } else if (c.close < prevDay.low) {
-            sellVotes++;
-            voteDetails.push(`Engine 8 [Prev Day Low Break ₹${prevDay.low}]: BEARISH (+1)`);
-        }
-    }
-
-    // ENGINE 9: Bank Nifty Heavyweight Sectorial Alignment (~34% Nifty Weight)
-    const bnSpot = data.bankNiftySpot !== undefined ? data.bankNiftySpot : (data.bankNiftyCandles && data.bankNiftyCandles[i] ? data.bankNiftyCandles[i].close : null);
-    const bnEma = data.bankNiftyEma && data.bankNiftyEma[i] ? data.bankNiftyEma[i] : null;
-    const bnNetChange = data.bankNiftyNetChange;
-
-    if (bnSpot !== null && bnSpot !== undefined) {
-        if (bnEma !== null && bnSpot > bnEma) {
-            buyVotes++;
-            voteDetails.push(`Engine 9 [Bank Nifty Alignment ₹${bnSpot.toFixed(1)}]: BULLISH ALIGNED (+1)`);
-        } else if (bnEma !== null && bnSpot < bnEma) {
-            sellVotes++;
-            voteDetails.push(`Engine 9 [Bank Nifty Alignment ₹${bnSpot.toFixed(1)}]: BEARISH ALIGNED (+1)`);
-        }
-    } else {
-        if (emaVal !== null && c.close > emaVal && pcrVal >= 1.0) {
-            buyVotes++;
-            voteDetails.push("Engine 9 [Bank Nifty Heavyweight Sectorial Alignment]: BULLISH (+1)");
-        } else if (emaVal !== null && c.close < emaVal && pcrVal <= 0.9) {
-            sellVotes++;
-            voteDetails.push("Engine 9 [Bank Nifty Heavyweight Sectorial Alignment]: BEARISH (+1)");
-        }
-    }
-
-    // ENGINE 10: Institutional Liquidity Sweep & SMC Zone Protection Engine
-    const sweepRes = (data && data.liquiditySweep && data.liquiditySweep[i]) ? 
-                     data.liquiditySweep[i] : 
-                     LiquiditySweepStrategy.detectLiquiditySweep(candles, i);
-
-    if (sweepRes.isSweep) {
-        const sweepType = sweepRes.sweepType || sweepRes.type;
-        if (sweepType === "BUY") {
-            buyVotes += 2;
-            voteDetails.push(`Engine 10 [${sweepRes.details || 'Bullish Sweep Reversal'}]: BULLISH REVERSAL (+2)`);
-            sellVotes = 0;
-        } else if (sweepType === "SELL") {
-            sellVotes += 2;
-            voteDetails.push(`Engine 10 [${sweepRes.details || 'Bearish Sweep Reversal'}]: BEARISH REVERSAL (+2)`);
-            buyVotes = 0;
-        }
-    }
-
-    const zoneProt = (sweepRes.blockPE !== undefined) ? 
-                     sweepRes : 
-                     LiquiditySweepStrategy.checkZoneProtection(candles, i);
 
     const rawBuyVotes = buyVotes;
     const rawSellVotes = sellVotes;
@@ -219,14 +134,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     let effectiveBuyVotes = buyVotes;
     let effectiveSellVotes = sellVotes;
 
-    if (zoneProt.blockPE && !sweepRes.isSweep) {
-        effectiveSellVotes = 0;
-    }
-    if (zoneProt.blockCE && !sweepRes.isSweep) {
-        effectiveBuyVotes = 0;
-    }
-
-    const minConsensusVotes = strategyConfig.consensusThreshold || 6; // Default 6 out of 10 Majority Vote for optimal trade frequency
+    const minConsensusVotes = strategyConfig.consensusThreshold || 3; // Default 3 out of 5 Majority Vote
     let signalType = "NONE";
     const totalVotes = Math.max(effectiveBuyVotes, effectiveSellVotes);
 
@@ -236,17 +144,21 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         signalType = "SELL";
     }
 
+    const isRsiBullActive = rsiVal > rsiBull || isRsiBullTurnover;
+    const isRsiBearActive = rsiVal < rsiBear || (isRsiBearTurnover && isUpperWickRejection);
+    const isEmaBullActive = !isUpperWickRejection && emaVal !== null && c.close > emaVal;
+    const isEmaBearActive = isUpperWickRejection || (emaVal !== null && c.close < emaVal);
+    const isVwapBullActive = !isUpperWickRejection && vwapVal !== null && c.close > vwapVal;
+    const isVwapBearActive = isUpperWickRejection || (vwapVal !== null && c.close < vwapVal);
+    const isPaBullActive = isStBull || isBullEngulf;
+    const isPaBearActive = isStBear || isBearEngulf || isUpperWickRejection;
+
     const subEngineVotes = [
         { id: 1, name: "Volume Surge", type: r >= minRVOL ? "CONFIRMED" : "NONE", voteLabel: r >= minRVOL ? "YES (CONFIRMED)" : "NO VOTE", detail: `RVOL ${r.toFixed(2)}x` },
-        { id: 2, name: "RSI Momentum", type: rsiVal > rsiBull ? "BUY" : (rsiVal < rsiBear ? "SELL" : "NONE"), voteLabel: rsiVal > rsiBull ? "YES (BUY)" : (rsiVal < rsiBear ? "YES (SELL)" : "NO VOTE"), detail: `RSI ${rsiVal.toFixed(1)}` },
-        { id: 3, name: "EMA 50 Trend", type: (emaVal !== null && c.close > emaVal) ? "BUY" : ((emaVal !== null && c.close < emaVal) ? "SELL" : "NONE"), voteLabel: (emaVal !== null && c.close > emaVal) ? "YES (BUY)" : ((emaVal !== null && c.close < emaVal) ? "YES (SELL)" : "NO VOTE"), detail: emaVal ? `EMA ₹${emaVal.toFixed(1)}` : "--" },
-        { id: 4, name: "Intraday VWAP", type: (vwapVal !== null && c.close > vwapVal) ? "BUY" : ((vwapVal !== null && c.close < vwapVal) ? "SELL" : "NONE"), voteLabel: (vwapVal !== null && c.close > vwapVal) ? "YES (BUY)" : ((vwapVal !== null && c.close < vwapVal) ? "YES (SELL)" : "NO VOTE"), detail: vwapVal ? `VWAP ₹${vwapVal.toFixed(1)}` : "--" },
-        { id: 5, name: "Supertrend", type: (stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY")) ? "BUY" : ((stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL")) ? "SELL" : "NONE"), voteLabel: (stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY")) ? "YES (BUY)" : ((stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL")) ? "YES (SELL)" : "NO VOTE"), detail: stObj?.supertrend ? `ST ₹${stObj.supertrend.toFixed(1)}` : "--" },
-        { id: 6, name: "Price Action", type: (prevC && c.close > c.open && c.close > prevC.high) ? "BUY" : ((prevC && c.close < c.open && c.close < prevC.low) ? "SELL" : "NONE"), voteLabel: (prevC && c.close > c.open && c.close > prevC.high) ? "YES (BUY)" : ((prevC && c.close < c.open && c.close < prevC.low) ? "YES (SELL)" : "NO VOTE"), detail: "Engulfing Check" },
-        { id: 7, name: "MACD Momentum", type: (macdObj && macdObj.macd > macdObj.signal && macdObj.histogram > 0) ? "BUY" : ((macdObj && macdObj.macd < macdObj.signal && macdObj.histogram < 0) ? "SELL" : "NONE"), voteLabel: (macdObj && macdObj.macd > macdObj.signal && macdObj.histogram > 0) ? "YES (BUY)" : ((macdObj && macdObj.macd < macdObj.signal && macdObj.histogram < 0) ? "YES (SELL)" : "NO VOTE"), detail: macdObj?.histogram ? `Hist ${macdObj.histogram.toFixed(2)}` : "--" },
-        { id: 8, name: "Prev Day Levels", type: (prevDay && prevDay.high !== -Infinity && c.close > prevDay.high) ? "BUY" : ((prevDay && prevDay.high !== -Infinity && c.close < prevDay.low) ? "SELL" : "NONE"), voteLabel: (prevDay && prevDay.high !== -Infinity && c.close > prevDay.high) ? "YES (BUY)" : ((prevDay && prevDay.high !== -Infinity && c.close < prevDay.low) ? "YES (SELL)" : "NO VOTE"), detail: prevDay ? `PDH ₹${prevDay.high} / PDL ₹${prevDay.low}` : "--" },
-        { id: 9, name: "Bank Nifty Alignment", type: (bnSpot !== null && bnEma !== null && bnSpot > bnEma) ? "BUY" : ((bnSpot !== null && bnEma !== null && bnSpot < bnEma) ? "SELL" : "NONE"), voteLabel: (bnSpot !== null && bnEma !== null && bnSpot > bnEma) ? "YES (BUY)" : ((bnSpot !== null && bnEma !== null && bnSpot < bnEma) ? "YES (SELL)" : "NO VOTE"), detail: bnSpot ? `BN Spot ₹${bnSpot.toFixed(1)}` : "--" },
-        { id: 10, name: "SMC Liquidity Sweep", type: (sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "BUY" || sweepRes.type === "BUY")) ? "BUY" : ((sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "SELL" || sweepRes.type === "SELL")) ? "SELL" : "NONE"), voteLabel: (sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "BUY" || sweepRes.type === "BUY")) ? "YES (BUY)" : ((sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "SELL" || sweepRes.type === "SELL")) ? "YES (SELL)" : "NO VOTE"), detail: sweepRes?.isSweep ? (sweepRes.details || "Liquidity Sweep") : "Zone Protection" }
+        { id: 2, name: "RSI Momentum", type: isRsiBullActive ? "BUY" : (isRsiBearActive ? "SELL" : "NONE"), voteLabel: isRsiBullActive ? "YES (BUY)" : (isRsiBearActive ? "YES (SELL)" : "NO VOTE"), detail: `RSI ${rsiVal.toFixed(1)}` },
+        { id: 3, name: "EMA 50 Trend", type: isEmaBullActive ? "BUY" : (isEmaBearActive ? "SELL" : "NONE"), voteLabel: isEmaBullActive ? "YES (BUY)" : (isEmaBearActive ? "YES (SELL)" : "NO VOTE"), detail: emaVal ? `EMA ₹${emaVal.toFixed(1)}` : "--" },
+        { id: 4, name: "Intraday VWAP", type: isVwapBullActive ? "BUY" : (isVwapBearActive ? "SELL" : "NONE"), voteLabel: isVwapBullActive ? "YES (BUY)" : (isVwapBearActive ? "YES (SELL)" : "NO VOTE"), detail: vwapVal ? `VWAP ₹${vwapVal.toFixed(1)}` : "--" },
+        { id: 5, name: "Supertrend & PA", type: isPaBullActive ? "BUY" : (isPaBearActive ? "SELL" : "NONE"), voteLabel: isPaBullActive ? "YES (BUY)" : (isPaBearActive ? "YES (SELL)" : "NO VOTE"), detail: stObj?.supertrend ? `ST ₹${stObj.supertrend.toFixed(1)}` : "Engulfing/Wick Check" }
     ];
 
     if (signalType !== "NONE") {
@@ -267,43 +179,41 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         const targetPtsStr = dynamicTRPoints.toFixed(1);
         const ratioXXStr = `${riskPtsStr}:${targetPtsStr}`;
 
-            const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/10 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
+        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/5 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
 
-            return {
-                type: signalType,
-                entryPrice: spotPrice,
-                stopLoss: Number(sl.toFixed(2)),
-                targetPrice: Number(tp.toFixed(2)),
-                slPoints: Number(riskPtsStr),
-                trPoints: Number(targetPtsStr),
-                riskRewardRatio: ratioXXStr,
-                rrMultiplier: Number(rrMultiplier.toFixed(1)),
-                reasoning: reasoning,
-                consensusVotes: totalVotes,
-                buyVotes: rawBuyVotes,
-                sellVotes: rawSellVotes,
-                effectiveBuyVotes: effectiveBuyVotes,
-                effectiveSellVotes: effectiveSellVotes,
-                voteDetails: voteDetails,
-                subEngineVotes: subEngineVotes,
-                indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)), dynamicSLPts: Number(riskPtsStr), dynamicTRPts: Number(targetPtsStr), dynamicRR: Number(rrMultiplier.toFixed(1)), ratioXX: ratioXXStr }
-            };
-        }
-
-        const ceBlockedStr = (zoneProt.blockCE && !sweepRes.isSweep && rawBuyVotes > 0) ? " (CE Blocked by Zone Guard)" : "";
-        const peBlockedStr = (zoneProt.blockPE && !sweepRes.isSweep && rawSellVotes > 0) ? " (PE Blocked by Zone Guard)" : "";
-        const voteDetailsStr = voteDetails.length > 0 ? ` | Active Votes: ${voteDetails.join(" | ")}` : "";
         return {
-            type: "NONE",
+            type: signalType,
+            entryPrice: spotPrice,
+            stopLoss: Number(sl.toFixed(2)),
+            targetPrice: Number(tp.toFixed(2)),
+            slPoints: Number(riskPtsStr),
+            trPoints: Number(targetPtsStr),
+            riskRewardRatio: ratioXXStr,
+            rrMultiplier: Number(rrMultiplier.toFixed(1)),
+            reasoning: reasoning,
+            consensusVotes: totalVotes,
             buyVotes: rawBuyVotes,
             sellVotes: rawSellVotes,
             effectiveBuyVotes: effectiveBuyVotes,
             effectiveSellVotes: effectiveSellVotes,
             voteDetails: voteDetails,
             subEngineVotes: subEngineVotes,
-            reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${rawBuyVotes}${ceBlockedStr}, Sell Votes=${rawSellVotes}${peBlockedStr} (Required: ${minConsensusVotes}/10)${voteDetailsStr}. Waiting for Sub-Strategy Majority.`,
-            indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
+            indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)), dynamicSLPts: Number(riskPtsStr), dynamicTRPts: Number(targetPtsStr), dynamicRR: Number(rrMultiplier.toFixed(1)), ratioXX: ratioXXStr }
         };
+    }
+
+    const voteDetailsStr = voteDetails.length > 0 ? ` | Active Votes: ${voteDetails.join(" | ")}` : "";
+    return {
+        type: "NONE",
+        buyVotes: rawBuyVotes,
+        sellVotes: rawSellVotes,
+        effectiveBuyVotes: effectiveBuyVotes,
+        effectiveSellVotes: effectiveSellVotes,
+        voteDetails: voteDetails,
+        subEngineVotes: subEngineVotes,
+        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${rawBuyVotes}, Sell Votes=${rawSellVotes} (Required: ${minConsensusVotes}/5)${voteDetailsStr}. Waiting for Sub-Strategy Majority.`,
+        indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
+    };
     } catch (err) {
         systemLogger.logError("CONSENSUS_ENGINE", `Master Head Strategy Exception: ${err.message}`, { index: i, date: c?.date, time: c?.time, stack: err.stack });
         return {
