@@ -32,7 +32,7 @@ class PaperOrderManager {
         this.isOrderActive = false;
 
         // Virtual Funds & Journal
-        this.virtualBalance = 100000.0;
+        this.virtualBalance = 10000.0;
         this.virtualMarginUsed = 0.0;
         this.tradeHistory = [];
         this.todaySummary = {
@@ -56,7 +56,7 @@ class PaperOrderManager {
         try {
             if (fs.existsSync(JOURNAL_PATH)) {
                 const data = JSON.parse(fs.readFileSync(JOURNAL_PATH, 'utf-8'));
-                this.virtualBalance = Number(data.virtualBalance) || 100000.0;
+                this.virtualBalance = Number(data.virtualBalance) || 10000.0;
                 this.todaySummary = data.todaySummary || this.todaySummary;
                 this.tradeHistory = data.tradeHistory || [];
                 console.log(`📖 [PAPER MANAGER] Loaded Paper Journal. Virtual Balance: ₹${this.virtualBalance}`);
