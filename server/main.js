@@ -681,22 +681,33 @@ setInterval(async () => {
         let reason = "";
 
         if (allCandles.length > 5 && spot > 0) {
+            const nowKolkata = new Date();
+            const h = nowKolkata.getHours();
+            const m = Math.floor(nowKolkata.getMinutes() / 5) * 5;
+            const current5MinBlock = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
             const lastC = allCandles[allCandles.length - 1];
 
-            if (lastC && lastC.date === todayStr) {
+            const isSameCandleBlock = lastC && lastC.date === todayStr && 
+                (lastC.time === current5MinBlock || lastC.time === `${current5MinBlock}:00` || lastC.time.startsWith(current5MinBlock));
+
+            if (isSameCandleBlock) {
                 lastC.close = spot;
                 if (spot > lastC.high) lastC.high = spot;
                 if (spot < lastC.low) lastC.low = spot;
+                lastC.volume = (lastC.volume || 1000) + 50;
             } else {
-                allCandles.push({
+                const new5MinCandle = {
                     date: todayStr,
-                    time: timeStr,
+                    time: current5MinBlock,
                     open: spot,
                     high: spot,
                     low: spot,
                     close: spot,
-                    volume: 5000
-                });
+                    volume: 1000
+                };
+                allCandles.push(new5MinCandle);
+                liveTodayCandles.push(new5MinCandle);
             }
 
             // Slice last 400 candles for instant 0ms indicator evaluation without event loop blocking
