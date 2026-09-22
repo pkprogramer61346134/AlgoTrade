@@ -42,6 +42,46 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     const orb = data.dayORB[c.date];
     if (!orb || orb.high === -Infinity || orb.low === Infinity) return { type: "NONE" };
 
+    // PREVIOUS DAY BIG RANGE & INSIDE-RANGE CHOPPY DAY AVOIDANCE FILTER
+    let prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
+    if (!prevDay && candles && i > 0) {
+        const currDate = c.date;
+        let pHigh = -Infinity;
+        let pLow = Infinity;
+        for (let k = i - 1; k >= 0; k--) {
+            if (candles[k].date !== currDate) {
+                const targetPrevDate = candles[k].date;
+                for (let m = k; m >= 0 && candles[m].date === targetPrevDate; m--) {
+                    if (candles[m].high > pHigh) pHigh = candles[m].high;
+                    if (candles[m].low < pLow) pLow = candles[m].low;
+                }
+                if (pHigh !== -Infinity) {
+                    prevDay = { high: pHigh, low: pLow };
+                }
+                break;
+            }
+        }
+    }
+
+    if (prevDay && prevDay.high !== -Infinity && prevDay.low !== Infinity) {
+        const prevDayRange = prevDay.high - prevDay.low;
+        const maxAllowedPrevDayRange = strategyConfig.maxPrevDayRangeToTrade || 250; // Default 250 pts filter
+
+        const isInsidePrevDayRange = c.close <= prevDay.high && c.close >= prevDay.low;
+        const isInsideORB = c.close <= orb.high && c.close >= orb.low;
+
+        // Block trade if previous day had a big move (>= 250 pts) AND price is stuck inside range / ORB
+        if (prevDayRange >= maxAllowedPrevDayRange && (isInsidePrevDayRange || isInsideORB)) {
+            return {
+                type: "NONE",
+                buyVotes: 0,
+                sellVotes: 0,
+                reasoning: `🚫 BIG PREVIOUS DAY RANGE FILTER: Prev Day Range was ${prevDayRange.toFixed(1)} pts (>= ${maxAllowedPrevDayRange} pts). Price inside ${isInsideORB ? 'ORB' : 'Prev Day'} Range. Trade suppressed to avoid choppy sideways consolidation.`,
+                indicators: { orbHigh: orb?.high, orbLow: orb?.low }
+            };
+        }
+    }
+
     const r = (data.rvol && data.rvol[i] !== null && data.rvol[i] !== undefined) ? Number(data.rvol[i]) : 1.0;
     const rsiVal = (data.rsi && data.rsi[i] !== null && data.rsi[i] !== undefined) ? Number(data.rsi[i]) : 50.0;
     const emaVal = (data.emaTrend && data.emaTrend[i] !== null) ? Number(data.emaTrend[i]) : null;
@@ -196,7 +236,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
     }
 
     // Sub-Engine 13: Previous Day High / Low Institutional Level Break Engine (Connected to Candle Data Hub)
-    let prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
+    if (!prevDay) prevDay = (data.prevDayMap && data.prevDayMap[c.date]) ? data.prevDayMap[c.date] : null;
     if (!prevDay && candles && i > 0) {
         // Fallback: search prior candles in dataset for previous day high/low
         const currDate = c.date;
