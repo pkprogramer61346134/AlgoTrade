@@ -228,6 +228,19 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         signalType = "SELL";
     }
 
+    const subEngineVotes = [
+        { id: 1, name: "Volume Surge", type: r >= minRVOL ? "CONFIRMED" : "NONE", voteLabel: r >= minRVOL ? "YES (CONFIRMED)" : "NO VOTE", detail: `RVOL ${r.toFixed(2)}x` },
+        { id: 2, name: "RSI Momentum", type: rsiVal > rsiBull ? "BUY" : (rsiVal < rsiBear ? "SELL" : "NONE"), voteLabel: rsiVal > rsiBull ? "YES (BUY)" : (rsiVal < rsiBear ? "YES (SELL)" : "NO VOTE"), detail: `RSI ${rsiVal.toFixed(1)}` },
+        { id: 3, name: "EMA 50 Trend", type: (emaVal !== null && c.close > emaVal) ? "BUY" : ((emaVal !== null && c.close < emaVal) ? "SELL" : "NONE"), voteLabel: (emaVal !== null && c.close > emaVal) ? "YES (BUY)" : ((emaVal !== null && c.close < emaVal) ? "YES (SELL)" : "NO VOTE"), detail: emaVal ? `EMA ₹${emaVal.toFixed(1)}` : "--" },
+        { id: 4, name: "Intraday VWAP", type: (vwapVal !== null && c.close > vwapVal) ? "BUY" : ((vwapVal !== null && c.close < vwapVal) ? "SELL" : "NONE"), voteLabel: (vwapVal !== null && c.close > vwapVal) ? "YES (BUY)" : ((vwapVal !== null && c.close < vwapVal) ? "YES (SELL)" : "NO VOTE"), detail: vwapVal ? `VWAP ₹${vwapVal.toFixed(1)}` : "--" },
+        { id: 5, name: "Supertrend", type: (stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY")) ? "BUY" : ((stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL")) ? "SELL" : "NONE"), voteLabel: (stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY")) ? "YES (BUY)" : ((stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL")) ? "YES (SELL)" : "NO VOTE"), detail: stObj?.supertrend ? `ST ₹${stObj.supertrend.toFixed(1)}` : "--" },
+        { id: 6, name: "Price Action", type: (prevC && c.close > c.open && c.close > prevC.high) ? "BUY" : ((prevC && c.close < c.open && c.close < prevC.low) ? "SELL" : "NONE"), voteLabel: (prevC && c.close > c.open && c.close > prevC.high) ? "YES (BUY)" : ((prevC && c.close < c.open && c.close < prevC.low) ? "YES (SELL)" : "NO VOTE"), detail: "Engulfing Check" },
+        { id: 7, name: "MACD Momentum", type: (macdObj && macdObj.macd > macdObj.signal && macdObj.histogram > 0) ? "BUY" : ((macdObj && macdObj.macd < macdObj.signal && macdObj.histogram < 0) ? "SELL" : "NONE"), voteLabel: (macdObj && macdObj.macd > macdObj.signal && macdObj.histogram > 0) ? "YES (BUY)" : ((macdObj && macdObj.macd < macdObj.signal && macdObj.histogram < 0) ? "YES (SELL)" : "NO VOTE"), detail: macdObj?.histogram ? `Hist ${macdObj.histogram.toFixed(2)}` : "--" },
+        { id: 8, name: "Prev Day Levels", type: (prevDay && prevDay.high !== -Infinity && c.close > prevDay.high) ? "BUY" : ((prevDay && prevDay.high !== -Infinity && c.close < prevDay.low) ? "SELL" : "NONE"), voteLabel: (prevDay && prevDay.high !== -Infinity && c.close > prevDay.high) ? "YES (BUY)" : ((prevDay && prevDay.high !== -Infinity && c.close < prevDay.low) ? "YES (SELL)" : "NO VOTE"), detail: prevDay ? `PDH ₹${prevDay.high} / PDL ₹${prevDay.low}` : "--" },
+        { id: 9, name: "Bank Nifty Alignment", type: (bnSpot !== null && bnEma !== null && bnSpot > bnEma) ? "BUY" : ((bnSpot !== null && bnEma !== null && bnSpot < bnEma) ? "SELL" : "NONE"), voteLabel: (bnSpot !== null && bnEma !== null && bnSpot > bnEma) ? "YES (BUY)" : ((bnSpot !== null && bnEma !== null && bnSpot < bnEma) ? "YES (SELL)" : "NO VOTE"), detail: bnSpot ? `BN Spot ₹${bnSpot.toFixed(1)}` : "--" },
+        { id: 10, name: "SMC Liquidity Sweep", type: (sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "BUY" || sweepRes.type === "BUY")) ? "BUY" : ((sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "SELL" || sweepRes.type === "SELL")) ? "SELL" : "NONE"), voteLabel: (sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "BUY" || sweepRes.type === "BUY")) ? "YES (BUY)" : ((sweepRes && sweepRes.isSweep && (sweepRes.sweepType === "SELL" || sweepRes.type === "SELL")) ? "YES (SELL)" : "NO VOTE"), detail: sweepRes?.isSweep ? (sweepRes.details || "Liquidity Sweep") : "Zone Protection" }
+    ];
+
     if (signalType !== "NONE") {
         const spotPrice = c.close;
 
@@ -237,44 +250,41 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
         const dynamicSLPoints = Math.max(minSLDistance, Math.min(maxSLDistance, atrVal * 1.5));
         
         let sl = signalType === "BUY" ? (spotPrice - dynamicSLPoints) : (spotPrice + dynamicSLPoints);
-        const totalVotes = signalType === "BUY" ? buyVotes : sellVotes;
 
-        // Fixed 1:2.0 Risk-Reward Target Calculation
-        const rrMultiplier = strategyConfig.riskRewardRatio || 2.0;
-        const risk = Math.abs(spotPrice - sl);
-        const dynamicTRPoints = Number((risk * rrMultiplier).toFixed(2));
-        const tp = signalType === "BUY" ? (spotPrice + dynamicTRPoints) : (spotPrice - dynamicTRPoints);
+            const riskPtsStr = risk.toFixed(1);
+            const targetPtsStr = dynamicTRPoints.toFixed(1);
+            const ratioXXStr = `${riskPtsStr}:${targetPtsStr}`;
 
-        const riskPtsStr = risk.toFixed(1);
-        const targetPtsStr = dynamicTRPoints.toFixed(1);
-        const ratioXXStr = `${riskPtsStr}:${targetPtsStr}`;
+            const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/10 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
 
-        const reasoning = `👑 MASTER HEAD CONSENSUS PASSED [${totalVotes}/10 Engines Voted YES]: ${signalType === "BUY" ? "BULLISH CE" : "BEARISH PE"} Entry @ ₹${spotPrice}. Dynamic SL: ₹${sl.toFixed(2)} (${riskPtsStr} pts risk), Dynamic Target: ₹${tp.toFixed(2)} (+${targetPtsStr} pts target) [Dynamic R:R ${ratioXXStr} (1:${rrMultiplier.toFixed(1)})]. ${voteDetails.join(" | ")}`;
+            return {
+                type: signalType,
+                entryPrice: spotPrice,
+                stopLoss: Number(sl.toFixed(2)),
+                targetPrice: Number(tp.toFixed(2)),
+                slPoints: Number(riskPtsStr),
+                trPoints: Number(targetPtsStr),
+                riskRewardRatio: ratioXXStr,
+                rrMultiplier: Number(rrMultiplier.toFixed(1)),
+                reasoning: reasoning,
+                consensusVotes: totalVotes,
+                buyVotes: buyVotes,
+                sellVotes: sellVotes,
+                voteDetails: voteDetails,
+                subEngineVotes: subEngineVotes,
+                indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)), dynamicSLPts: Number(riskPtsStr), dynamicTRPts: Number(targetPtsStr), dynamicRR: Number(rrMultiplier.toFixed(1)), ratioXX: ratioXXStr }
+            };
+        }
 
         return {
-            type: signalType,
-            entryPrice: spotPrice,
-            stopLoss: Number(sl.toFixed(2)),
-            targetPrice: Number(tp.toFixed(2)),
-            slPoints: Number(riskPtsStr),
-            trPoints: Number(targetPtsStr),
-            riskRewardRatio: ratioXXStr,
-            rrMultiplier: Number(rrMultiplier.toFixed(1)),
-            reasoning: reasoning,
-            consensusVotes: totalVotes,
+            type: "NONE",
+            buyVotes: buyVotes,
+            sellVotes: sellVotes,
             voteDetails: voteDetails,
-            indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)), dynamicSLPts: Number(riskPtsStr), dynamicTRPts: Number(targetPtsStr), dynamicRR: Number(rrMultiplier.toFixed(1)), ratioXX: ratioXXStr }
+            subEngineVotes: subEngineVotes,
+            reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/10). Waiting for Sub-Strategy Majority.`,
+            indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
         };
-    }
-
-    return {
-        type: "NONE",
-        buyVotes: buyVotes,
-        sellVotes: sellVotes,
-        voteDetails: voteDetails,
-        reasoning: `ℹ️ MASTER HEAD CONSENSUS WAITING: Buy Votes=${buyVotes}, Sell Votes=${sellVotes} (Required: ${minConsensusVotes}/10). Waiting for Sub-Strategy Majority.`,
-        indicators: { rvol: Number(r.toFixed(2)), rsi: Number(rsiVal.toFixed(1)), pcr: Number(pcrVal.toFixed(2)) }
-    };
     } catch (err) {
         systemLogger.logError("CONSENSUS_ENGINE", `Master Head Strategy Exception: ${err.message}`, { index: i, date: c?.date, time: c?.time, stack: err.stack });
         return {

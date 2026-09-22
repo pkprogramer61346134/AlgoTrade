@@ -632,57 +632,83 @@ function renderEngineVotingGrid(data) {
     const gridDiv = document.getElementById('live-engine-voting-grid');
     if (!gridDiv) return;
 
-    let targetLog = "";
-    if (data.engineLogs && Array.isArray(data.engineLogs)) {
-        const foundLog = data.engineLogs.find(l => l.reasoning && l.reasoning.includes("Engine 1"));
-        if (foundLog) {
-            targetLog = foundLog.reasoning;
-        } else if (data.engineLogs[0]) {
-            targetLog = data.engineLogs[0].reasoning || "";
+    let subVotes = (data && Array.isArray(data.subEngineVotes) && data.subEngineVotes.length > 0) ? data.subEngineVotes : null;
+
+    // Fallback: Parse voteDetails from engineLogs if subEngineVotes is missing
+    if (!subVotes) {
+        let targetLog = "";
+        if (data && data.engineLogs && Array.isArray(data.engineLogs)) {
+            const foundLog = data.engineLogs.find(l => l.reasoning && l.reasoning.includes("Engine 1"));
+            if (foundLog) {
+                targetLog = foundLog.reasoning;
+            } else if (data.engineLogs[0]) {
+                targetLog = data.engineLogs[0].reasoning || "";
+            }
         }
+
+        const enginesDef = [
+            { id: 1, name: "Volume Surge", desc: "RVOL >= 1.25x Institutional Volume", keyword: "Engine 1" },
+            { id: 2, name: "RSI Momentum", desc: "RSI > 54 (Bull) / RSI < 46 (Bear)", keyword: "Engine 2" },
+            { id: 3, name: "EMA 50 Trend", desc: "Spot Price relative to 50 EMA", keyword: "Engine 3" },
+            { id: 4, name: "Intraday VWAP", desc: "Institutional Volume Weighted Avg Price", keyword: "Engine 4" },
+            { id: 5, name: "Supertrend", desc: "ATR Volatility Trailing Direction", keyword: "Engine 5" },
+            { id: 6, name: "Price Action", desc: "Bullish / Bearish Engulfing Pattern", keyword: "Engine 6" },
+            { id: 7, name: "MACD Momentum", desc: "MACD Line & Signal Histogram Crossover", keyword: "Engine 7" },
+            { id: 8, name: "Prev Day Levels", desc: "Previous Day High / Low Level Breakout", keyword: "Engine 8" },
+            { id: 9, name: "Bank Nifty Heavyweight", desc: "~34% Nifty Weight Alignment Check", keyword: "Engine 9" },
+            { id: 10, name: "SMC Liquidity Sweep", desc: "Institutional Sweep Reversal & Zone Guard", keyword: "Engine 10" }
+        ];
+
+        subVotes = enginesDef.map(eng => {
+            let isBull = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BULLISH") || targetLog.includes("CONFIRMED"));
+            let isBear = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BEARISH") || targetLog.includes("CONFIRMED"));
+            return {
+                id: eng.id,
+                name: eng.name,
+                type: isBull ? "BUY" : (isBear ? "SELL" : "NONE"),
+                voteLabel: isBull ? "YES (BUY)" : (isBear ? "YES (SELL)" : "NO VOTE"),
+                detail: eng.desc
+            };
+        });
     }
 
-    const engines = [
-        { id: 1, name: "Volume Surge", desc: "RVOL >= 1.25x Institutional Volume", keyword: "Engine 1" },
-        { id: 2, name: "RSI Momentum", desc: "RSI > 54 (Bull) / RSI < 46 (Bear)", keyword: "Engine 2" },
-        { id: 3, name: "EMA 50 Trend", desc: "Spot Price relative to 50 EMA", keyword: "Engine 3" },
-        { id: 4, name: "Intraday VWAP", desc: "Institutional Volume Weighted Avg Price", keyword: "Engine 4" },
-        { id: 5, name: "Supertrend", desc: "ATR Volatility Trailing Direction", keyword: "Engine 5" },
-        { id: 6, name: "Price Action", desc: "Bullish / Bearish Engulfing Pattern", keyword: "Engine 6" },
-        { id: 7, name: "MACD Momentum", desc: "MACD Line & Signal Histogram Crossover", keyword: "Engine 7" },
-        { id: 8, name: "Prev Day Levels", desc: "Previous Day High / Low Level Breakout", keyword: "Engine 8" },
-        { id: 9, name: "Bank Nifty Heavyweight", desc: "~34% Nifty Weight Alignment Check", keyword: "Engine 9" },
-        { id: 10, name: "SMC Liquidity Sweep", desc: "Institutional Sweep Reversal & Zone Guard", keyword: "Engine 10" }
-    ];
+    gridDiv.innerHTML = subVotes.map(eng => {
+        const isBuy = eng.type === "BUY" || eng.voteLabel?.includes("BUY") || eng.type === "CONFIRMED";
+        const isSell = eng.type === "SELL" || eng.voteLabel?.includes("SELL");
 
-    gridDiv.innerHTML = engines.map(eng => {
-        let isBull = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BULLISH") || targetLog.includes("CONFIRMED"));
-        let isBear = targetLog.includes(`${eng.keyword}`) && (targetLog.includes("BEARISH") || targetLog.includes("CONFIRMED"));
-
-        let statusText = "NEUTRAL / WAITING";
+        let statusText = eng.voteLabel || "NO VOTE";
         let statusBadgeClass = "badge-info";
-        let cardBorder = "rgba(255,255,255,0.08)";
-        let cardBg = "rgba(15, 23, 42, 0.6)";
+        let cardBorder = "rgba(255,255,255,0.1)";
+        let cardBg = "rgba(15, 23, 42, 0.75)";
+        let titleColor = "#94a3b8";
 
-        if (isBull) {
-            statusText = "🟢 YES (BULLISH)";
+        if (isBuy) {
+            statusText = "🟢 YES (BUY)";
             statusBadgeClass = "badge-win";
-            cardBorder = "rgba(16, 185, 129, 0.4)";
-            cardBg = "rgba(16, 185, 129, 0.08)";
-        } else if (isBear) {
-            statusText = "🔴 YES (BEARISH)";
+            cardBorder = "rgba(16, 185, 129, 0.6)";
+            cardBg = "rgba(16, 185, 129, 0.12)";
+            titleColor = "#ffffff";
+        } else if (isSell) {
+            statusText = "🔴 YES (SELL)";
             statusBadgeClass = "badge-loss";
-            cardBorder = "rgba(239, 68, 68, 0.4)";
-            cardBg = "rgba(239, 68, 68, 0.08)";
+            cardBorder = "rgba(239, 68, 68, 0.6)";
+            cardBg = "rgba(239, 68, 68, 0.12)";
+            titleColor = "#ffffff";
+        } else {
+            statusText = "⚪ NO VOTE";
+            statusBadgeClass = "badge-info";
+            cardBorder = "rgba(255,255,255,0.08)";
+            cardBg = "rgba(15, 23, 42, 0.6)";
+            titleColor = "#94a3b8";
         }
 
         return `
-            <div style="background: ${cardBg}; border: 1px solid ${cardBorder}; padding: 1rem; border-radius: 10px; transition: all 0.2s ease;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                    <strong style="font-size: 0.9rem; color: #fff;">#${eng.id} ${eng.name}</strong>
-                    <span class="badge ${statusBadgeClass}" style="font-size: 0.7rem;">${statusText}</span>
+            <div style="background: ${cardBg}; border: 1px solid ${cardBorder}; padding: 0.85rem 1rem; border-radius: 8px; transition: all 0.2s ease;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                    <strong style="font-size: 0.85rem; color: ${titleColor};">Engine ${eng.id} [${eng.name}]</strong>
+                    <span class="badge ${statusBadgeClass}" style="font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.5rem;">${statusText}</span>
                 </div>
-                <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;">${eng.desc}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.3;">${eng.detail || ''}</div>
             </div>
         `;
     }).join('');

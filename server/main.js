@@ -730,6 +730,9 @@ setInterval(async () => {
             }
             const lastIdx = evalCandles.length - 1;
             const signal = evaluateJSONStrategy(evalCandles, lastIdx, stratConfig, data, {});
+            if (signal && signal.subEngineVotes) {
+                liveState.subEngineVotes = signal.subEngineVotes;
+            }
 
             if (signal && signal.type === "BUY") {
                 status = "BUY_SIGNAL";
@@ -1278,6 +1281,7 @@ app.get('/api/live-status', async (req, res) => {
             lastSyncTimestamp: liveState.lastSyncTimestamp || Date.now(),
             isMarketOpen: isIndianMarketOpen(),
             preMarketReadiness: preMarketReadiness,
+            subEngineVotes: liveState.subEngineVotes || [],
             lastSystemError: systemLogger.getErrorLogs(1)[0] || null,
             recentSystemErrors: systemLogger.getErrorLogs(5)
         });

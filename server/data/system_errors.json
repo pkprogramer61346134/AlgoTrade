@@ -1,15 +1,1 @@
-[
-  {
-    "id": "ERR_1790015240427_82",
-    "timestamp": "21/9/2026, 23:57:20.407 IST",
-    "date": "2026-09-21",
-    "time": "23:57:20",
-    "level": "ERROR",
-    "module": "SYSTEM_TEST",
-    "message": "Test Error Logging Verification",
-    "metadata": {
-      "testId": 101
-    },
-    "stack": []
-  }
-]
+[]
