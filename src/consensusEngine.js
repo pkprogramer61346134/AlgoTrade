@@ -221,6 +221,7 @@ function evaluateConsensusEngine(candles, i, strategyConfig, data, dailyTradeCou
 
     const minConsensusVotes = strategyConfig.consensusThreshold || 6; // Default 6 out of 10 Majority Vote for optimal trade frequency
     let signalType = "NONE";
+    const totalVotes = Math.max(buyVotes, sellVotes);
 
     if (buyVotes >= minConsensusVotes && buyVotes > sellVotes) {
         signalType = "BUY";
