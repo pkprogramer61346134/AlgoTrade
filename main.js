@@ -60,9 +60,15 @@ async function orchestrateMultiTerminalSystem() {
     await new Promise((r) => setTimeout(r, 1500));
 
     // ---------------------------------------------------------------------------------
-    // STEP 4: PAPER ORDER MANAGER
+    // STEP 4A: PAPER ORDER MANAGER
     // ---------------------------------------------------------------------------------
-    openTerminalWindow('📝 4. Paper Order Manager', 'papermanager/paperOrderManager.js');
+    openTerminalWindow('📝 4A. Paper Order Manager', 'papermanager/paperOrderManager.js');
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // ---------------------------------------------------------------------------------
+    // STEP 4B: REAL MONEY ORDER MANAGER (DHAN API)
+    // ---------------------------------------------------------------------------------
+    openTerminalWindow('🔴 4B. Real Money Manager', 'ordermanager/smartOrderManager.js');
     await new Promise((r) => setTimeout(r, 1000));
 
     // ---------------------------------------------------------------------------------

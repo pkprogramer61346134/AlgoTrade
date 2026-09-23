@@ -677,6 +677,7 @@ class ConsensusEngineService {
         this.connected = false;
         this.clientId = 'consensusEngine';
         this.wsUrl = 'ws://localhost:8080';
+        this.activeRoutingMode = 'BOTH'; // DEFAULT: BOTH (Paper Trading + Real Dhan Order Manager)
     }
 
     connect(wsUrl = 'ws://localhost:8080', clientId = 'consensusEngine') {
@@ -767,9 +768,15 @@ class ConsensusEngineService {
             });
 
             const payload = message.payload;
+            if (payload && payload.action === 'SET_ROUTING_MODE') {
+                this.activeRoutingMode = (payload.mode || 'BOTH').toUpperCase();
+                console.log(`🔀 [CONSENSUS ROUTING MODE UPDATED] Active mode changed to: "${this.activeRoutingMode}"`);
+            }
+
             if (payload && (payload.action === 'EVALUATE_SIGNAL' || payload.action === 'EVALUATE_CONSENSUS')) {
-                const { candles, index = -1, mode = 'PAPER', targetRecipient = null } = payload;
-                console.log(`🧠 [CONSENSUS ENGINE WS] Received signal request from "${message.senderId}" (Mode: ${mode})...`);
+                const { candles, index = -1, mode = null, targetRecipient = null } = payload;
+                const effectiveMode = (mode || this.activeRoutingMode || 'BOTH').toUpperCase();
+                console.log(`🧠 [CONSENSUS ENGINE WS] Received signal request from "${message.senderId}" (Mode: ${effectiveMode})...`);
 
                 const singleSignal = await evaluateSingleConsensusSignalAsync(candles, index);
 
@@ -784,22 +791,9 @@ class ConsensusEngineService {
                     }
                 });
 
-                // 2. Route Signal to Order Managers based on execution mode (DEFAULT: PAPER)
-                const effectiveMode = (mode || 'PAPER').toUpperCase();
-                
+                // 2. Route Signal to Order Managers based on execution mode (DEFAULT: BOTH)
                 if (singleSignal.consensus && singleSignal.consensus !== 'NO_SIGNAL') {
-                    if (effectiveMode === 'REAL' || targetRecipient === 'orderManager') {
-                        console.log(`🚀 [CONSENSUS ROUTING] Forwarding Real Trading Signal to "orderManager"...`);
-                        this.sendRaw({
-                            type: 'SEND_MESSAGE',
-                            recipientId: 'orderManager',
-                            payload: {
-                                action: 'CONSENSUS_SIGNAL_RESPONSE',
-                                mode: 'REAL',
-                                singleSignal
-                            }
-                        });
-                    } else if (effectiveMode === 'BOTH') {
+                    if (effectiveMode === 'BOTH' || (effectiveMode !== 'REAL' && effectiveMode !== 'PAPER')) {
                         console.log(`🚀 [CONSENSUS ROUTING] Forwarding Dual Signals to "paperOrderManager" AND "orderManager"...`);
                         this.sendRaw({
                             type: 'SEND_MESSAGE',
@@ -811,9 +805,20 @@ class ConsensusEngineService {
                             recipientId: 'orderManager',
                             payload: { action: 'CONSENSUS_SIGNAL_RESPONSE', mode: 'REAL', singleSignal }
                         });
+                    } else if (effectiveMode === 'REAL' || targetRecipient === 'orderManager') {
+                        console.log(`🚀 [CONSENSUS ROUTING] Forwarding Real Trading Signal to "orderManager"...`);
+                        this.sendRaw({
+                            type: 'SEND_MESSAGE',
+                            recipientId: 'orderManager',
+                            payload: {
+                                action: 'CONSENSUS_SIGNAL_RESPONSE',
+                                mode: 'REAL',
+                                singleSignal
+                            }
+                        });
                     } else {
-                        // DEFAULT: PAPER TRADING ("paperOrderManager")
-                        console.log(`📝 [CONSENSUS ROUTING (DEFAULT)] Forwarding Signal to Paper Trading Manager ("paperOrderManager")...`);
+                        // PAPER TRADING ("paperOrderManager")
+                        console.log(`📝 [CONSENSUS ROUTING] Forwarding Signal to Paper Trading Manager ("paperOrderManager")...`);
                         this.sendRaw({
                             type: 'SEND_MESSAGE',
                             recipientId: 'paperOrderManager',

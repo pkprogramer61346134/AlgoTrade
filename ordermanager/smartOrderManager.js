@@ -1,6 +1,10 @@
+const fs = require('fs');
+const path = require('path');
 const { WebSocket } = require('ws');
 const AlgoTradeWSClient = require('../server/wsClient');
 const DhanOptionStrikeFetcher = require('../dhanAPI/optionStrikeFetcher');
+
+const JOURNAL_PATH = path.join(__dirname, '../server/data/trade_journal.json');
 
 // Dhan SDK fallback import
 let DhanSDK;
@@ -52,6 +56,44 @@ class SmartOrderManager {
         
         // Auto-cut timer at 3:15 PM
         this.autoCutTimer = null;
+        this.loadJournal();
+    }
+
+    /**
+     * Loads saved trade journal & balance from server/data/trade_journal.json
+     */
+    loadJournal() {
+        try {
+            if (fs.existsSync(JOURNAL_PATH)) {
+                const data = JSON.parse(fs.readFileSync(JOURNAL_PATH, 'utf-8'));
+                this.accountBalance = Number(data.accountBalance) || 50000.0;
+                this.todaySummary = data.todaySummary || this.todaySummary;
+                this.tradeHistory = data.tradeHistory || [];
+                console.log(`📖 [SMART ORDER MANAGER] Loaded Trade Journal. Account Balance: ₹${this.accountBalance}`);
+            }
+        } catch (e) {
+            console.warn(`⚠️ [SMART ORDER MANAGER] Could not load trade journal: ${e.message}`);
+        }
+    }
+
+    /**
+     * Saves trade journal to server/data/trade_journal.json
+     */
+    saveJournal() {
+        try {
+            const data = {
+                accountBalance: this.accountBalance,
+                todaySummary: this.todaySummary,
+                tradeHistory: this.tradeHistory,
+                lastUpdated: new Date().toISOString()
+            };
+            const dir = path.dirname(JOURNAL_PATH);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(JOURNAL_PATH, JSON.stringify(data, null, 2), 'utf-8');
+            console.log(`💾 [SMART ORDER MANAGER] Trade Journal saved to ${JOURNAL_PATH}`);
+        } catch (e) {
+            console.error(`❌ [SMART ORDER MANAGER] Failed to save trade journal: ${e.message}`);
+        }
     }
 
     async init() {
@@ -328,6 +370,7 @@ class SmartOrderManager {
         };
 
         this.tradeHistory.push(closedRecord);
+        this.saveJournal();
 
         console.log(`===========================================================`);
         console.log(`🏁 [SMART ORDER MANAGER POSITION CLOSED]`);
