@@ -63,6 +63,10 @@ class SmartOrderManager {
 
         // Listen for Consensus Signals & Messages
         this.wsClient.onMessage((msg) => {
+            if (msg.type === 'LIVE_NIFTY_TICK' && msg.ltp) {
+                this.onSpotPriceTick(msg.ltp);
+            }
+
             if (msg.type === 'FORWARD_MESSAGE') {
                 const payload = msg.payload;
 
@@ -74,6 +78,11 @@ class SmartOrderManager {
                 // 2. Live Option Tick Update Event
                 if (payload && payload.action === 'LIVE_OPTION_TICK') {
                     this.onOptionPriceTick(payload.ltp);
+                }
+
+                // 3. Live Spot Price Update Event
+                if (payload && (payload.currentLtp || payload.spotPrice)) {
+                    this.onSpotPriceTick(payload.currentLtp || payload.spotPrice);
                 }
             }
         });
@@ -155,9 +164,10 @@ class SmartOrderManager {
             return;
         }
 
-        // Calculate Option Premium SL (15 Premium Points Risk)
+        // Calculate Option Premium SL & Target Profit (15 Premium Points Risk, 1:2.2 RR Target)
         const riskPoints = 15.0; // 15 points risk (1R = ₹15)
         const initialSL = Number((entryPremium - riskPoints).toFixed(2));
+        const targetProfit = Number((entryPremium + (riskPoints * 2.2)).toFixed(2));
 
         // Create Active Position State
         this.activePosition = {
@@ -166,10 +176,12 @@ class SmartOrderManager {
             optionType,
             strikePrice,
             qty,
+            entrySpot: spotPrice,
             entryPrice: entryPremium,
             currentLtp: entryPremium,
             initialSL,
             currentTrailingSL: initialSL,
+            targetProfit,
             highestPriceSeen: entryPremium,
             riskPoints,
             currentMilestoneIndex: -1, // No milestone reached yet
@@ -188,6 +200,20 @@ class SmartOrderManager {
         console.log(`   - Initial SL: ₹${initialSL} (Risk = ₹${riskPoints} / Lot)`);
 
         this.broadcastTelemetry("POSITION_OPENED", this.activePosition);
+    }
+
+    /**
+     * Handles spot price ticks and estimates live Option LTP based on Delta (~0.55)
+     */
+    onSpotPriceTick(spotPrice) {
+        if (!this.isOrderActive || !this.activePosition || !spotPrice) return;
+        const pos = this.activePosition;
+        const entrySpot = pos.entrySpot || spotPrice;
+        const spotDelta = spotPrice - entrySpot;
+        const optionDelta = pos.optionType === 'CE' ? 0.55 : -0.55;
+        const estimatedLtp = Number((pos.entryPrice + (spotDelta * optionDelta)).toFixed(2));
+        const finalLtp = Math.max(1.0, estimatedLtp);
+        this.onOptionPriceTick(finalLtp);
     }
 
     /**
@@ -316,11 +342,16 @@ class SmartOrderManager {
                 qty: this.activePosition.qty,
                 entryPrice: this.activePosition.entryPrice,
                 currentLtp: this.activePosition.currentLtp,
+                initialSL: this.activePosition.initialSL,
+                targetProfit: this.activePosition.targetProfit,
                 unrealizedPnl: this.activePosition.unrealizedPnl,
                 highestPriceSeen: this.activePosition.highestPriceSeen,
                 trailingSL: this.activePosition.currentTrailingSL,
                 ratioText: this.activePosition.currentRatioText
             } : null,
+            todaySummary: this.todaySummary,
+            eventData: data
+        };
             todaySummary: this.todaySummary,
             eventData: data
         };
