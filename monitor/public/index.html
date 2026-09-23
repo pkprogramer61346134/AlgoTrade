@@ -46,12 +46,12 @@
     <div class="mode-switcher-bar">
         <div class="mode-label">
             <span>🎮 SIGNAL ROUTING MODE:</span>
-            <span id="currentRoutingMode" class="pill-green">PAPER TRADING</span>
+            <span id="currentRoutingMode" style="background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; color: #a78bfa;">BOTH (PAPER + REAL)</span>
         </div>
         <div class="mode-btn-group">
-            <button class="mode-btn active-paper" onclick="setRoutingMode('PAPER')">📝 Paper Mode</button>
-            <button class="mode-btn" onclick="setRoutingMode('REAL')">🔴 Real Dhan Mode</button>
-            <button class="mode-btn" onclick="setRoutingMode('BOTH')">🔄 Both (Paper + Real)</button>
+            <button id="btnModePaper" class="mode-btn" onclick="setRoutingMode('PAPER')">📝 Paper Mode</button>
+            <button id="btnModeReal" class="mode-btn" onclick="setRoutingMode('REAL')">🔴 Real Dhan Mode</button>
+            <button id="btnModeBoth" class="mode-btn active-both" onclick="setRoutingMode('BOTH')">🔄 Both (Paper + Real)</button>
         </div>
     </div>
 
@@ -430,6 +430,10 @@
             // 0.5. BACKEND CONSENSUS ENGINE LIVE TELEMETRY
             if (msg.type === 'CONSENSUS_UPDATE' || (msg.data && msg.data.type === 'CONSENSUS_UPDATE')) {
                 const payload = msg.type === 'CONSENSUS_UPDATE' ? msg : msg.data;
+                
+                if (payload.routingMode) {
+                    updateRoutingModeUI(payload.routingMode);
+                }
                 
                 // Warmup Candles KPI & Telemetry
                 if (payload.warmupCandleCount) {

@@ -41,18 +41,53 @@ function initWebMonitorSocket(onMessageCallback) {
     };
 }
 
-function setRoutingMode(mode) {
+function updateRoutingModeUI(mode) {
+    const normMode = (mode || 'BOTH').toUpperCase();
+    
+    try {
+        localStorage.setItem('algotrade_routing_mode', normMode);
+    } catch (e) {}
+
     const modeElem = document.getElementById('currentRoutingMode');
     if (modeElem) {
-        modeElem.innerText = mode === 'PAPER' ? 'PAPER TRADING' : (mode === 'REAL' ? 'REAL DHAN MONEY' : 'BOTH (PAPER + REAL)');
+        if (normMode === 'PAPER') {
+            modeElem.innerText = 'PAPER TRADING';
+            modeElem.style.background = 'rgba(16, 185, 129, 0.15)';
+            modeElem.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+            modeElem.style.color = '#34d399';
+        } else if (normMode === 'REAL') {
+            modeElem.innerText = 'REAL DHAN MONEY';
+            modeElem.style.background = 'rgba(239, 68, 68, 0.15)';
+            modeElem.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+            modeElem.style.color = '#f87171';
+        } else {
+            modeElem.innerText = 'BOTH (PAPER + REAL)';
+            modeElem.style.background = 'rgba(139, 92, 246, 0.2)';
+            modeElem.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+            modeElem.style.color = '#a78bfa';
+        }
     }
+
+    const btnPaper = document.getElementById('btnModePaper');
+    const btnReal = document.getElementById('btnModeReal');
+    const btnBoth = document.getElementById('btnModeBoth');
+
+    if (btnPaper) btnPaper.className = `mode-btn ${normMode === 'PAPER' ? 'active-paper' : ''}`;
+    if (btnReal) btnReal.className = `mode-btn ${normMode === 'REAL' ? 'active-real' : ''}`;
+    if (btnBoth) btnBoth.className = `mode-btn ${normMode === 'BOTH' ? 'active-both' : ''}`;
+}
+
+function setRoutingMode(mode) {
+    const normMode = (mode || 'BOTH').toUpperCase();
+    updateRoutingModeUI(normMode);
+
     if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
             type: 'FORWARD_MESSAGE',
             recipientId: 'consensusEngine',
             payload: {
                 action: 'SET_ROUTING_MODE',
-                mode: mode
+                mode: normMode
             }
         }));
     }

@@ -644,6 +644,7 @@ async function evaluateSingleConsensusSignalAsync(candles, i = -1, data = {}) {
             payload: {
                 type: 'CONSENSUS_UPDATE',
                 warmupCandleCount: preparedCandles.length,
+                routingMode: consensusService.activeRoutingMode || 'BOTH',
                 consensus: consolidated.consensus,
                 stratBuyCount: consolidated.stratBuyCount || 0,
                 stratSellCount: consolidated.stratSellCount || 0,
