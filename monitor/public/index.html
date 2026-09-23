@@ -484,12 +484,23 @@
 
                 // Log evaluation event to Live Terminal Console
                 const statesForLog = payload.strategyStates || [];
-                const bLean = statesForLog.filter(s => s.bias === 'BULLISH').length;
-                const rLean = statesForLog.filter(s => s.bias === 'BEARISH').length;
+                const activeSigs = payload.activeSignals || [];
+                const buyVotesCount = activeSigs.filter(s => s.type === 'BUY').length + statesForLog.filter(s => s.triggered && s.type === 'BUY').length;
+                const sellVotesCount = activeSigs.filter(s => s.type === 'SELL').length + statesForLog.filter(s => s.triggered && s.type === 'SELL').length;
+                const bullLeanCount = statesForLog.filter(s => s.bias === 'BULLISH' && !s.triggered).length;
+                const bearLeanCount = statesForLog.filter(s => s.bias === 'BEARISH' && !s.triggered).length;
+
+                let voteStr = '';
+                if (buyVotesCount > 0 || sellVotesCount > 0) {
+                    voteStr = `Votes: <b style="color:#34d399">${buyVotesCount} BUY</b> / <b style="color:#f87171">${sellVotesCount} SELL</b> | Leans: <span style="color:#34d399">${bullLeanCount} Bullish</span> / <span style="color:#f87171">${bearLeanCount} Bearish</span>`;
+                } else {
+                    voteStr = `Leans: <span style="color:#34d399">${bullLeanCount} Bullish</span> / <span style="color:#f87171">${bearLeanCount} Bearish</span>`;
+                }
+
                 if (payload.consensus && payload.consensus !== 'NO_SIGNAL') {
                     appendBackendLog(`🚀 <b style="color:#f59e0b">CONSENSUS TRIGGERED (${payload.consensus}):</b> Strategy ${payload.strategyName || ''} @ Entry ₹${payload.spotPrice}`, '#f59e0b');
                 } else {
-                    appendBackendLog(`🧠 <b>Master Consensus Evaluated:</b> Spot <b>₹${payload.spotPrice || '--'}</b> | Memory: ${payload.warmupCandleCount || 774} Candles | Leans: <span style="color:#34d399">${bLean} Bullish</span> / <span style="color:#f87171">${rLean} Bearish</span>`, '#e2e8f0');
+                    appendBackendLog(`🧠 <b>Master Consensus Evaluated:</b> Spot <b>₹${payload.spotPrice || '--'}</b> | Memory: ${payload.warmupCandleCount || 774} Candles | ${voteStr}`, '#e2e8f0');
                 }
 
                 // Dynamic Strategy Box Highlight & Status Pills
