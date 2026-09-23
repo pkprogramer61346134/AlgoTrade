@@ -682,6 +682,12 @@
                     }
                 }
 
+                if (msg.data.event === 'ORDER_FAILED_FUNDS' && msg.data.eventData) {
+                    const req = msg.data.eventData.requiredMargin ? `₹${msg.data.eventData.requiredMargin.toFixed(2)}` : '₹7,500+';
+                    const avail = msg.data.eventData.availableBalance ? `₹${msg.data.eventData.availableBalance.toFixed(2)}` : '₹750.99';
+                    appendBackendLog(`⚠️ <b style="color:#ef4444">REAL ORDER SKIPPED (INSUFFICIENT FUNDS):</b> Required Margin: <b>${req}</b> | Available Dhan Balance: <b>${avail}</b>`, '#ef4444');
+                }
+
                 if (msg.data.event === 'LIVE_POSITION_CLOSED' && (msg.data.data || msg.data)) {
                     addLiveTradeRow('REAL', msg.data.data || msg.data);
                 }
