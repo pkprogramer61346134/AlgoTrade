@@ -384,25 +384,29 @@
                     consElem.style.color = consensusVal === 'BUY' ? 'var(--bull-green-light)' : (consensusVal === 'SELL' ? 'var(--bear-red-light)' : 'var(--brand-amber)');
                 }
 
-                // Strategy Confluence Votes & Order Trigger Threshold Indicator
+                // Strategy Votes Counter & Confluence Telemetry
                 const votesElem = document.getElementById('telemetryVotes');
                 if (votesElem) {
                     const sBuy = payload.stratBuyCount || 0;
                     const sSell = payload.stratSellCount || 0;
+                    const states = payload.strategyStates || [];
+                    const bullLean = states.filter(s => s.bias === 'BULLISH').length;
+                    const bearLean = states.filter(s => s.bias === 'BEARISH').length;
+
                     if (sBuy >= 2) {
-                        votesElem.innerText = `${sBuy} BUY / ${sSell} SELL (🟢 ORDER TRIGGERED!)`;
+                        votesElem.innerText = `${sBuy} BUY / ${sSell} SELL (🟢 ENTRY SIGNAL TRIGGERED!)`;
                         votesElem.style.color = 'var(--bull-green-light)';
                     } else if (sBuy === 1) {
-                        votesElem.innerText = `1 BUY / ${sSell} SELL (Waiting 1 More Strategy 🎯)`;
+                        votesElem.innerText = `1 BUY Signal / ${bullLean} Bullish Leans (Waiting 1 More Trigger 🎯)`;
                         votesElem.style.color = 'var(--brand-amber)';
                     } else if (sSell >= 2) {
-                        votesElem.innerText = `${sBuy} BUY / ${sSell} SELL (🔴 SELL ORDER TRIGGERED!)`;
+                        votesElem.innerText = `${sBuy} BUY / ${sSell} SELL (🔴 SELL SIGNAL TRIGGERED!)`;
                         votesElem.style.color = 'var(--bear-red-light)';
                     } else if (sSell === 1) {
-                        votesElem.innerText = `${sBuy} BUY / 1 SELL (Waiting 1 More Strategy 🎯)`;
+                        votesElem.innerText = `1 SELL Signal / ${bearLean} Bearish Leans (Waiting 1 More Trigger 🎯)`;
                         votesElem.style.color = 'var(--brand-amber)';
                     } else {
-                        votesElem.innerText = `0 BUY / 0 SELL Strategies (Min 2 Req)`;
+                        votesElem.innerText = `0 Signals Triggered (${bullLean} Bullish / ${bearLean} Bearish Leans)`;
                         votesElem.style.color = '#ffffff';
                     }
                 }
@@ -432,24 +436,51 @@
                     const sig = activeSignals.find(matchStrat);
                     const state = strategyStates.find(matchStrat);
 
-                    const voteType = sig ? sig.type : (state ? state.type : 'NEUTRAL');
+                    let voteType = 'NEUTRAL';
+                    if (sig) {
+                        voteType = sig.type; // 'BUY' or 'SELL'
+                    } else if (state) {
+                        if (state.triggered) {
+                            voteType = state.type;
+                        } else if (state.bias === 'BULLISH') {
+                            voteType = 'BULLISH_BIAS';
+                        } else if (state.bias === 'BEARISH') {
+                            voteType = 'BEARISH_BIAS';
+                        }
+                    }
 
                     if (voteType === 'BUY') {
                         box.style.borderColor = '#10b981';
-                        box.style.background = 'rgba(16, 185, 129, 0.15)';
-                        box.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.6)';
+                        box.style.background = 'rgba(16, 185, 129, 0.2)';
+                        box.style.boxShadow = '0 0 25px rgba(16, 185, 129, 0.7)';
                         pill.innerText = '🟢 BUY VOTE';
                         pill.style.color = '#34d399';
-                        pill.style.background = 'rgba(16, 185, 129, 0.25)';
-                        pill.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+                        pill.style.background = 'rgba(16, 185, 129, 0.3)';
+                        pill.style.border = '1px solid rgba(16, 185, 129, 0.5)';
                     } else if (voteType === 'SELL') {
                         box.style.borderColor = '#ef4444';
-                        box.style.background = 'rgba(239, 68, 68, 0.15)';
-                        box.style.boxShadow = '0 0 20px rgba(239, 68, 68, 0.6)';
+                        box.style.background = 'rgba(239, 68, 68, 0.2)';
+                        box.style.boxShadow = '0 0 25px rgba(239, 68, 68, 0.7)';
                         pill.innerText = '🔴 SELL VOTE';
                         pill.style.color = '#f87171';
-                        pill.style.background = 'rgba(239, 68, 68, 0.25)';
-                        pill.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+                        pill.style.background = 'rgba(239, 68, 68, 0.3)';
+                        pill.style.border = '1px solid rgba(239, 68, 68, 0.5)';
+                    } else if (voteType === 'BULLISH_BIAS') {
+                        box.style.borderColor = 'rgba(52, 211, 153, 0.6)';
+                        box.style.background = 'rgba(16, 185, 129, 0.08)';
+                        box.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.2)';
+                        pill.innerText = '🟢 BULLISH LEAN';
+                        pill.style.color = '#34d399';
+                        pill.style.background = 'rgba(16, 185, 129, 0.15)';
+                        pill.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                    } else if (voteType === 'BEARISH_BIAS') {
+                        box.style.borderColor = 'rgba(248, 113, 113, 0.6)';
+                        box.style.background = 'rgba(239, 68, 68, 0.08)';
+                        box.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.2)';
+                        pill.innerText = '🔴 BEARISH LEAN';
+                        pill.style.color = '#f87171';
+                        pill.style.background = 'rgba(239, 68, 68, 0.15)';
+                        pill.style.border = '1px solid rgba(239, 68, 68, 0.3)';
                     } else {
                         box.style.borderColor = sId === 5 ? 'rgba(139, 92, 246, 0.4)' : (sId === 7 ? 'rgba(59, 130, 246, 0.5)' : (sId === 8 ? 'rgba(245, 158, 11, 0.5)' : (sId === 9 ? 'rgba(236, 72, 153, 0.5)' : 'rgba(16, 185, 129, 0.4)')));
                         box.style.background = 'rgba(17, 24, 39, 0.85)';

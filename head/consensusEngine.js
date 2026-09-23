@@ -197,6 +197,42 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
  * Evaluates all strategies in the config array and returns an ARRAY of active signals:
  * [{ strategyId, strategyName, type, entry, sl, tr, winrate }]
  */
+function getStrategyBias(c, i, candles, strat, computed) {
+    if (!c || !computed) return "NEUTRAL";
+    const spotPrice = c.close;
+    const vwapVal = computed.vwap ? computed.vwap[i] : null;
+    const stObj = computed.supertrend ? computed.supertrend[i] : null;
+    const rsiVal = computed.rsi ? computed.rsi[i] : 50.0;
+    const eFast = computed.emaFast ? computed.emaFast[i] : null;
+    const eSlow = computed.emaSlow ? computed.emaSlow[i] : null;
+
+    const isStBull = stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY");
+    const isStBear = stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL");
+
+    let bullScore = 0;
+    let bearScore = 0;
+
+    if (isStBull) bullScore++;
+    if (isStBear) bearScore++;
+
+    if (vwapVal !== null) {
+        if (spotPrice > vwapVal) bullScore++;
+        else if (spotPrice < vwapVal) bearScore++;
+    }
+
+    if (rsiVal > 52) bullScore++;
+    else if (rsiVal < 48) bearScore++;
+
+    if (eFast !== null && eSlow !== null) {
+        if (eFast > eSlow) bullScore++;
+        else if (eFast < eSlow) bearScore++;
+    }
+
+    if (bullScore > bearScore) return "BULLISH";
+    if (bearScore > bullScore) return "BEARISH";
+    return "NEUTRAL";
+}
+
 function evaluateConsensusEngine(candles, i, data = {}) {
     if (!candles || !Array.isArray(candles) || candles.length === 0 || i < 0 || i >= candles.length) {
         return { triggeredSignals: [], strategyStates: [] };
@@ -214,12 +250,14 @@ function evaluateConsensusEngine(candles, i, data = {}) {
     for (const strat of strategies) {
         if (strat.enabled === false) continue;
         const res = evaluateSingleStrategy(c, i, candles, strat, computed);
+        const bias = getStrategyBias(c, i, candles, strat, computed);
         if (res) {
             triggeredSignals.push(res);
             strategyStates.push({
                 strategyId: strat.id,
                 strategyName: strat.name,
                 type: res.type,
+                bias: res.type,
                 triggered: true,
                 winrate: strat.winrate || "70.0%"
             });
@@ -228,6 +266,7 @@ function evaluateConsensusEngine(candles, i, data = {}) {
                 strategyId: strat.id,
                 strategyName: strat.name,
                 type: "NEUTRAL",
+                bias: bias,
                 triggered: false,
                 winrate: strat.winrate || "70.0%"
             });
