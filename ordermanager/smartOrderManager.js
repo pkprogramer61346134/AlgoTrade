@@ -146,25 +146,29 @@ class SmartOrderManager {
     }
 
     /**
-     * Refreshes real account funds from Dhan API (if credentials present)
+     * Refreshes real account funds from Dhan API (No fake/dummy fallback funds)
      */
     async refreshAccountBalance() {
         if (this.dhan && typeof this.dhan.funds?.getFundLimits === 'function') {
             try {
                 const fundRes = await this.dhan.funds.getFundLimits();
                 if (fundRes && fundRes.status === 'success' && fundRes.data) {
-                    const realBal = Number(fundRes.data.availabelBalance) || 0;
-                    // If real balance is present and >= 5000, use it; otherwise fallback to virtual 50k balance for simulation
-                    this.accountBalance = realBal >= 5000 ? realBal : 50000.0;
-                    this.marginUsed = Number(fundRes.data.marginUsed) || 0.0;
-                    console.log(`💰 [SMART ORDER MANAGER] Account Balance: ₹${this.accountBalance} (Real Dhan: ₹${realBal})`);
+                    const realBal = Number(fundRes.data.availabelBalance || fundRes.data.availableBalance || 0);
+                    this.accountBalance = realBal;
+                    this.marginUsed = Number(fundRes.data.utilizedAmount || fundRes.data.marginUsed || 0.0);
+                    console.log(`💰 [SMART ORDER MANAGER] Real Dhan Account Balance: ₹${this.accountBalance}`);
+                    this.broadcastTelemetry("REAL_BALANCE_REFRESHED", null);
                     return;
+                } else {
+                    console.warn(`⚠️ [SMART ORDER MANAGER] Dhan Funds API warning:`, fundRes);
                 }
             } catch (e) {
                 console.warn(`⚠️ [SMART ORDER MANAGER] Fund refresh notice: ${e.message}`);
             }
         }
-        this.accountBalance = 50000.0;
+        // If API fails or credentials invalid, set balance to 0.0 (NO fake 50k fallbacks)
+        this.accountBalance = 0.0;
+        this.broadcastTelemetry("REAL_BALANCE_REFRESHED", null);
     }
 
     /**
