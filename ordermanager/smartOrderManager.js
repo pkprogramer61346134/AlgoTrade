@@ -164,6 +164,7 @@ class SmartOrderManager {
                     }
                     this.marginUsed = Number(fundRes.data.utilizedAmount || fundRes.data.marginUsed || 0.0);
                     console.log(`💰 [SMART ORDER MANAGER] Real Dhan Account Balance: ₹${this.accountBalance}`);
+                    await this.syncDhanLivePosition();
                     this.broadcastTelemetry("REAL_BALANCE_REFRESHED", null);
                     return;
                 } else {
@@ -306,6 +307,58 @@ class SmartOrderManager {
     }
 
     /**
+     * Direct Dhan API Positions Sync: Queries GET /positions directly from Dhan servers.
+     * Uses Dhan server pre-calculated unrealizedProfit, official buyAvg, and open netQty.
+     */
+    async syncDhanLivePosition() {
+        if (!this.dhan || typeof this.dhan.portfolio?.getPositions !== 'function') return null;
+
+        try {
+            const posRes = await this.dhan.portfolio.getPositions();
+            const posList = Array.isArray(posRes?.data) ? posRes.data : (Array.isArray(posRes) ? posRes : []);
+
+            if (!this.activePosition || !this.isOrderActive) return posList;
+
+            const secIdStr = String(this.activePosition.securityId);
+            const liveMatch = posList.find(p => String(p.securityId) === secIdStr || p.tradingSymbol === this.activePosition.symbol);
+
+            if (liveMatch) {
+                // Check if position was closed manually on Dhan App/Web Terminal
+                const netQty = Number(liveMatch.netQty || liveMatch.positionQty || 0);
+                if (netQty === 0 && this.isOrderActive) {
+                    console.log(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} closed externally on Dhan App/Terminal. Auto-closing in bot state.`);
+                    const exitPrice = Number(liveMatch.sellAvg || liveMatch.costPrice || this.activePosition.currentLtp);
+                    const netPnl = Number(liveMatch.realizedProfit || liveMatch.rnlProfit || 0.0);
+                    this.activePosition.currentLtp = exitPrice;
+                    this.closePosition("EXTERNALLY_CLOSED_DHAN_APP");
+                    return posList;
+                }
+
+                // Official Dhan Server Pre-Calculated Live PnL & Buy Avg
+                const serverUnrealizedPnl = Number(liveMatch.unrealizedProfit || liveMatch.unrealizedPnl || 0.0);
+                const officialBuyAvg = Number(liveMatch.buyAvg || liveMatch.costPrice || 0);
+
+                if (officialBuyAvg > 0) {
+                    this.activePosition.entryPrice = officialBuyAvg;
+                }
+                this.activePosition.unrealizedPnl = serverUnrealizedPnl;
+                
+                // Deriving current LTP from server unrealized profit
+                if (this.activePosition.qty > 0) {
+                    const derivedLtp = Number((this.activePosition.entryPrice + (serverUnrealizedPnl / this.activePosition.qty)).toFixed(2));
+                    if (derivedLtp > 0) {
+                        this.activePosition.currentLtp = derivedLtp;
+                    }
+                }
+            }
+            return posList;
+        } catch (err) {
+            console.warn(`⚠️ [SMART ORDER MANAGER DHAN SYNC NOTICE] ${err.message}`);
+            return null;
+        }
+    }
+
+    /**
      * Handles spot price ticks with ZERO latency (0ms delay) for ultra-fast PnL and Trailing SL updates
      */
     onSpotPriceTick(spotPrice) {
@@ -322,16 +375,9 @@ class SmartOrderManager {
         // Immediately evaluate SL/TP & broadcast telemetry (0ms latency!)
         this.onOptionPriceTick(finalLtp);
 
-        // 2. Non-blocking asynchronous anchor sync with Dhan API Option Chain
-        this.strikeFetcher.fetchLiveOptionLtp(pos.strikePrice, pos.optionType, pos.securityId)
-            .then(realLtp => {
-                if (realLtp && realLtp > 0 && this.isOrderActive && this.activePosition) {
-                    this.onOptionPriceTick(realLtp);
-                }
-            })
-            .catch(() => {
-                // Soft fallback to spot delta price if Dhan API is throttled
-            });
+        // 2. Non-blocking asynchronous anchor sync with Dhan API GET /positions directly from Dhan Servers
+        this.syncDhanLivePosition()
+            .catch(() => {});
     }
 
     /**
