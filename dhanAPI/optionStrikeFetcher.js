@@ -50,8 +50,9 @@ class DhanOptionStrikeFetcher {
     }
 
     /**
-     * Resolves the ITM or Budget-Friendly Strike Price, Security ID, and Real Live Dhan LTP for Nifty Spot Price
-     * If maxBudget is passed, auto-selects a strike where requiredMargin (LTP * 50) <= maxBudget
+     * Resolves the exact ATM (At-The-Money) Strike Price, Security ID, and Real Live Dhan LTP for Nifty Spot Price.
+     * Strictly matches live market ATM strike (nearest 50-point rounded strike to Nifty Spot).
+     * NO cheap OTM budget fallbacks!
      */
     async resolveOptionStrike(spotPrice, optionType, maxBudget = null) {
         if (!spotPrice || spotPrice <= 0) {
@@ -59,62 +60,36 @@ class DhanOptionStrikeFetcher {
         }
 
         const optType = optionType.toUpperCase(); // 'CE' or 'PE'
-        const defaultStrikePrice = optType === 'CE' ? Math.floor(spotPrice / 50) * 50 : Math.ceil(spotPrice / 50) * 50;
+
+        // Strictly calculate nearest ATM Strike (e.g. Spot 23419.1 -> 23400, Spot 23428 -> 23450)
+        const chosenStrike = Math.round(spotPrice / 50) * 50;
 
         const { ocMap, expiry } = await this.fetchOptionChain();
 
-        let chosenStrike = defaultStrikePrice;
-        let targetKey = Object.keys(ocMap).find(k => Math.abs(parseFloat(k) - defaultStrikePrice) < 0.1);
-
-        const qty = 65; // 1 Lot Nifty = 65 Qty (NSE Lot Size)
-        if (maxBudget && maxBudget > 0) {
-            const maxAllowedPremium = maxBudget / qty;
-            
-            // Check if default strike exceeds budget
-            let defaultLtp = 0;
-            if (targetKey && ocMap[targetKey]) {
-                const defaultObj = optType === 'CE' ? ocMap[targetKey].ce : ocMap[targetKey].pe;
-                defaultLtp = Number(defaultObj?.last_price || defaultObj?.top_bid_price || 0);
-            }
-
-            if (defaultLtp <= 0 || defaultLtp > maxAllowedPremium) {
-                // Find all keys in ocMap with valid prices and sort by proximity to spotPrice
-                const availableStrikes = Object.keys(ocMap)
-                    .map(k => ({ key: k, strike: parseFloat(k) }))
-                    .filter(item => !isNaN(item.strike))
-                    .sort((a, b) => optType === 'CE' ? (a.strike - b.strike) : (b.strike - a.strike));
-
-                for (const item of availableStrikes) {
-                    const sObj = ocMap[item.key];
-                    if (!sObj) continue;
-                    const side = optType === 'CE' ? sObj.ce : sObj.pe;
-                    if (!side || !side.security_id) continue;
-                    const ltp = Number(side.last_price || side.top_bid_price || 0);
-
-                    if (ltp > 0 && ltp <= maxAllowedPremium) {
-                        targetKey = item.key;
-                        chosenStrike = item.strike;
-                        console.log(`💡 [DHAN STRIKE FETCHER] Auto-selected budget strike ${chosenStrike} ${optType} @ ₹${ltp} (Margin ₹${(ltp * qty).toFixed(2)} <= Available ₹${maxBudget})`);
-                        break;
-                    }
-                }
-            }
-        }
+        const targetKey = Object.keys(ocMap).find(k => Math.abs(parseFloat(k) - chosenStrike) < 0.1);
 
         if (!targetKey || !ocMap[targetKey]) {
-            throw new Error(`[DHAN OPTION ERROR] Strike ${chosenStrike} not found in Dhan Option Chain matrix`);
+            throw new Error(`[DHAN OPTION ERROR] Real Market ATM Strike ${chosenStrike} ${optType} not found in Dhan Option Chain matrix`);
         }
 
         const strikeObj = ocMap[targetKey];
         const sideObj = optType === 'CE' ? strikeObj.ce : strikeObj.pe;
 
         if (!sideObj || !sideObj.security_id) {
-            throw new Error(`[DHAN OPTION ERROR] Contract details missing for ${chosenStrike} ${optType} in Dhan Option Chain`);
+            throw new Error(`[DHAN OPTION ERROR] Contract details missing for ATM Strike ${chosenStrike} ${optType} in Dhan Option Chain`);
         }
 
         const liveLtp = Number(sideObj.last_price || sideObj.top_bid_price || sideObj.previous_close_price || 0);
         if (liveLtp <= 0) {
-            throw new Error(`[DHAN OPTION ERROR] Received zero or invalid live price (₹${liveLtp}) for ${chosenStrike} ${optType} from Dhan API`);
+            throw new Error(`[DHAN OPTION ERROR] Received zero or invalid live price (₹${liveLtp}) for ATM Strike ${chosenStrike} ${optType} from Dhan API`);
+        }
+
+        const qty = 65; // 1 Lot Nifty = 65 Qty
+        const requiredMargin = liveLtp * qty;
+
+        // If maxBudget is specified and available balance cannot afford 1 Lot (65 Qty) of the real ATM strike:
+        if (maxBudget && maxBudget > 0 && requiredMargin > maxBudget) {
+            throw new Error(`[DHAN OPTION ERROR] Insufficient Funds for Real Market ATM Strike NIFTY_${chosenStrike}_${optType} @ ₹${liveLtp}. Required Margin for 1 Lot (65 Qty): ₹${requiredMargin.toFixed(2)}, Available Balance: ₹${maxBudget.toFixed(2)}. Please add funds.`);
         }
 
         return {
