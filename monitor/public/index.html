@@ -314,8 +314,8 @@
                 <div id="telemetryWarmup" style="font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: var(--bull-green-light); margin-top: 4px;">761 Candles Loaded ⚡</div>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 14px; border-radius: 10px;">
-                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">SUB-ENGINE VOTES</div>
-                <div id="telemetryVotes" style="font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: #ffffff; margin-top: 4px;">0 BUY / 0 SELL (Confluence 2 Required)</div>
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">STRATEGY CONFLUENCE VOTES</div>
+                <div id="telemetryVotes" style="font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: #ffffff; margin-top: 4px;">0 BUY / 0 SELL (Min 2 Req)</div>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 14px; border-radius: 10px;">
                 <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">LAST BACKEND EVALUATION</div>
@@ -384,10 +384,12 @@
                     consElem.style.color = consensusVal === 'BUY' ? 'var(--bull-green-light)' : (consensusVal === 'SELL' ? 'var(--bear-red-light)' : 'var(--brand-amber)');
                 }
 
-                // Sub-Engine Votes
+                // Strategy Confluence Votes
                 const votesElem = document.getElementById('telemetryVotes');
                 if (votesElem) {
-                    votesElem.innerText = `${payload.buyVotes || 0} BUY / ${payload.sellVotes || 0} SELL (Confluence 2 Req)`;
+                    const sBuy = payload.stratBuyCount || 0;
+                    const sSell = payload.stratSellCount || 0;
+                    votesElem.innerText = `${sBuy} BUY / ${sSell} SELL Strategies (Min 2 Req)`;
                 }
 
                 // Evaluation Timestamp

@@ -519,6 +519,8 @@ function consolidateSignals(signals) {
         sl: chosenSignal ? chosenSignal.sl : null,
         tr: chosenSignal ? chosenSignal.tr : null,
         triggeredCount: signals.length,
+        stratBuyCount: buyCount,
+        stratSellCount: sellCount,
         allSignals: signals,
         timestamp: Date.now()
     };
@@ -579,6 +581,8 @@ async function evaluateSingleConsensusSignalAsync(candles, i = -1, data = {}) {
                 type: 'CONSENSUS_UPDATE',
                 warmupCandleCount: preparedCandles.length,
                 consensus: consolidated.consensus,
+                stratBuyCount: consolidated.stratBuyCount || 0,
+                stratSellCount: consolidated.stratSellCount || 0,
                 buyVotes: subEval.buyVotes,
                 sellVotes: subEval.sellVotes,
                 subEngineVotes: subEval.subEngineVotes,
