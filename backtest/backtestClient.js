@@ -202,10 +202,11 @@ class BacktestClient {
         const strikePrice = Math.round(spotPrice / 50) * 50;
         const symbol = `NIFTY_${strikePrice}_${optionType}`;
 
-        const basePremium = 120.0;
+        // Dynamic ATM Option Premium Estimation (~0.55% of spot price)
+        const basePremium = Number((spotPrice * 0.0055).toFixed(2));
         const entryPremium = Number((basePremium + this.slippagePoints).toFixed(2));
         const lotCount = this.selectedLots || 1;
-        const qty = 50 * lotCount; // Lot Size (50 Qty per Lot)
+        const qty = 65 * lotCount; // 1 Lot Nifty = 65 Qty (NSE Official Lot Size)
         const requiredMargin = entryPremium * qty;
 
         if (this.virtualBalance < requiredMargin) {
@@ -213,7 +214,7 @@ class BacktestClient {
             return;
         }
 
-        const riskPoints = 12.0;
+        const riskPoints = 15.0;
         const rrRatio = (signal && signal.riskRewardRatio) ? signal.riskRewardRatio : 2.2;
         const initialSL = Number((entryPremium - riskPoints).toFixed(2));
         const targetProfit = Number((entryPremium + (riskPoints * rrRatio)).toFixed(2));

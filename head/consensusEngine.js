@@ -162,7 +162,7 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
                 if (r.target === "tripleEMA" && r.condition === "bearishStack" && (e10 === null || eFast === null || eSlow === null || e10 >= eFast || eFast >= eSlow)) sellMatch = false;
                 if (r.target === "priceAction" && r.condition === "upperWickRejection" && !isUpperWickRej) sellMatch = false;
                 if (r.target === "macd" && r.condition === "bearishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd >= macdObj.signal)) sellMatch = false;
-                if (r.target === "donchian" && r.condition === "lowerBreak" && (!donchianObj || donchianObj.lower === null || spotPrice >= donchianObj.lower)) buyMatch = false;
+                if (r.target === "donchian" && r.condition === "lowerBreak" && (!donchianObj || donchianObj.lower === null || spotPrice >= donchianObj.lower)) sellMatch = false;
                 if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (atrVal * atrMult)) sellMatch = false;
                 if (r.target === "prevDay" && r.condition === "belowPDL" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellMatch = false;
                 if (r.target === "bollinger" && r.condition === "lowerBandBreak" && (!bbObj || !bbObj.lower || spotPrice >= bbObj.lower)) sellMatch = false;
@@ -245,7 +245,7 @@ function evaluateConsensusEngine(candles, i, data = {}) {
     const strategies = config.strategies || [config]; // Array of multi-strategies
 
     const c = candles[i];
-    const computed = (data.vwap && data.supertrend) ? data : computeIndicators(candles, {});
+    const computed = (data && data.vwap && Array.isArray(data.vwap) && data.vwap.length === candles.length) ? data : computeIndicators(candles, {});
 
     const triggeredSignals = [];
     const strategyStates = [];
@@ -303,9 +303,10 @@ async function ensureWarmupCandlesOverWS(candles, warmupCount = 200) {
     // 1. Attempt WebSocket fetch from candleDataHub over WS protocol
     if (consensusService && consensusService.connected) {
         try {
-            const sDateObj = new Date(firstCandleDate);
+            const sDateStr = firstCandleDate.includes('T') ? firstCandleDate : `${firstCandleDate}T00:00:00+05:30`;
+            const sDateObj = new Date(sDateStr);
             const priorDateObj = new Date(sDateObj.getTime() - 15 * 24 * 60 * 60 * 1000);
-            const priorStartStr = priorDateObj.toISOString().split('T')[0];
+            const priorStartStr = priorDateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             // Include firstCandleDate so morning session candles (09:15 AM to current time) are also fetched if server starts late
             const targetEndStr = firstCandleDate;
 
@@ -316,6 +317,7 @@ async function ensureWarmupCandlesOverWS(candles, warmupCount = 200) {
                 const existingTimestamps = new Set(candles.map(c => c.timestamp || `${c.date}_${c.time}`));
                 const filteredPrior = priorCandles.filter(c => !existingTimestamps.has(c.timestamp || `${c.date}_${c.time}`));
                 const merged = [...filteredPrior, ...candles];
+                merged.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
                 console.log(`✅ [CONSENSUS WARMUP WS] Received & prepended ${filteredPrior.length} warmup & morning candles over WebSocket! Total candles now: ${merged.length}`);
                 return merged;
             }
@@ -331,6 +333,7 @@ async function ensureWarmupCandlesOverWS(candles, warmupCount = 200) {
             const existingTimestamps = new Set(candles.map(c => c.timestamp || `${c.date}_${c.time}`));
             const filteredPrior = priorWarmup.filter(c => !existingTimestamps.has(c.timestamp || `${c.date}_${c.time}`));
             const merged = [...filteredPrior, ...candles];
+            merged.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
             console.log(`✅ [CONSENSUS WARMUP] Successfully prepended ${filteredPrior.length} prior warmup candles from disk! Total candles now: ${merged.length}`);
             return merged;
         }
@@ -349,7 +352,9 @@ function ensureWarmupCandles(candles, warmupCount = 200) {
         if (priorWarmup && priorWarmup.length > 0) {
             const existingTimestamps = new Set(candles.map(c => c.timestamp || `${c.date}_${c.time}`));
             const filteredPrior = priorWarmup.filter(c => !existingTimestamps.has(c.timestamp || `${c.date}_${c.time}`));
-            return [...filteredPrior, ...candles];
+            const merged = [...filteredPrior, ...candles];
+            merged.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+            return merged;
         }
     }
     return candles;
@@ -360,7 +365,7 @@ function evaluate10SubEngines(candles, i, data = {}) {
     if (!c) return { buyVotes: 0, sellVotes: 0, subEngineVotes: [], activeVoteLogs: [], reasoningLog: '' };
     const prevC = i > 0 ? candles[i - 1] : null;
 
-    const computed = (data.vwap && data.supertrend) ? data : computeIndicators(candles, {});
+    const computed = (data && data.vwap && Array.isArray(data.vwap) && data.vwap.length === candles.length) ? data : computeIndicators(candles, {});
 
     const rvolVal = (computed.rvol && computed.rvol[i] !== null && computed.rvol[i] !== undefined) ? Number(computed.rvol[i]) : 1.0;
     const rsiVal = (computed.rsi && computed.rsi[i] !== null && computed.rsi[i] !== undefined) ? Number(computed.rsi[i]) : 50.0;
@@ -726,6 +731,9 @@ class ConsensusEngineService {
 
             const timeout = setTimeout(() => {
                 console.warn('⚠️ [CONSENSUS WS WARMUP] WebSocket request to candleDataHub timed out after 3s.');
+                if (this.ws) {
+                    this.ws.removeListener('message', messageHandler);
+                }
                 resolve([]);
             }, 3000);
 

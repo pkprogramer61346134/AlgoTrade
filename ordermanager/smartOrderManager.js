@@ -41,7 +41,7 @@ class SmartOrderManager {
         this.isOrderActive = false;
 
         // Account & Trade Summary Stats
-        this.accountBalance = 50000.0;
+        this.accountBalance = 0.0;
         this.marginUsed = 0.0;
         this.tradeHistory = [];
         this.todaySummary = {
@@ -66,7 +66,7 @@ class SmartOrderManager {
         try {
             if (fs.existsSync(JOURNAL_PATH)) {
                 const data = JSON.parse(fs.readFileSync(JOURNAL_PATH, 'utf-8'));
-                this.accountBalance = Number(data.accountBalance) || 50000.0;
+                this.accountBalance = Number(data.accountBalance) || 0.0;
                 this.todaySummary = data.todaySummary || this.todaySummary;
                 this.tradeHistory = data.tradeHistory || [];
                 console.log(`📖 [SMART ORDER MANAGER] Loaded Trade Journal. Account Balance: ₹${this.accountBalance}`);
@@ -206,7 +206,13 @@ class SmartOrderManager {
      * Step 2: Dynamic Strike Price Selection & Order Entry using Real Dhan Market Data
      */
     async executeSmartOrderEntry(signalType, signal) {
-        const spotPrice = signal.entry || 24500.0;
+        const spotPrice = Number(signal.entry || signal.spotPrice || signal.currentLtp || 0);
+        if (!spotPrice || spotPrice <= 0) {
+            console.error(`❌ [SMART ORDER MANAGER] Missing or invalid Nifty spot price in signal:`, signal);
+            this.broadcastTelemetry("ORDER_FAILED_INVALID_SPOT", { error: "Missing or invalid Nifty spot price in signal", signal });
+            return;
+        }
+
         const optionType = (signalType === 'BUY') ? 'CE' : 'PE';
 
         let optionDetails;
@@ -317,7 +323,46 @@ class SmartOrderManager {
             const posRes = await this.dhan.portfolio.getPositions();
             const posList = Array.isArray(posRes?.data) ? posRes.data : (Array.isArray(posRes) ? posRes : []);
 
-            if (!this.activePosition || !this.isOrderActive) return posList;
+            if (!this.activePosition || !this.isOrderActive) {
+                // Active Position Recovery: If no active trade in memory, but open position exists on Dhan broker
+                const openDhanPos = posList.find(p => Number(p.netQty || p.positionQty || 0) > 0 && (p.exchangeSegment === 'NSE_FNO' || p.segment === 'NSE_FNO'));
+                if (openDhanPos) {
+                    const symbol = openDhanPos.tradingSymbol || openDhanPos.symbol;
+                    const securityId = openDhanPos.securityId;
+                    const qty = Number(openDhanPos.netQty || openDhanPos.positionQty || 65);
+                    const entryPrice = Number(openDhanPos.buyAvg || openDhanPos.costPrice || 0);
+                    const optionType = symbol.endsWith('CE') || symbol.includes('CE') ? 'CE' : 'PE';
+                    const riskPoints = 15.0;
+                    const initialSL = Number((entryPrice - riskPoints).toFixed(2));
+                    const targetProfit = Number((entryPrice + (riskPoints * 2.2)).toFixed(2));
+                    const serverUnrealizedPnl = Number(openDhanPos.unrealizedProfit || openDhanPos.unrealizedPnl || 0.0);
+                    const derivedLtp = qty > 0 ? Number((entryPrice + (serverUnrealizedPnl / qty)).toFixed(2)) : entryPrice;
+
+                    this.activePosition = {
+                        orderId: `RECOVERED_${Date.now()}`,
+                        symbol,
+                        securityId,
+                        optionType,
+                        strikePrice: 0,
+                        qty,
+                        entrySpot: 0,
+                        entryPrice,
+                        currentLtp: derivedLtp,
+                        initialSL,
+                        currentTrailingSL: initialSL,
+                        targetProfit,
+                        highestPriceSeen: Math.max(entryPrice, derivedLtp),
+                        riskPoints,
+                        currentMilestoneIndex: -1,
+                        currentRatioText: '1:0',
+                        unrealizedPnl: serverUnrealizedPnl,
+                        openedAt: new Date().toLocaleTimeString()
+                    };
+                    this.isOrderActive = true;
+                    console.log(`🔄 [SMART ORDER MANAGER RECOVERY] Restored active Dhan position: ${symbol} (BuyAvg: ₹${entryPrice}, Qty: ${qty})`);
+                }
+                return posList;
+            }
 
             const secIdStr = String(this.activePosition.securityId);
             const liveMatch = posList.find(p => String(p.securityId) === secIdStr || p.tradingSymbol === this.activePosition.symbol);
@@ -407,8 +452,9 @@ class SmartOrderManager {
         }
 
         // Evaluate Trailing SL Progression
+        const riskPts = pos.riskPoints && pos.riskPoints > 0 ? pos.riskPoints : 15.0;
         const gainedPoints = pos.highestPriceSeen - pos.entryPrice;
-        const currentRRRatio = gainedPoints / pos.riskPoints;
+        const currentRRRatio = gainedPoints / riskPts;
 
         // Find highest milestone achieved
         for (let i = this.trailingRatioSteps.length - 1; i >= 0; i--) {
@@ -562,13 +608,23 @@ class SmartOrderManager {
     scheduleAutoCut310() {
         const checkAutoCut = () => {
             const now = new Date();
-            const hours = now.getHours();
-            const minutes = now.getMinutes();
+            const istFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Kolkata',
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const parts = istFormatter.formatToParts(now);
+            let hours = 0, minutes = 0;
+            for (const p of parts) {
+                if (p.type === 'hour') hours = parseInt(p.value, 10);
+                if (p.type === 'minute') minutes = parseInt(p.value, 10);
+            }
 
-            // Check if 3:10 PM (15:10) or later
+            // Check if 3:10 PM IST (15:10) or later
             if ((hours === 15 && minutes >= 10) || hours > 15) {
                 if (this.isOrderActive && this.activePosition) {
-                    console.log('⏰ [SMART ORDER MANAGER] 3:10 PM Auto-Cut Triggered!');
+                    console.log('⏰ [SMART ORDER MANAGER] 3:10 PM IST Auto-Cut Triggered!');
                     this.closePosition("AUTO_CUT_310_PM");
                 }
             }

@@ -293,11 +293,12 @@ class CentralCandleDataHub {
         // If available warmup candles before startDate are less than warmupCount (e.g. < 300), auto-fetch prior 15 calendar days from Dhan API
         if ((startIndex < 0 || startIndex < warmupCount) && startDate) {
             try {
-                const sDateObj = new Date(startDate);
+                const sDateStr = startDate.includes('T') ? startDate : `${startDate}T00:00:00+05:30`;
+                const sDateObj = new Date(sDateStr);
                 const priorDateObj = new Date(sDateObj.getTime() - 15 * 24 * 60 * 60 * 1000);
-                const priorStartStr = priorDateObj.toISOString().split('T')[0];
+                const priorStartStr = priorDateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
                 const dayBeforeStartObj = new Date(sDateObj.getTime() - 1 * 24 * 60 * 60 * 1000);
-                const dayBeforeStartStr = dayBeforeStartObj.toISOString().split('T')[0];
+                const dayBeforeStartStr = dayBeforeStartObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
                 console.log(`🌐 [DATA HUB WARMUP] Sourced ${warmupCount} prior historical warmup candles (${priorStartStr} to ${dayBeforeStartStr}) from Dhan API...`);
                 await this.downloadAndCacheFromDhan(priorStartStr, dayBeforeStartStr, symbol, interval);
@@ -325,6 +326,7 @@ class CentralCandleDataHub {
 
         const targetIndex = allCandles.findIndex(c => c.date >= startDate);
         if (targetIndex < 0) return allCandles.slice(-warmupCount);
+        if (targetIndex === 0) return allCandles.slice(0, Math.min(allCandles.length, warmupCount));
 
         const startPos = Math.max(0, targetIndex - warmupCount);
         return allCandles.slice(startPos, targetIndex);

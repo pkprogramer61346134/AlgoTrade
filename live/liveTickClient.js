@@ -234,11 +234,7 @@ class LiveTickClient {
                 }
             }
 
-            // Fallback if API quote temporarily unready
-            if (!currentPrice) currentPrice = 23360.0;
-            const change = (Math.random() - 0.49) * 2.0;
-            currentPrice = Number((currentPrice + change).toFixed(2));
-            this.onTick(currentPrice, 100, new Date());
+            console.warn('⚠️ [LIVE TICK CLIENT] Waiting for real Dhan API live tick... (Zero fake data fallback)');
         };
 
         // Fetch real tick immediately

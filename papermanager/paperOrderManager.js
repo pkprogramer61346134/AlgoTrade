@@ -164,7 +164,11 @@ class PaperOrderManager {
      * Step 2: Virtual Strike Selection & Paper Order Execution using Real Dhan Option Market Data
      */
     async executePaperOrderEntry(signalType, signal) {
-        const spotPrice = signal.entry || 24500.0;
+        if (!signal || !signal.entry || signal.entry <= 0) {
+            console.error(`❌ [PAPER MANAGER ERROR] Cannot execute order without valid signal spot price.`);
+            return;
+        }
+        const spotPrice = signal.entry;
         const optionType = (signalType === 'BUY') ? 'CE' : 'PE';
 
         let optionDetails;
@@ -411,12 +415,22 @@ class PaperOrderManager {
     scheduleAutoCut310() {
         const checkAutoCut = () => {
             const now = new Date();
-            const hours = now.getHours();
-            const minutes = now.getMinutes();
+            const istFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Kolkata',
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const parts = istFormatter.formatToParts(now);
+            let hours = 0, minutes = 0;
+            for (const p of parts) {
+                if (p.type === 'hour') hours = parseInt(p.value, 10);
+                if (p.type === 'minute') minutes = parseInt(p.value, 10);
+            }
 
             if ((hours === 15 && minutes >= 10) || hours > 15) {
                 if (this.isOrderActive && this.activePosition) {
-                    console.log('⏰ [PAPER MANAGER] 3:10 PM Auto-Cut Triggered!');
+                    console.log('⏰ [PAPER MANAGER] 3:10 PM IST Auto-Cut Triggered!');
                     this.closePaperPosition("PAPER_AUTO_CUT_310_PM");
                 }
             }
