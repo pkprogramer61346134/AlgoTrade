@@ -5,7 +5,7 @@ class DhanOptionStrikeFetcher {
         this.dhan = new DhanSDK();
         this.ocCache = null;
         this.ocCacheTime = 0;
-        this.cacheTTL = 2000; // 2 seconds cache to prevent rate-limiting while providing real-time updates
+        this.cacheTTL = 1000; // 1 second cache for fast option price updates
         this.nearestExpiry = null;
     }
 
