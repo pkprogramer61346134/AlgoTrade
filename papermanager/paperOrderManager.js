@@ -169,8 +169,8 @@ class PaperOrderManager {
 
         let optionDetails;
         try {
-            console.log(`🔍 [PAPER MANAGER] Querying Dhan API Option Chain for Nifty spot ₹${spotPrice} (${optionType})...`);
-            optionDetails = await this.strikeFetcher.resolveOptionStrike(spotPrice, optionType);
+            console.log(`🔍 [PAPER MANAGER] Querying Dhan API Option Chain for Nifty spot ₹${spotPrice} (${optionType}) with Virtual Balance ₹${this.virtualBalance}...`);
+            optionDetails = await this.strikeFetcher.resolveOptionStrike(spotPrice, optionType, this.virtualBalance);
         } catch (err) {
             console.error(`❌ [PAPER MANAGER DHAN API ERROR] Could not fetch real option strike: ${err.message}`);
             this.broadcastTelemetry("PAPER_ORDER_FAILED_DHAN_API", { error: err.message, signal });

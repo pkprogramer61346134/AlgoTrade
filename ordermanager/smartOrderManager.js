@@ -210,8 +210,8 @@ class SmartOrderManager {
 
         let optionDetails;
         try {
-            console.log(`🔍 [SMART ORDER MANAGER] Querying Dhan API Option Chain for Nifty spot ₹${spotPrice} (${optionType})...`);
-            optionDetails = await this.strikeFetcher.resolveOptionStrike(spotPrice, optionType);
+            console.log(`🔍 [SMART ORDER MANAGER] Querying Dhan API Option Chain for Nifty spot ₹${spotPrice} (${optionType}) with Account Balance ₹${this.accountBalance}...`);
+            optionDetails = await this.strikeFetcher.resolveOptionStrike(spotPrice, optionType, this.accountBalance);
         } catch (err) {
             console.error(`❌ [SMART ORDER MANAGER DHAN API ERROR] Could not fetch real option strike: ${err.message}`);
             this.broadcastTelemetry("ORDER_FAILED_DHAN_API", { error: err.message, signal });
