@@ -358,9 +358,6 @@ class PaperOrderManager {
             todaySummary: this.todaySummary,
             eventData: data
         };
-            todaySummary: this.todaySummary,
-            eventData: data
-        };
 
         this.wsClient.sendMessage({
             type: 'PAPER_MONITOR_UPDATE',

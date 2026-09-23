@@ -352,9 +352,6 @@ class SmartOrderManager {
             todaySummary: this.todaySummary,
             eventData: data
         };
-            todaySummary: this.todaySummary,
-            eventData: data
-        };
 
         this.wsClient.sendMessage({
             type: 'LIVE_MONITOR_UPDATE',
