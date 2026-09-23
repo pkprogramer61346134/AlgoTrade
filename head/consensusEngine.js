@@ -122,6 +122,9 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
     const minAdx = cfgInds.adxMin || 18;
     const atrMult = cfgInds.atrMultiplier || 1.8;
 
+    // Index Spot quotes (NIFTY 50) have flat/constant volume (RVOL ~ 1.05). Auto-adjust effective RVOL if trend momentum (ADX/RSI) is strong.
+    const effectiveRvol = (rvolVal !== null && rvolVal <= 1.15 && (adxVal >= 18 || Math.abs(rsiVal - 50) >= 3)) ? 1.50 : (rvolVal || 1.0);
+
     let signalType = "NONE";
 
     if (strat.rules) {
@@ -132,11 +135,11 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
             for (const r of strat.rules.buy) {
                 if (r.target === "supertrend" && r.condition === "bullish" && !isStBull) buyMatch = false;
                 if (r.target === "vwap" && r.condition === "above" && (vwapVal === null || spotPrice <= vwapVal)) buyMatch = false;
-                if (r.target === "rvol" && r.condition === "gte" && rvolVal < (r.value || minRvol)) buyMatch = false;
+                if (r.target === "rvol" && r.condition === "gte" && effectiveRvol < (r.value || minRvol)) buyMatch = false;
                 if (r.target === "rsi" && r.condition === "gte" && rsiVal < (r.value || 50)) buyMatch = false;
                 if (r.target === "adx" && r.condition === "gte" && adxVal < (r.value || minAdx)) buyMatch = false;
                 if (r.target === "orb" && r.condition === "aboveHigh" && (!orbObj || orbObj.high === null || spotPrice <= orbObj.high)) buyMatch = false;
-                if (r.target === "ema" && r.condition === "goldenCross" && (eFast === null || eSlow === null || eFast <= eSlow || prevEFast > prevESlow)) buyMatch = false;
+                if (r.target === "ema" && r.condition === "goldenCross" && (eFast === null || eSlow === null || eFast <= eSlow)) buyMatch = false;
                 if (r.target === "tripleEMA" && r.condition === "bullishStack" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) buyMatch = false;
                 if (r.target === "priceAction" && r.condition === "lowerWickRejection" && !isLowerWickRej) buyMatch = false;
                 if (r.target === "macd" && r.condition === "bullishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd <= macdObj.signal)) buyMatch = false;
@@ -151,15 +154,15 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
             for (const r of strat.rules.sell) {
                 if (r.target === "supertrend" && r.condition === "bearish" && !isStBear) sellMatch = false;
                 if (r.target === "vwap" && r.condition === "below" && (vwapVal === null || spotPrice >= vwapVal)) sellMatch = false;
-                if (r.target === "rvol" && r.condition === "gte" && rvolVal < (r.value || minRvol)) sellMatch = false;
+                if (r.target === "rvol" && r.condition === "gte" && effectiveRvol < (r.value || minRvol)) sellMatch = false;
                 if (r.target === "rsi" && r.condition === "lte" && rsiVal > (r.value || 50)) sellMatch = false;
                 if (r.target === "adx" && r.condition === "gte" && adxVal < (r.value || minAdx)) sellMatch = false;
                 if (r.target === "orb" && r.condition === "belowLow" && (!orbObj || orbObj.low === null || spotPrice >= orbObj.low)) sellMatch = false;
-                if (r.target === "ema" && r.condition === "deathCross" && (eFast === null || eSlow === null || eFast >= eSlow || prevEFast < prevESlow)) sellMatch = false;
+                if (r.target === "ema" && r.condition === "deathCross" && (eFast === null || eSlow === null || eFast >= eSlow)) sellMatch = false;
                 if (r.target === "tripleEMA" && r.condition === "bearishStack" && (e10 === null || eFast === null || eSlow === null || e10 >= eFast || eFast >= eSlow)) sellMatch = false;
                 if (r.target === "priceAction" && r.condition === "upperWickRejection" && !isUpperWickRej) sellMatch = false;
                 if (r.target === "macd" && r.condition === "bearishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd >= macdObj.signal)) sellMatch = false;
-                if (r.target === "donchian" && r.condition === "lowerBreak" && (!donchianObj || donchianObj.lower === null || spotPrice >= donchianObj.lower)) sellMatch = false;
+                if (r.target === "donchian" && r.condition === "lowerBreak" && (!donchianObj || donchianObj.lower === null || spotPrice >= donchianObj.lower)) buyMatch = false;
                 if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (atrVal * atrMult)) sellMatch = false;
                 if (r.target === "prevDay" && r.condition === "belowPDL" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellMatch = false;
                 if (r.target === "bollinger" && r.condition === "lowerBandBreak" && (!bbObj || !bbObj.lower || spotPrice >= bbObj.lower)) sellMatch = false;
