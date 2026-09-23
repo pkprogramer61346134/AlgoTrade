@@ -102,17 +102,22 @@ class PaperOrderManager {
             if (msg.type === 'FORWARD_MESSAGE') {
                 const payload = msg.payload;
 
-                // 1. Consensus Signal Event from consensusEngine
+                // 1. Live Nifty Tick forwarded
+                if (payload && (payload.type === 'LIVE_NIFTY_TICK' || payload.action === 'LIVE_NIFTY_TICK') && (payload.ltp || payload.currentLtp || payload.spotPrice)) {
+                    this.onSpotPriceTick(payload.ltp || payload.currentLtp || payload.spotPrice);
+                }
+
+                // 2. Consensus Signal Event from consensusEngine
                 if (payload && (payload.action === 'CONSENSUS_SIGNAL_RESPONSE' || payload.consensus)) {
                     this.handleConsensusSignal(payload.singleSignal || payload, msg.senderId);
                 }
 
-                // 2. Live Option Tick Update Event
+                // 3. Live Option Tick Update Event
                 if (payload && payload.action === 'LIVE_OPTION_TICK') {
                     this.onOptionPriceTick(payload.ltp);
                 }
 
-                // 3. Live Spot Price Update Event
+                // 4. Live Spot Price Update Event
                 if (payload && (payload.currentLtp || payload.spotPrice)) {
                     this.onSpotPriceTick(payload.currentLtp || payload.spotPrice);
                 }
