@@ -324,6 +324,25 @@
         </div>
     </div>
 
+    <!-- Real-Time Backend Console / Live Execution Terminal Log Window -->
+    <div style="background: #090d16; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 16px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); backdrop-filter: blur(16px);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+            <div style="font-size: 13px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px;">📟</span> LIVE BACKEND CONSENSUS ENGINE TERMINAL & LOG STREAM
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #34d399; background: rgba(16, 185, 129, 0.12); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(16, 185, 129, 0.3);">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                    <span>LIVE LOG STREAM ACTIVE</span>
+                </div>
+                <button onclick="clearConsoleLogs()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #94a3b8; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 6px; cursor: pointer;">Clear Console</button>
+            </div>
+        </div>
+        <div id="backendConsoleLog" style="height: 180px; overflow-y: auto; font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; font-size: 12px; line-height: 1.6; color: #cbd5e1; background: rgba(0, 0, 0, 0.5); padding: 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.04);">
+            <div style="color: #64748b; font-style: italic;">[SYSTEM INIT] Connected to Dhan API Live Feed & Master Consensus Engine...</div>
+        </div>
+    </div>
+
     <!-- Live Execution Trade Journal Table -->
     <div class="table-card">
         <div class="table-header-title">📖 Live Execution Trade Journal (Real-Time Stream)</div>
@@ -353,6 +372,34 @@
 
     <script src="app.js"></script>
     <script>
+        function appendBackendLog(msg, color = '#cbd5e1') {
+            const consoleContainer = document.getElementById('backendConsoleLog');
+            if (!consoleContainer) return;
+
+            const timeStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+            const logLine = document.createElement('div');
+            logLine.style.color = color;
+            logLine.style.marginBottom = '2px';
+            logLine.innerHTML = `<span style="color: #64748b;">[${timeStr} IST]</span> ${msg}`;
+
+            consoleContainer.appendChild(logLine);
+
+            while (consoleContainer.childNodes.length > 100) {
+                consoleContainer.removeChild(consoleContainer.firstChild);
+            }
+
+            consoleContainer.scrollTop = consoleContainer.scrollHeight;
+        }
+
+        function clearConsoleLogs() {
+            const consoleContainer = document.getElementById('backendConsoleLog');
+            if (consoleContainer) {
+                consoleContainer.innerHTML = '<div style="color: #64748b; font-style: italic;">[CONSOLE CLEARED] Listening for new backend consensus engine logs...</div>';
+            }
+        }
+
+        let tickCounter = 0;
+
         initWebMonitorSocket((msg) => {
             if (!msg) return;
 
@@ -361,6 +408,11 @@
                 const ltpVal = typeof msg.ltp === 'number' ? msg.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : msg.ltp;
                 const headerElem = document.getElementById('niftyHeaderLtp');
                 if (headerElem) headerElem.innerText = `₹${ltpVal}`;
+
+                tickCounter++;
+                if (tickCounter % 5 === 0) {
+                    appendBackendLog(`📡 <b>Dhan Live Feed:</b> NIFTY 50 Spot LTP <b>₹${ltpVal}</b> @ ${msg.timeStr || ''}`, '#34d399');
+                }
             }
 
             // 0.5. BACKEND CONSENSUS ENGINE LIVE TELEMETRY
@@ -416,6 +468,16 @@
                 if (timeElem) {
                     const evalTimeStr = payload.evalTime ? `${payload.evalDate} ${payload.evalTime} IST` : new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' });
                     timeElem.innerText = evalTimeStr;
+                }
+
+                // Log evaluation event to Live Terminal Console
+                const statesForLog = payload.strategyStates || [];
+                const bLean = statesForLog.filter(s => s.bias === 'BULLISH').length;
+                const rLean = statesForLog.filter(s => s.bias === 'BEARISH').length;
+                if (payload.consensus && payload.consensus !== 'NO_SIGNAL') {
+                    appendBackendLog(`🚀 <b style="color:#f59e0b">CONSENSUS TRIGGERED (${payload.consensus}):</b> Strategy ${payload.strategyName || ''} @ Entry ₹${payload.spotPrice}`, '#f59e0b');
+                } else {
+                    appendBackendLog(`🧠 <b>Master Consensus Evaluated:</b> Spot <b>₹${payload.spotPrice || '--'}</b> | Memory: ${payload.warmupCandleCount || 774} Candles | Leans: <span style="color:#34d399">${bLean} Bullish</span> / <span style="color:#f87171">${rLean} Bearish</span>`, '#e2e8f0');
                 }
 
                 // Dynamic Strategy Box Highlight & Status Pills
