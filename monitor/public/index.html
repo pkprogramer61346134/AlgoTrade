@@ -384,12 +384,27 @@
                     consElem.style.color = consensusVal === 'BUY' ? 'var(--bull-green-light)' : (consensusVal === 'SELL' ? 'var(--bear-red-light)' : 'var(--brand-amber)');
                 }
 
-                // Strategy Confluence Votes
+                // Strategy Confluence Votes & Order Trigger Threshold Indicator
                 const votesElem = document.getElementById('telemetryVotes');
                 if (votesElem) {
                     const sBuy = payload.stratBuyCount || 0;
                     const sSell = payload.stratSellCount || 0;
-                    votesElem.innerText = `${sBuy} BUY / ${sSell} SELL Strategies (Min 2 Req)`;
+                    if (sBuy >= 2) {
+                        votesElem.innerText = `${sBuy} BUY / ${sSell} SELL (🟢 ORDER TRIGGERED!)`;
+                        votesElem.style.color = 'var(--bull-green-light)';
+                    } else if (sBuy === 1) {
+                        votesElem.innerText = `1 BUY / ${sSell} SELL (Waiting 1 More Strategy 🎯)`;
+                        votesElem.style.color = 'var(--brand-amber)';
+                    } else if (sSell >= 2) {
+                        votesElem.innerText = `${sBuy} BUY / ${sSell} SELL (🔴 SELL ORDER TRIGGERED!)`;
+                        votesElem.style.color = 'var(--bear-red-light)';
+                    } else if (sSell === 1) {
+                        votesElem.innerText = `${sBuy} BUY / 1 SELL (Waiting 1 More Strategy 🎯)`;
+                        votesElem.style.color = 'var(--brand-amber)';
+                    } else {
+                        votesElem.innerText = `0 BUY / 0 SELL Strategies (Min 2 Req)`;
+                        votesElem.style.color = '#ffffff';
+                    }
                 }
 
                 // Evaluation Timestamp
@@ -401,24 +416,42 @@
 
                 // Dynamic Strategy Box Highlight & Status Pills
                 const activeSignals = payload.activeSignals || [];
+                const strategyStates = payload.strategyStates || [];
+
                 for (let sId = 1; sId <= 10; sId++) {
                     const box = document.getElementById(`stratBox${sId}`);
                     const pill = document.getElementById(`stratPill${sId}`);
                     if (!box || !pill) continue;
 
                     const sig = activeSignals.find(s => s.strategyId === `strat-${sId}` || s.strategyId === sId);
-                    if (sig) {
-                        box.style.borderColor = sig.type === 'BUY' ? '#10b981' : '#ef4444';
-                        box.style.boxShadow = sig.type === 'BUY' ? '0 0 16px rgba(16, 185, 129, 0.4)' : '0 0 16px rgba(239, 68, 68, 0.4)';
-                        pill.innerText = `● ${sig.type} SIGNAL`;
-                        pill.style.color = sig.type === 'BUY' ? '#34d399' : '#f87171';
-                        pill.style.background = sig.type === 'BUY' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+                    const state = strategyStates.find(s => s.strategyId === `strat-${sId}` || s.strategyId === sId);
+
+                    const voteType = sig ? sig.type : (state ? state.type : 'NEUTRAL');
+
+                    if (voteType === 'BUY') {
+                        box.style.borderColor = '#10b981';
+                        box.style.background = 'rgba(16, 185, 129, 0.15)';
+                        box.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.6)';
+                        pill.innerText = '🟢 BUY VOTE';
+                        pill.style.color = '#34d399';
+                        pill.style.background = 'rgba(16, 185, 129, 0.25)';
+                        pill.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+                    } else if (voteType === 'SELL') {
+                        box.style.borderColor = '#ef4444';
+                        box.style.background = 'rgba(239, 68, 68, 0.15)';
+                        box.style.boxShadow = '0 0 20px rgba(239, 68, 68, 0.6)';
+                        pill.innerText = '🔴 SELL VOTE';
+                        pill.style.color = '#f87171';
+                        pill.style.background = 'rgba(239, 68, 68, 0.25)';
+                        pill.style.border = '1px solid rgba(239, 68, 68, 0.4)';
                     } else {
                         box.style.borderColor = sId === 5 ? 'rgba(139, 92, 246, 0.4)' : (sId === 7 ? 'rgba(59, 130, 246, 0.5)' : (sId === 8 ? 'rgba(245, 158, 11, 0.5)' : (sId === 9 ? 'rgba(236, 72, 153, 0.5)' : 'rgba(16, 185, 129, 0.4)')));
+                        box.style.background = 'rgba(17, 24, 39, 0.85)';
                         box.style.boxShadow = 'none';
                         pill.innerText = '● EVALUATING';
                         pill.style.color = '#34d399';
                         pill.style.background = 'rgba(16, 185, 129, 0.12)';
+                        pill.style.border = 'none';
                     }
                 }
             }

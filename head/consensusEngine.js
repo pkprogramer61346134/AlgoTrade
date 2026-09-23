@@ -199,7 +199,7 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
  */
 function evaluateConsensusEngine(candles, i, data = {}) {
     if (!candles || !Array.isArray(candles) || candles.length === 0 || i < 0 || i >= candles.length) {
-        return [];
+        return { triggeredSignals: [], strategyStates: [] };
     }
 
     const config = loadStrategyConfig("consensus_master_head.json");
@@ -208,17 +208,33 @@ function evaluateConsensusEngine(candles, i, data = {}) {
     const c = candles[i];
     const computed = (data.vwap && data.supertrend) ? data : computeIndicators(candles, {});
 
-    const activeSignals = [];
+    const triggeredSignals = [];
+    const strategyStates = [];
 
     for (const strat of strategies) {
         if (strat.enabled === false) continue;
         const res = evaluateSingleStrategy(c, i, candles, strat, computed);
         if (res) {
-            activeSignals.push(res);
+            triggeredSignals.push(res);
+            strategyStates.push({
+                strategyId: strat.id,
+                strategyName: strat.name,
+                type: res.type,
+                triggered: true,
+                winrate: strat.winrate || "70.0%"
+            });
+        } else {
+            strategyStates.push({
+                strategyId: strat.id,
+                strategyName: strat.name,
+                type: "NEUTRAL",
+                triggered: false,
+                winrate: strat.winrate || "70.0%"
+            });
         }
     }
 
-    return activeSignals; // Returns Array of triggered strategy signals
+    return { triggeredSignals, strategyStates };
 }
 
 let candleDataHubModule;
@@ -540,13 +556,16 @@ function evaluateSingleConsensusSignal(candles, i = -1, data = {}) {
     const index = (i < 0) ? preparedCandles.length - 1 : (i + offset);
 
     const subEval = evaluate10SubEngines(preparedCandles, index, data);
-    const signals = evaluateConsensusEngine(preparedCandles, index, data);
+    const evalRes = evaluateConsensusEngine(preparedCandles, index, data);
+    const triggeredSignals = Array.isArray(evalRes) ? evalRes : (evalRes.triggeredSignals || []);
+    const strategyStates = evalRes.strategyStates || [];
 
-    const consolidated = consolidateSignals(signals);
+    const consolidated = consolidateSignals(triggeredSignals);
     consolidated.subEngineVotes = subEval.subEngineVotes;
     consolidated.buyVotes = subEval.buyVotes;
     consolidated.sellVotes = subEval.sellVotes;
     consolidated.reasoningLog = subEval.reasoningLog;
+    consolidated.strategyStates = strategyStates;
 
     return consolidated;
 }
@@ -564,13 +583,16 @@ async function evaluateSingleConsensusSignalAsync(candles, i = -1, data = {}) {
     const index = (i < 0) ? preparedCandles.length - 1 : (i + offset);
 
     const subEval = evaluate10SubEngines(preparedCandles, index, data);
-    const signals = evaluateConsensusEngine(preparedCandles, index, data);
+    const evalRes = evaluateConsensusEngine(preparedCandles, index, data);
+    const triggeredSignals = Array.isArray(evalRes) ? evalRes : (evalRes.triggeredSignals || []);
+    const strategyStates = evalRes.strategyStates || [];
 
-    const consolidated = consolidateSignals(signals);
+    const consolidated = consolidateSignals(triggeredSignals);
     consolidated.subEngineVotes = subEval.subEngineVotes;
     consolidated.buyVotes = subEval.buyVotes;
     consolidated.sellVotes = subEval.sellVotes;
     consolidated.reasoningLog = subEval.reasoningLog;
+    consolidated.strategyStates = strategyStates;
 
     // Broadcast comprehensive consensus & sub-engine telemetry over WebSocket to monitorClient
     if (consensusService && consensusService.connected) {
@@ -587,7 +609,8 @@ async function evaluateSingleConsensusSignalAsync(candles, i = -1, data = {}) {
                 sellVotes: subEval.sellVotes,
                 subEngineVotes: subEval.subEngineVotes,
                 reasoningLog: subEval.reasoningLog,
-                activeSignals: signals,
+                activeSignals: triggeredSignals,
+                strategyStates: strategyStates,
                 totalStrategies: 10,
                 spotPrice: preparedCandles[index] ? preparedCandles[index].close : null,
                 evalTime: preparedCandles[index] ? preparedCandles[index].time : '',
