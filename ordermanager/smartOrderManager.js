@@ -225,14 +225,43 @@ class SmartOrderManager {
             return;
         }
 
-        // Calculate Option Premium SL & Target Profit (15 Premium Points Risk, 1:2.2 RR Target)
-        const riskPoints = 15.0; // 15 points risk (1R = ₹15)
-        const initialSL = Number((entryPremium - riskPoints).toFixed(2));
-        const targetProfit = Number((entryPremium + (riskPoints * 2.2)).toFixed(2));
+        // Submit Real Order to Dhan API
+        let realDhanOrderId = `ORD_${Date.now()}`;
+        if (this.dhan && typeof this.dhan.orders?.placeOrder === 'function') {
+            try {
+                console.log(`🚀 [SMART ORDER MANAGER DHAN API] Submitting REAL Order to Dhan API for ${symbol} (SecID: ${securityId}, Qty: ${qty})...`);
+                const realOrderResult = await this.dhan.orders.placeOrder({
+                    transactionType: 'BUY',
+                    exchangeSegment: 'NSE_FNO',
+                    productType: 'INTRADAY',
+                    orderType: 'MARKET',
+                    validity: 'DAY',
+                    securityId: String(securityId),
+                    quantity: qty,
+                    price: 0
+                });
+
+                console.log(`📩 [SMART ORDER MANAGER DHAN API RESPONSE]:`, JSON.stringify(realOrderResult, null, 2));
+
+                if (realOrderResult && (realOrderResult.status === 'success' || realOrderResult.orderId || realOrderResult.data?.orderId)) {
+                    realDhanOrderId = realOrderResult.orderId || realOrderResult.data?.orderId || realDhanOrderId;
+                    console.log(`✅ [DHAN API REAL ORDER SUBMITTED] Order ID: ${realDhanOrderId}`);
+                } else {
+                    const errMsg = realOrderResult?.message || (realOrderResult?.errorData ? JSON.stringify(realOrderResult.errorData) : 'Dhan API order rejected');
+                    console.error(`❌ [DHAN API REAL ORDER REJECTED]: ${errMsg}`);
+                    this.broadcastTelemetry("REAL_ORDER_REJECTED_DHAN_API", { error: errMsg, response: realOrderResult });
+                    return;
+                }
+            } catch (dhanErr) {
+                console.error(`❌ [DHAN API REAL ORDER EXCEPTION]: ${dhanErr.message}`);
+                this.broadcastTelemetry("REAL_ORDER_FAILED_DHAN_API", { error: dhanErr.message });
+                return;
+            }
+        }
 
         // Create Active Position State
         this.activePosition = {
-            orderId: `ORD_${Date.now()}`,
+            orderId: realDhanOrderId,
             symbol,
             securityId,
             optionType,
@@ -349,12 +378,33 @@ class SmartOrderManager {
     }
 
     /**
-     * Step 4: Close Active Position & Record PnL
+     * Step 4: Close Active Position & Record PnL (Submits Real Exit Order to Dhan API)
      */
-    closePosition(reason = "MANUAL_EXIT") {
+    async closePosition(reason = "MANUAL_EXIT") {
         if (!this.isOrderActive || !this.activePosition) return;
 
         const pos = this.activePosition;
+
+        // Send Real Exit Order to Dhan API
+        if (this.dhan && pos.securityId && typeof this.dhan.orders?.placeOrder === 'function') {
+            try {
+                console.log(`🚀 [SMART ORDER MANAGER DHAN EXIT] Submitting Real Exit Order to Dhan API for ${pos.symbol} (SecID: ${pos.securityId})...`);
+                const exitRes = await this.dhan.orders.placeOrder({
+                    transactionType: 'SELL',
+                    exchangeSegment: 'NSE_FNO',
+                    productType: 'INTRADAY',
+                    orderType: 'MARKET',
+                    validity: 'DAY',
+                    securityId: String(pos.securityId),
+                    quantity: pos.qty,
+                    price: 0
+                });
+                console.log(`📩 [DHAN EXIT ORDER RESPONSE]:`, JSON.stringify(exitRes, null, 2));
+            } catch (exitErr) {
+                console.error(`❌ [DHAN EXIT ORDER EXCEPTION]: ${exitErr.message}`);
+            }
+        }
+
         const exitPrice = pos.currentLtp;
         const pnlPerShare = exitPrice - pos.entryPrice;
         const netPnl = Number((pnlPerShare * pos.qty).toFixed(2));
