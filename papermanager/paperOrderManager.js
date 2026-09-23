@@ -184,7 +184,7 @@ class PaperOrderManager {
 
         // Realistic Slippage Simulator (+0.50 pts on entry)
         const entryPremium = Number((basePremium + this.slippagePoints).toFixed(2));
-        const qty = 50; // 1 Lot Nifty
+        const qty = 65; // 1 Lot Nifty = 65 Qty (NSE Lot Size)
         const requiredMargin = entryPremium * qty;
 
         if (this.virtualBalance < requiredMargin) {

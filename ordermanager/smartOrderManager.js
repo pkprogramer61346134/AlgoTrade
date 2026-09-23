@@ -223,7 +223,7 @@ class SmartOrderManager {
         const entryPremium = Number(optionDetails.liveLtp.toFixed(2));
         const securityId = optionDetails.securityId;
 
-        const qty = 50; // 1 Lot Nifty
+        const qty = 65; // 1 Lot Nifty = 65 Qty (NSE Lot Size)
         const requiredMargin = entryPremium * qty;
 
         if (this.accountBalance < requiredMargin) {
@@ -254,7 +254,7 @@ class SmartOrderManager {
                     realDhanOrderId = realOrderResult.orderId || realOrderResult.data?.orderId || realDhanOrderId;
                     console.log(`✅ [DHAN API REAL ORDER SUBMITTED] Order ID: ${realDhanOrderId}`);
                 } else {
-                    const errMsg = realOrderResult?.message || (realOrderResult?.errorData ? JSON.stringify(realOrderResult.errorData) : 'Dhan API order rejected');
+                    const errMsg = realOrderResult?.errorData?.errorMessage || realOrderResult?.message || (realOrderResult?.errorData ? JSON.stringify(realOrderResult.errorData) : 'Dhan API order rejected');
                     console.error(`❌ [DHAN API REAL ORDER REJECTED]: ${errMsg}`);
                     this.broadcastTelemetry("REAL_ORDER_REJECTED_DHAN_API", { error: errMsg, response: realOrderResult });
                     return;

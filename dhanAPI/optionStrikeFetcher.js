@@ -66,7 +66,7 @@ class DhanOptionStrikeFetcher {
         let chosenStrike = defaultStrikePrice;
         let targetKey = Object.keys(ocMap).find(k => Math.abs(parseFloat(k) - defaultStrikePrice) < 0.1);
 
-        const qty = 50; // 1 Lot Nifty
+        const qty = 65; // 1 Lot Nifty = 65 Qty (NSE Lot Size)
         if (maxBudget && maxBudget > 0) {
             const maxAllowedPremium = maxBudget / qty;
             
