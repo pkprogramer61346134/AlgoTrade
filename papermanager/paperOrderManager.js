@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const AlgoTradeWSClient = require('../server/wsClient');
+const DhanOptionStrikeFetcher = require('../dhanAPI/optionStrikeFetcher');
 
 const JOURNAL_PATH = path.join(__dirname, 'paper_journal.json');
 
@@ -10,7 +11,7 @@ const JOURNAL_PATH = path.join(__dirname, 'paper_journal.json');
  * 1. Connects to WebSocket Server as "paperOrderManager".
  * 2. Listens for Consensus Signals from "consensusEngine".
  * 3. Paper Active Order Guard: Ignores incoming signals if a paper trade is already active.
- * 4. Virtual Funds & Strike Selector: Uses ₹100,000 virtual balance & selects ATM/ITM Option Strike.
+ * 4. Virtual Funds & Strike Selector: Uses virtual balance & selects real ITM Option Strike from Dhan API.
  * 5. Realistic Slippage Simulator: Applies ±0.50 pts slippage on entry and exit.
  * 6. Premium SL & Trailing Engine: Calculates Option SL & trails SL progressively (1:1.5, 1:2.5, 1:3, 1:3.5, 1:4, 1:4.5, 1:5+).
  * 7. 1R Breathing Room: Prevents early exits from market noise/wicks.
@@ -26,6 +27,7 @@ class PaperOrderManager {
         this.slippagePoints = options.slippagePoints || 0.50; // ±0.50 pts realistic slippage
 
         this.wsClient = null;
+        this.strikeFetcher = new DhanOptionStrikeFetcher();
 
         // Paper Active Position State
         this.activePosition = null;
@@ -154,16 +156,27 @@ class PaperOrderManager {
     }
 
     /**
-     * Step 2: Virtual Strike Selection & Paper Order Execution with Slippage
+     * Step 2: Virtual Strike Selection & Paper Order Execution using Real Dhan Option Market Data
      */
     async executePaperOrderEntry(signalType, signal) {
         const spotPrice = signal.entry || 24500.0;
         const optionType = (signalType === 'BUY') ? 'CE' : 'PE';
-        // In-The-Money (ITM) Strike Selection: Math.floor for CE, Math.ceil for PE
-        const strikePrice = optionType === 'CE' ? Math.floor(spotPrice / 50) * 50 : Math.ceil(spotPrice / 50) * 50;
-        const symbol = `NIFTY_${strikePrice}_${optionType}`;
 
-        const basePremium = 120.0;
+        let optionDetails;
+        try {
+            console.log(`🔍 [PAPER MANAGER] Querying Dhan API Option Chain for Nifty spot ₹${spotPrice} (${optionType})...`);
+            optionDetails = await this.strikeFetcher.resolveOptionStrike(spotPrice, optionType);
+        } catch (err) {
+            console.error(`❌ [PAPER MANAGER DHAN API ERROR] Could not fetch real option strike: ${err.message}`);
+            this.broadcastTelemetry("PAPER_ORDER_FAILED_DHAN_API", { error: err.message, signal });
+            return;
+        }
+
+        const symbol = optionDetails.symbol;
+        const strikePrice = optionDetails.strikePrice;
+        const basePremium = optionDetails.liveLtp;
+        const securityId = optionDetails.securityId;
+
         // Realistic Slippage Simulator (+0.50 pts on entry)
         const entryPremium = Number((basePremium + this.slippagePoints).toFixed(2));
         const qty = 50; // 1 Lot Nifty
@@ -185,6 +198,7 @@ class PaperOrderManager {
             orderId: `PAPER_ORD_${Date.now()}`,
             mode: 'PAPER_TRADING',
             symbol,
+            securityId,
             optionType,
             strikePrice,
             qty,
@@ -205,27 +219,27 @@ class PaperOrderManager {
         this.isOrderActive = true;
         this.virtualMarginUsed = requiredMargin;
 
-        console.log(`✅ [PAPER MANAGER ENTRY] Virtual Order Executed!`);
+        console.log(`✅ [PAPER MANAGER ENTRY] Virtual Order Executed with Real Dhan Market Price!`);
         console.log(`   - Order ID: ${this.activePosition.orderId}`);
-        console.log(`   - Contract: ${symbol}`);
-        console.log(`   - Entry Premium (with +${this.slippagePoints} pts slippage): ₹${entryPremium}`);
+        console.log(`   - Contract: ${symbol} (SecurityID: ${securityId})`);
+        console.log(`   - Real Dhan LTP: ₹${basePremium} | Executed Entry (with +${this.slippagePoints} pts slippage): ₹${entryPremium}`);
         console.log(`   - Initial SL: ₹${initialSL} (Risk = ₹${riskPoints} / Lot)`);
 
         this.broadcastTelemetry("PAPER_POSITION_OPENED", this.activePosition);
     }
 
     /**
-     * Handles spot price ticks and estimates live Option LTP based on Delta (~0.55)
+     * Handles spot price ticks and fetches REAL Option LTP directly from Dhan API
      */
-    onSpotPriceTick(spotPrice) {
+    async onSpotPriceTick(spotPrice) {
         if (!this.isOrderActive || !this.activePosition || !spotPrice) return;
         const pos = this.activePosition;
-        const entrySpot = pos.entrySpot || spotPrice;
-        const spotDelta = spotPrice - entrySpot;
-        const optionDelta = pos.optionType === 'CE' ? 0.55 : -0.55;
-        const estimatedLtp = Number((pos.entryPrice + (spotDelta * optionDelta)).toFixed(2));
-        const finalLtp = Math.max(1.0, estimatedLtp);
-        this.onOptionPriceTick(finalLtp);
+        try {
+            const realLtp = await this.strikeFetcher.fetchLiveOptionLtp(pos.strikePrice, pos.optionType, pos.securityId);
+            this.onOptionPriceTick(realLtp);
+        } catch (e) {
+            console.warn(`⚠️ [PAPER MANAGER] Dhan Live Option LTP update warning: ${e.message}`);
+        }
     }
 
     /**

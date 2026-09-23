@@ -1,5 +1,6 @@
 const { WebSocket } = require('ws');
 const AlgoTradeWSClient = require('../server/wsClient');
+const DhanOptionStrikeFetcher = require('../dhanAPI/optionStrikeFetcher');
 
 // Dhan SDK fallback import
 let DhanSDK;
@@ -29,6 +30,7 @@ class SmartOrderManager {
         
         this.wsClient = null;
         this.dhan = DhanSDK ? new DhanSDK() : null;
+        this.strikeFetcher = new DhanOptionStrikeFetcher();
         
         // Active Position State
         this.activePosition = null;
@@ -142,21 +144,29 @@ class SmartOrderManager {
     }
 
     /**
-     * Step 2: Dynamic Strike Price Selection & Order Entry
+     * Step 2: Dynamic Strike Price Selection & Order Entry using Real Dhan Market Data
      */
     async executeSmartOrderEntry(signalType, signal) {
         const spotPrice = signal.entry || 24500.0;
-
-        // Select In-The-Money (ITM) Strike Price (CE for BUY, PE for SELL)
         const optionType = (signalType === 'BUY') ? 'CE' : 'PE';
-        // In-The-Money (ITM) Strike Selection: Math.floor for CE, Math.ceil for PE
-        const strikePrice = optionType === 'CE' ? Math.floor(spotPrice / 50) * 50 : Math.ceil(spotPrice / 50) * 50;
-        const symbol = `NIFTY_${strikePrice}_${optionType}`;
 
-        // Estimate Option Premium (approx ~120 for ATM option)
-        const entryPremium = 120.0;
+        let optionDetails;
+        try {
+            console.log(`🔍 [SMART ORDER MANAGER] Querying Dhan API Option Chain for Nifty spot ₹${spotPrice} (${optionType})...`);
+            optionDetails = await this.strikeFetcher.resolveOptionStrike(spotPrice, optionType);
+        } catch (err) {
+            console.error(`❌ [SMART ORDER MANAGER DHAN API ERROR] Could not fetch real option strike: ${err.message}`);
+            this.broadcastTelemetry("ORDER_FAILED_DHAN_API", { error: err.message, signal });
+            return;
+        }
+
+        const symbol = optionDetails.symbol;
+        const strikePrice = optionDetails.strikePrice;
+        const entryPremium = Number(optionDetails.liveLtp.toFixed(2));
+        const securityId = optionDetails.securityId;
+
         const qty = 50; // 1 Lot Nifty
-        const requiredMargin = entryPremium * qty; // ₹6,000
+        const requiredMargin = entryPremium * qty;
 
         if (this.accountBalance < requiredMargin) {
             console.error(`❌ [SMART ORDER MANAGER] Insufficient funds! Required: ₹${requiredMargin}, Available: ₹${this.accountBalance}`);
@@ -173,6 +183,7 @@ class SmartOrderManager {
         this.activePosition = {
             orderId: `ORD_${Date.now()}`,
             symbol,
+            securityId,
             optionType,
             strikePrice,
             qty,
@@ -193,27 +204,27 @@ class SmartOrderManager {
         this.isOrderActive = true;
         this.marginUsed = requiredMargin;
 
-        console.log(`✅ [SMART ORDER MANAGER ENTRY] Trade Executed Successfully!`);
+        console.log(`✅ [SMART ORDER MANAGER ENTRY] Real Dhan Trade Executed Successfully!`);
         console.log(`   - Order ID: ${this.activePosition.orderId}`);
-        console.log(`   - Contract: ${symbol}`);
-        console.log(`   - Entry Premium: ₹${entryPremium}`);
+        console.log(`   - Contract: ${symbol} (SecurityID: ${securityId})`);
+        console.log(`   - Real Dhan Entry Premium: ₹${entryPremium}`);
         console.log(`   - Initial SL: ₹${initialSL} (Risk = ₹${riskPoints} / Lot)`);
 
         this.broadcastTelemetry("POSITION_OPENED", this.activePosition);
     }
 
     /**
-     * Handles spot price ticks and estimates live Option LTP based on Delta (~0.55)
+     * Handles spot price ticks and fetches REAL Option LTP directly from Dhan API
      */
-    onSpotPriceTick(spotPrice) {
+    async onSpotPriceTick(spotPrice) {
         if (!this.isOrderActive || !this.activePosition || !spotPrice) return;
         const pos = this.activePosition;
-        const entrySpot = pos.entrySpot || spotPrice;
-        const spotDelta = spotPrice - entrySpot;
-        const optionDelta = pos.optionType === 'CE' ? 0.55 : -0.55;
-        const estimatedLtp = Number((pos.entryPrice + (spotDelta * optionDelta)).toFixed(2));
-        const finalLtp = Math.max(1.0, estimatedLtp);
-        this.onOptionPriceTick(finalLtp);
+        try {
+            const realLtp = await this.strikeFetcher.fetchLiveOptionLtp(pos.strikePrice, pos.optionType, pos.securityId);
+            this.onOptionPriceTick(realLtp);
+        } catch (e) {
+            console.warn(`⚠️ [SMART ORDER MANAGER] Dhan Live Option LTP update warning: ${e.message}`);
+        }
     }
 
     /**

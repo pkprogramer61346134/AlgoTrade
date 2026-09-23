@@ -1,11 +1,11 @@
 {
-  "virtualBalance": 10000,
+  "virtualBalance": 10000.00,
   "todaySummary": {
     "totalTrades": 0,
     "wins": 0,
     "losses": 0,
-    "realizedPnl": 0
+    "realizedPnl": 0.00
   },
   "tradeHistory": [],
-  "lastUpdated": "2026-09-23T11:28:00.000Z"
+  "lastUpdated": "2026-09-23T12:05:00.000Z"
 }
