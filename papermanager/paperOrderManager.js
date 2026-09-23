@@ -129,6 +129,11 @@ class PaperOrderManager {
         // Schedule 3:15 PM auto-cut check
         this.scheduleAutoCut315();
 
+        // Start 3-second periodic telemetry heartbeat broadcast
+        setInterval(() => {
+            this.broadcastTelemetry("PAPER_HEARTBEAT", null);
+        }, 3000);
+
         console.log(`✅ [PAPER MANAGER] Running & Listening for signals. Virtual Balance: ₹${this.virtualBalance}`);
     }
 

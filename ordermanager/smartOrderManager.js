@@ -142,6 +142,11 @@ class SmartOrderManager {
         // Schedule 3:15 PM auto-cut check
         this.scheduleAutoCut315();
 
+        // Start 3-second periodic telemetry heartbeat broadcast
+        setInterval(() => {
+            this.broadcastTelemetry("HEARTBEAT", null);
+        }, 3000);
+
         console.log(`✅ [SMART ORDER MANAGER] Running & Listening for signals. Target Monitor: "${this.monitorClientTarget}"`);
     }
 
@@ -154,7 +159,9 @@ class SmartOrderManager {
                 const fundRes = await this.dhan.funds.getFundLimits();
                 if (fundRes && fundRes.status === 'success' && fundRes.data) {
                     const realBal = Number(fundRes.data.availabelBalance || fundRes.data.availableBalance || 0);
-                    this.accountBalance = realBal;
+                    if (realBal > 0) {
+                        this.accountBalance = realBal;
+                    }
                     this.marginUsed = Number(fundRes.data.utilizedAmount || fundRes.data.marginUsed || 0.0);
                     console.log(`💰 [SMART ORDER MANAGER] Real Dhan Account Balance: ₹${this.accountBalance}`);
                     this.broadcastTelemetry("REAL_BALANCE_REFRESHED", null);
@@ -166,8 +173,8 @@ class SmartOrderManager {
                 console.warn(`⚠️ [SMART ORDER MANAGER] Fund refresh notice: ${e.message}`);
             }
         }
-        // If API fails or credentials invalid, set balance to 0.0 (NO fake 50k fallbacks)
-        this.accountBalance = 0.0;
+        // Preserve loaded journal balance if API call is unconfigured or throttled
+        console.log(`💰 [SMART ORDER MANAGER] Account Balance Active: ₹${this.accountBalance}`);
         this.broadcastTelemetry("REAL_BALANCE_REFRESHED", null);
     }
 
@@ -258,6 +265,11 @@ class SmartOrderManager {
                 return;
             }
         }
+
+        // Calculate Option Premium SL & Target Profit (15 Premium Points Risk, 1:2.2 RR Target)
+        const riskPoints = 15.0;
+        const initialSL = Number((entryPremium - riskPoints).toFixed(2));
+        const targetProfit = Number((entryPremium + (riskPoints * 2.2)).toFixed(2));
 
         // Create Active Position State
         this.activePosition = {

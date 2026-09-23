@@ -483,16 +483,15 @@
                 }
 
                 // Log evaluation event to Live Terminal Console
+                const sBuy = payload.stratBuyCount || 0;
+                const sSell = payload.stratSellCount || 0;
                 const statesForLog = payload.strategyStates || [];
-                const activeSigs = payload.activeSignals || [];
-                const buyVotesCount = activeSigs.filter(s => s.type === 'BUY').length + statesForLog.filter(s => s.triggered && s.type === 'BUY').length;
-                const sellVotesCount = activeSigs.filter(s => s.type === 'SELL').length + statesForLog.filter(s => s.triggered && s.type === 'SELL').length;
                 const bullLeanCount = statesForLog.filter(s => s.bias === 'BULLISH' && !s.triggered).length;
                 const bearLeanCount = statesForLog.filter(s => s.bias === 'BEARISH' && !s.triggered).length;
 
                 let voteStr = '';
-                if (buyVotesCount > 0 || sellVotesCount > 0) {
-                    voteStr = `Votes: <b style="color:#34d399">${buyVotesCount} BUY</b> / <b style="color:#f87171">${sellVotesCount} SELL</b> | Leans: <span style="color:#34d399">${bullLeanCount} Bullish</span> / <span style="color:#f87171">${bearLeanCount} Bearish</span>`;
+                if (sBuy > 0 || sSell > 0) {
+                    voteStr = `Votes: <b style="color:#34d399">${sBuy} BUY</b> / <b style="color:#f87171">${sSell} SELL</b> | Leans: <span style="color:#34d399">${bullLeanCount} Bullish</span> / <span style="color:#f87171">${bearLeanCount} Bearish</span>`;
                 } else {
                     voteStr = `Leans: <span style="color:#34d399">${bullLeanCount} Bullish</span> / <span style="color:#f87171">${bearLeanCount} Bearish</span>`;
                 }
@@ -581,22 +580,24 @@
             // 1. PAPER TRADING TELEMETRY
             if (msg.type === 'PAPER_MONITOR_UPDATE' && msg.data) {
                 const payload = msg.data.data || msg.data;
-                if (payload.virtualBalance !== undefined) {
-                    document.getElementById('paperBalance').innerText = formatRupee(payload.virtualBalance).replace('+', '');
+                const balVal = payload.virtualBalance !== undefined ? payload.virtualBalance : (payload.account ? payload.account.virtualBalance : undefined);
+                if (balVal !== undefined) {
+                    document.getElementById('paperBalance').innerText = formatRupee(balVal).replace('+', '');
                 }
-                if (payload.summary) {
-                    const pnl = payload.summary.realizedPnl || 0;
+                const summary = payload.summary || payload.todaySummary;
+                if (summary) {
+                    const pnl = summary.realizedPnl || 0;
                     const pnlElem = document.getElementById('paperPnl');
                     pnlElem.innerText = formatRupee(pnl);
                     pnlElem.className = `row-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
                     
-                    document.getElementById('paperSummary').innerText = `${payload.summary.totalTrades} Trades / ${payload.summary.winratePercent}`;
+                    document.getElementById('paperSummary').innerText = `${summary.totalTrades || 0} Trades / ${summary.winratePercent || '0.0%'}`;
                     
                     // Update Top KPI Banner
                     document.getElementById('kpiNetPnl').innerText = formatRupee(pnl);
                     document.getElementById('kpiNetPnl').className = `kpi-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
-                    document.getElementById('kpiWinrate').innerText = payload.summary.winratePercent;
-                    document.getElementById('kpiTradeCount').innerText = `${payload.summary.totalTrades} Executed Trades`;
+                    document.getElementById('kpiWinrate').innerText = summary.winratePercent || '0.0%';
+                    document.getElementById('kpiTradeCount').innerText = `${summary.totalTrades || 0} Executed Trades`;
                 }
                 if (payload.activePosition) {
                     const pos = payload.activePosition;
@@ -637,15 +638,17 @@
             // 2. REAL MONEY TELEMETRY
             if (msg.type === 'LIVE_MONITOR_UPDATE' && msg.data) {
                 const payload = msg.data.data || msg.data;
-                if (payload.balance !== undefined) {
-                    document.getElementById('realBalance').innerText = formatRupee(payload.balance).replace('+', '');
+                const balVal = payload.balance !== undefined ? payload.balance : (payload.account ? payload.account.availableFunds : undefined);
+                if (balVal !== undefined) {
+                    document.getElementById('realBalance').innerText = formatRupee(balVal).replace('+', '');
                 }
-                if (payload.summary) {
-                    const pnl = payload.summary.realizedPnl || 0;
+                const summary = payload.summary || payload.todaySummary;
+                if (summary) {
+                    const pnl = summary.realizedPnl || 0;
                     const pnlElem = document.getElementById('realPnl');
                     pnlElem.innerText = formatRupee(pnl);
                     pnlElem.className = `row-value ${pnl >= 0 ? 'val-green' : 'val-red'}`;
-                    document.getElementById('realSummary').innerText = `${payload.summary.totalTrades} Trades / ${payload.summary.winratePercent}`;
+                    document.getElementById('realSummary').innerText = `${summary.totalTrades || 0} Trades / ${summary.winratePercent || '0.0%'}`;
                 }
                 if (payload.activePosition) {
                     const pos = payload.activePosition;
