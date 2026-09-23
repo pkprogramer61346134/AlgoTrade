@@ -570,21 +570,30 @@ async function evaluateSingleConsensusSignalAsync(candles, i = -1, data = {}) {
     consolidated.sellVotes = subEval.sellVotes;
     consolidated.reasoningLog = subEval.reasoningLog;
 
-    // Broadcast subEngineVotes & reasoningLog over WebSocket to monitorClient
+    // Broadcast comprehensive consensus & sub-engine telemetry over WebSocket to monitorClient
     if (consensusService && consensusService.connected) {
         consensusService.sendRaw({
             type: 'SEND_MESSAGE',
             recipientId: 'monitorClient',
             payload: {
                 type: 'CONSENSUS_UPDATE',
+                warmupCandleCount: preparedCandles.length,
+                consensus: consolidated.consensus,
                 buyVotes: subEval.buyVotes,
                 sellVotes: subEval.sellVotes,
                 subEngineVotes: subEval.subEngineVotes,
-                reasoningLog: subEval.reasoningLog
+                reasoningLog: subEval.reasoningLog,
+                activeSignals: signals,
+                totalStrategies: 10,
+                spotPrice: preparedCandles[index] ? preparedCandles[index].close : null,
+                evalTime: preparedCandles[index] ? preparedCandles[index].time : '',
+                evalDate: preparedCandles[index] ? preparedCandles[index].date : '',
+                timestamp: Date.now()
             }
         });
     }
 
+    consolidated.warmupCandleCount = preparedCandles.length;
     return consolidated;
 }
 

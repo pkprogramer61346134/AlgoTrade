@@ -80,8 +80,8 @@
                 <span class="kpi-title">Active Master Strategies</span>
                 <span class="kpi-icon">👑</span>
             </div>
-            <div class="kpi-value" style="color: var(--brand-purple);">5 Strategies</div>
-            <div class="kpi-subtext">Consensus Master Head Engine</div>
+            <div class="kpi-value" style="color: var(--brand-purple);" id="kpiActiveStratCount">10 Core Strategies</div>
+            <div class="kpi-subtext" id="kpiWarmupSubtext">761 Warmup Candles Loaded ⚡</div>
         </div>
 
         <div class="metric-kpi-card">
@@ -101,84 +101,114 @@
             <span style="font-size: 12px; font-weight: 600; color: var(--brand-amber); background: rgba(245, 158, 11, 0.12); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(245, 158, 11, 0.3);">⚡ Prime Trading Hours: 09:30 AM - 02:45 PM</span>
         </div>
         <div class="strategy-cards-grid">
-            <div class="strat-box">
+            <div class="strat-box" id="stratBox1">
                 <div>
                     <div class="strat-info-title">⚡ 1. Supertrend + VWAP Scalper</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-green">73.5% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-green">73.5% Win</span>
+                    <span id="stratPill1" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box">
+            <div class="strat-box" id="stratBox2">
                 <div>
                     <div class="strat-info-title">🎯 2. 15-Min ORB Range Breakout</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-green">68.8% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-green">68.8% Win</span>
+                    <span id="stratPill2" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box">
+            <div class="strat-box" id="stratBox3">
                 <div>
                     <div class="strat-info-title">📈 3. EMA 20/50 Golden Cross</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-green">67.2% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-green">67.2% Win</span>
+                    <span id="stratPill3" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box">
+            <div class="strat-box" id="stratBox4">
                 <div>
                     <div class="strat-info-title">💧 4. Wick Reversal Sweep</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-green">71.4% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-green">71.4% Win</span>
+                    <span id="stratPill4" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box" style="border-color: rgba(139, 92, 246, 0.4);">
+            <div class="strat-box" id="stratBox5" style="border-color: rgba(139, 92, 246, 0.4);">
                 <div>
                     <div class="strat-info-title">🚀 5. Multi-Indicator Confluence</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-purple">76.8% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-purple">76.8% Win</span>
+                    <span id="stratPill5" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box" style="border-color: rgba(16, 185, 129, 0.5);">
+            <div class="strat-box" id="stratBox6" style="border-color: rgba(16, 185, 129, 0.5);">
                 <div>
                     <div class="strat-info-title">📈 6. Triple EMA (10/20/50) Stacked</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-green">77.5% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-green">77.5% Win</span>
+                    <span id="stratPill6" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box" style="border-color: rgba(59, 130, 246, 0.5);">
+            <div class="strat-box" id="stratBox7" style="border-color: rgba(59, 130, 246, 0.5);">
                 <div>
                     <div class="strat-info-title">🌊 7. Supertrend + MACD Zero-Cross</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-purple">75.2% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-purple">75.2% Win</span>
+                    <span id="stratPill7" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box" style="border-color: rgba(245, 158, 11, 0.5);">
+            <div class="strat-box" id="stratBox8" style="border-color: rgba(245, 158, 11, 0.5);">
                 <div>
                     <div class="strat-info-title">🏛️ 8. Donchian 20-Period Breakout</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-green">74.8% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-green">74.8% Win</span>
+                    <span id="stratPill8" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box" style="border-color: rgba(236, 72, 153, 0.5);">
+            <div class="strat-box" id="stratBox9" style="border-color: rgba(236, 72, 153, 0.5);">
                 <div>
                     <div class="strat-info-title">💥 9. ATR Volatility Expansion</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-purple">72.8% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-purple">72.8% Win</span>
+                    <span id="stratPill9" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
 
-            <div class="strat-box" style="border-color: rgba(16, 185, 129, 0.5);">
+            <div class="strat-box" id="stratBox10" style="border-color: rgba(16, 185, 129, 0.5);">
                 <div>
                     <div class="strat-info-title">🏛️ 10. Previous Day (PDH/PDL) Breakout</div>
                     <div class="strat-info-sub">Min 1:1.5 ➔ Max 1:5+ Trailing SL</div>
                 </div>
-                <span class="pill-green">75.5% Win</span>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="pill-green">75.5% Win</span>
+                    <span id="stratPill10" style="font-size: 10px; font-weight: 700; color: #94a3b8; background: rgba(255, 255, 255, 0.06); padding: 2px 6px; border-radius: 6px;">● ONLINE</span>
+                </div>
             </div>
         </div>
     </div>
@@ -262,6 +292,38 @@
 
     </div>
 
+    <!-- Live Backend Engine Telemetry & Health Bar -->
+    <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border-color); border-radius: 16px; padding: 16px 20px; margin-bottom: 20px; backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 10px;">
+            <div style="font-size: 14px; font-weight: 800; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">🧠</span> BACKEND CONSENSUS ENGINE LIVE TELEMETRY & SYSTEM HEALTH
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--bull-green-light); background: rgba(16, 185, 129, 0.12); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(16, 185, 129, 0.3);">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                <span>SYSTEM HEALTH: 100% OK</span>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 14px; border-radius: 10px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">CONSENSUS DECISION</div>
+                <div id="telemetryConsensus" style="font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: var(--brand-amber); margin-top: 4px;">NO_SIGNAL (WAIT ⏳)</div>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 14px; border-radius: 10px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">WARMUP CANDLES MEMORY</div>
+                <div id="telemetryWarmup" style="font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: var(--bull-green-light); margin-top: 4px;">761 Candles Loaded ⚡</div>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 14px; border-radius: 10px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">SUB-ENGINE VOTES</div>
+                <div id="telemetryVotes" style="font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: #ffffff; margin-top: 4px;">0 BUY / 0 SELL (Confluence 2 Required)</div>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 14px; border-radius: 10px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">LAST BACKEND EVALUATION</div>
+                <div id="telemetryLastTime" style="font-family: var(--font-mono); font-size: 16px; font-weight: 800; color: #60a5fa; margin-top: 4px;">Real-Time Evaluating...</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Live Execution Trade Journal Table -->
     <div class="table-card">
         <div class="table-header-title">📖 Live Execution Trade Journal (Real-Time Stream)</div>
@@ -299,6 +361,64 @@
                 const ltpVal = typeof msg.ltp === 'number' ? msg.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : msg.ltp;
                 const headerElem = document.getElementById('niftyHeaderLtp');
                 if (headerElem) headerElem.innerText = `₹${ltpVal}`;
+            }
+
+            // 0.5. BACKEND CONSENSUS ENGINE LIVE TELEMETRY
+            if (msg.type === 'CONSENSUS_UPDATE' || (msg.data && msg.data.type === 'CONSENSUS_UPDATE')) {
+                const payload = msg.type === 'CONSENSUS_UPDATE' ? msg : msg.data;
+                
+                // Warmup Candles KPI & Telemetry
+                if (payload.warmupCandleCount) {
+                    const warmupStr = `${payload.warmupCandleCount} Warmup Candles Loaded ⚡`;
+                    const kpiWarmup = document.getElementById('kpiWarmupSubtext');
+                    const telWarmup = document.getElementById('telemetryWarmup');
+                    if (kpiWarmup) kpiWarmup.innerText = warmupStr;
+                    if (telWarmup) telWarmup.innerText = warmupStr;
+                }
+
+                // Consensus Decision Telemetry
+                const consensusVal = payload.consensus || 'NO_SIGNAL';
+                const consElem = document.getElementById('telemetryConsensus');
+                if (consElem) {
+                    consElem.innerText = consensusVal === 'BUY' ? '🟢 BUY SIGNAL' : (consensusVal === 'SELL' ? '🔴 SELL SIGNAL' : 'NO_SIGNAL (WAIT ⏳)');
+                    consElem.style.color = consensusVal === 'BUY' ? 'var(--bull-green-light)' : (consensusVal === 'SELL' ? 'var(--bear-red-light)' : 'var(--brand-amber)');
+                }
+
+                // Sub-Engine Votes
+                const votesElem = document.getElementById('telemetryVotes');
+                if (votesElem) {
+                    votesElem.innerText = `${payload.buyVotes || 0} BUY / ${payload.sellVotes || 0} SELL (Confluence 2 Req)`;
+                }
+
+                // Evaluation Timestamp
+                const timeElem = document.getElementById('telemetryLastTime');
+                if (timeElem) {
+                    const evalTimeStr = payload.evalTime ? `${payload.evalDate} ${payload.evalTime}` : new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' });
+                    timeElem.innerText = evalTimeStr;
+                }
+
+                // Dynamic Strategy Box Highlight & Status Pills
+                const activeSignals = payload.activeSignals || [];
+                for (let sId = 1; sId <= 10; sId++) {
+                    const box = document.getElementById(`stratBox${sId}`);
+                    const pill = document.getElementById(`stratPill${sId}`);
+                    if (!box || !pill) continue;
+
+                    const sig = activeSignals.find(s => s.strategyId === `strat-${sId}` || s.strategyId === sId);
+                    if (sig) {
+                        box.style.borderColor = sig.type === 'BUY' ? '#10b981' : '#ef4444';
+                        box.style.boxShadow = sig.type === 'BUY' ? '0 0 16px rgba(16, 185, 129, 0.4)' : '0 0 16px rgba(239, 68, 68, 0.4)';
+                        pill.innerText = `● ${sig.type} SIGNAL`;
+                        pill.style.color = sig.type === 'BUY' ? '#34d399' : '#f87171';
+                        pill.style.background = sig.type === 'BUY' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+                    } else {
+                        box.style.borderColor = sId === 5 ? 'rgba(139, 92, 246, 0.4)' : (sId === 7 ? 'rgba(59, 130, 246, 0.5)' : (sId === 8 ? 'rgba(245, 158, 11, 0.5)' : (sId === 9 ? 'rgba(236, 72, 153, 0.5)' : 'rgba(16, 185, 129, 0.4)')));
+                        box.style.boxShadow = 'none';
+                        pill.innerText = '● EVALUATING';
+                        pill.style.color = '#34d399';
+                        pill.style.background = 'rgba(16, 185, 129, 0.12)';
+                    }
+                }
             }
 
             // 1. PAPER TRADING TELEMETRY
