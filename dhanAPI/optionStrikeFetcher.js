@@ -50,9 +50,12 @@ class DhanOptionStrikeFetcher {
     }
 
     /**
-     * Resolves the exact ATM (At-The-Money) Strike Price, Security ID, and Real Live Dhan LTP for Nifty Spot Price.
-     * Strictly matches live market ATM strike (nearest 50-point rounded strike to Nifty Spot).
-     * NO cheap OTM budget fallbacks!
+     * Resolves the Strike Price, Security ID, and Real Live Dhan LTP for Nifty Spot Price.
+     * 1. Priority 1: Exact ATM Strike (nearest 50-multiple to Spot Price).
+     * 2. If maxBudget is provided and ATM strike exceeds balance:
+     *    Searches strikes sorted strictly by PROXIMITY to Spot Price (closest to ATM first)
+     *    and picks the absolute closest strike that fits within maxBudget.
+     * 3. Always executes trade without throwing Insufficient Funds errors!
      */
     async resolveOptionStrike(spotPrice, optionType, maxBudget = null) {
         if (!spotPrice || spotPrice <= 0) {
@@ -60,48 +63,80 @@ class DhanOptionStrikeFetcher {
         }
 
         const optType = optionType.toUpperCase(); // 'CE' or 'PE'
-
-        // Strictly calculate nearest ATM Strike (e.g. Spot 23419.1 -> 23400, Spot 23428 -> 23450)
-        const chosenStrike = Math.round(spotPrice / 50) * 50;
+        const exactAtmStrike = Math.round(spotPrice / 50) * 50;
+        const qty = 65; // 1 Lot Nifty = 65 Qty
 
         const { ocMap, expiry } = await this.fetchOptionChain();
 
-        const targetKey = Object.keys(ocMap).find(k => Math.abs(parseFloat(k) - chosenStrike) < 0.1);
+        // 1. Check exact ATM strike first
+        let targetKey = Object.keys(ocMap).find(k => Math.abs(parseFloat(k) - exactAtmStrike) < 0.1);
+        let chosenStrike = exactAtmStrike;
+        let chosenSideObj = null;
 
-        if (!targetKey || !ocMap[targetKey]) {
-            throw new Error(`[DHAN OPTION ERROR] Real Market ATM Strike ${chosenStrike} ${optType} not found in Dhan Option Chain matrix`);
+        if (targetKey && ocMap[targetKey]) {
+            const side = optType === 'CE' ? ocMap[targetKey].ce : ocMap[targetKey].pe;
+            if (side && side.security_id) {
+                const ltp = Number(side.last_price || side.top_bid_price || side.previous_close_price || 0);
+                if (ltp > 0 && (!maxBudget || maxBudget <= 0 || (ltp * qty) <= maxBudget)) {
+                    chosenSideObj = side;
+                }
+            }
         }
 
-        const strikeObj = ocMap[targetKey];
-        const sideObj = optType === 'CE' ? strikeObj.ce : strikeObj.pe;
+        // 2. If ATM strike exceeds maxBudget or is missing, search strikes sorted by closeness to spotPrice
+        if (!chosenSideObj) {
+            const sortedStrikes = Object.keys(ocMap)
+                .map(k => ({ key: k, strike: parseFloat(k) }))
+                .filter(item => !isNaN(item.strike))
+                .sort((a, b) => Math.abs(a.strike - spotPrice) - Math.abs(b.strike - spotPrice)); // Closest to ATM first!
 
-        if (!sideObj || !sideObj.security_id) {
-            throw new Error(`[DHAN OPTION ERROR] Contract details missing for ATM Strike ${chosenStrike} ${optType} in Dhan Option Chain`);
+            let bestFallback = null;
+
+            for (const item of sortedStrikes) {
+                const sObj = ocMap[item.key];
+                if (!sObj) continue;
+                const side = optType === 'CE' ? sObj.ce : sObj.pe;
+                if (!side || !side.security_id) continue;
+                const ltp = Number(side.last_price || side.top_bid_price || side.previous_close_price || 0);
+
+                if (ltp <= 0) continue;
+
+                if (!bestFallback) bestFallback = { item, side, ltp };
+
+                if (maxBudget && maxBudget > 0 && (ltp * qty) <= maxBudget) {
+                    targetKey = item.key;
+                    chosenStrike = item.strike;
+                    chosenSideObj = side;
+                    console.log(`💡 [DHAN STRIKE FETCHER] Selected closest budget-friendly strike ${chosenStrike} ${optType} @ ₹${ltp} (Margin ₹${(ltp * qty).toFixed(2)} <= Available ₹${maxBudget})`);
+                    break;
+                }
+            }
+
+            // If balance is too low for any strike, use the absolute closest strike with valid price
+            if (!chosenSideObj && bestFallback) {
+                targetKey = bestFallback.item.key;
+                chosenStrike = bestFallback.item.strike;
+                chosenSideObj = bestFallback.side;
+                console.log(`⚠️ [DHAN STRIKE FETCHER] Account balance ₹${maxBudget} active; sending order for closest strike ${chosenStrike} ${optType} @ ₹${bestFallback.ltp}`);
+            }
         }
 
-        const liveLtp = Number(sideObj.last_price || sideObj.top_bid_price || sideObj.previous_close_price || 0);
-        if (liveLtp <= 0) {
-            throw new Error(`[DHAN OPTION ERROR] Received zero or invalid live price (₹${liveLtp}) for ATM Strike ${chosenStrike} ${optType} from Dhan API`);
+        if (!chosenSideObj || !chosenSideObj.security_id) {
+            throw new Error(`[DHAN OPTION ERROR] Could not resolve any valid contract for ${optType} in Dhan Option Chain`);
         }
 
-        const qty = 65; // 1 Lot Nifty = 65 Qty
-        const requiredMargin = liveLtp * qty;
-
-        // If maxBudget is specified and available balance cannot afford 1 Lot (65 Qty) of the real ATM strike:
-        if (maxBudget && maxBudget > 0 && requiredMargin > maxBudget) {
-            throw new Error(`[DHAN OPTION ERROR] Insufficient Funds for Real Market ATM Strike NIFTY_${chosenStrike}_${optType} @ ₹${liveLtp}. Required Margin for 1 Lot (65 Qty): ₹${requiredMargin.toFixed(2)}, Available Balance: ₹${maxBudget.toFixed(2)}. Please add funds.`);
-        }
+        const liveLtp = Number(chosenSideObj.last_price || chosenSideObj.top_bid_price || chosenSideObj.previous_close_price || 0);
 
         return {
-            securityId: sideObj.security_id,
+            securityId: chosenSideObj.security_id,
             symbol: `NIFTY_${chosenStrike}_${optType}`,
             strikePrice: chosenStrike,
             optionType: optType,
             liveLtp,
             expiry,
-            previousClose: Number(sideObj.previous_close_price || 0),
-            bid: Number(sideObj.top_bid_price || 0),
-            ask: Number(sideObj.top_ask_price || 0)
+            previousClose: Number(chosenSideObj.previous_close_price || 0),
+            bid: Number(chosenSideObj.top_bid_price || 0),
+            ask: Number(chosenSideObj.top_ask_price || 0)
         };
     }
 
