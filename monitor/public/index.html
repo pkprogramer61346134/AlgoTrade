@@ -98,7 +98,7 @@
     <div style="margin-bottom: 20px;">
         <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between;">
             <span>👑 10 CORE DAILY ACTIVE STRATEGIES (MIN 1:1.5 LOCK ➔ MAX 1:5+ RUNNER)</span>
-            <span style="font-size: 12px; font-weight: 600; color: var(--brand-amber); background: rgba(245, 158, 11, 0.12); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(245, 158, 11, 0.3);">⚡ Prime Trading Hours: 09:30 AM - 02:45 PM</span>
+            <span style="font-size: 12px; font-weight: 600; color: var(--brand-amber); background: rgba(245, 158, 11, 0.12); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(245, 158, 11, 0.3);">⚡ Prime Trading Hours: 09:15 AM - 03:10 PM</span>
         </div>
         <div class="strategy-cards-grid">
             <div class="strat-box" id="stratBox1">
@@ -695,25 +695,31 @@
         });
 
         let liveTradeCount = 0;
-        function addLiveTradeRow(mode, trade) {
+        function addLiveTradeRow(mode, rawTrade) {
+            const trade = (rawTrade && rawTrade.eventData) ? rawTrade.eventData : ((rawTrade && rawTrade.data) ? rawTrade.data : rawTrade);
+            if (!trade || !trade.symbol || trade.symbol === 'undefined') return;
+
             const tbody = document.getElementById('liveTradeTableBody');
             if (liveTradeCount === 0) tbody.innerHTML = '';
             liveTradeCount++;
 
             const row = document.createElement('tr');
-            const pnlClass = trade.netPnl >= 0 ? 'val-green' : 'val-red';
-            const reasonPill = trade.netPnl >= 0 ? 'pill-green' : 'pill-red';
-            const tpVal = trade.targetProfit ? `₹${trade.targetProfit}` : `₹${(trade.entryPrice + 26.4).toFixed(2)}`;
-            const slVal = trade.initialSL ? `₹${trade.initialSL}` : `₹${(trade.entryPrice - 12.0).toFixed(2)}`;
+            const netPnl = trade.netPnl !== undefined ? Number(trade.netPnl) : 0.0;
+            const pnlClass = netPnl >= 0 ? 'val-green' : 'val-red';
+            const reasonPill = netPnl >= 0 ? 'pill-green' : 'pill-red';
+            const entryPrice = trade.entryPrice !== undefined ? trade.entryPrice : '--';
+            const exitPrice = trade.exitPrice !== undefined ? trade.exitPrice : '--';
+            const tpVal = trade.targetProfit ? `₹${trade.targetProfit}` : (trade.entryPrice ? `₹${(Number(trade.entryPrice) + 33.0).toFixed(2)}` : '₹--');
+            const slVal = trade.initialSL ? `₹${trade.initialSL}` : (trade.entryPrice ? `₹${(Number(trade.entryPrice) - 15.0).toFixed(2)}` : '₹--');
             row.innerHTML = `
                 <td>${trade.openedAt || new Date().toLocaleTimeString()}</td>
                 <td><span class="${mode === 'REAL' ? 'pill-red' : 'pill-green'}">${mode}</span></td>
                 <td><strong style="color: var(--text-primary);">${trade.symbol}</strong></td>
-                <td>₹${trade.entryPrice}</td>
+                <td>₹${entryPrice}</td>
                 <td style="color: var(--bull-green-light); font-weight:700;">${tpVal}</td>
                 <td style="color: var(--bear-red-light); font-weight:700;">${slVal}</td>
-                <td>₹${trade.exitPrice}</td>
-                <td class="${pnlClass}">${formatRupee(trade.netPnl)}</td>
+                <td>₹${exitPrice}</td>
+                <td class="${pnlClass}">${formatRupee(netPnl)}</td>
                 <td><span class="${reasonPill}">${cleanExitReason(trade.reason)}</span></td>
             `;
             tbody.prepend(row);

@@ -139,8 +139,8 @@ class SmartOrderManager {
         // Fetch real account balance if Dhan API is configured
         await this.refreshAccountBalance();
 
-        // Schedule 3:15 PM auto-cut check
-        this.scheduleAutoCut315();
+        // Schedule 3:10 PM auto-cut check
+        this.scheduleAutoCut310();
 
         // Start 3-second periodic telemetry heartbeat broadcast
         setInterval(() => {
@@ -509,19 +509,19 @@ class SmartOrderManager {
     }
 
     /**
-     * 3:15 PM Auto-Cut Timer
+     * 3:10 PM Auto-Cut Timer
      */
-    scheduleAutoCut315() {
+    scheduleAutoCut310() {
         const checkAutoCut = () => {
             const now = new Date();
             const hours = now.getHours();
             const minutes = now.getMinutes();
 
-            // Check if 3:15 PM (15:15) or later
-            if ((hours === 15 && minutes >= 15) || hours > 15) {
+            // Check if 3:10 PM (15:10) or later
+            if ((hours === 15 && minutes >= 10) || hours > 15) {
                 if (this.isOrderActive && this.activePosition) {
-                    console.log('⏰ [SMART ORDER MANAGER] 3:15 PM Auto-Cut Triggered!');
-                    this.closePosition("AUTO_CUT_315_PM");
+                    console.log('⏰ [SMART ORDER MANAGER] 3:10 PM Auto-Cut Triggered!');
+                    this.closePosition("AUTO_CUT_310_PM");
                 }
             }
         };

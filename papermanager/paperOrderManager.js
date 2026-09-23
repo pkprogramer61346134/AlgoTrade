@@ -126,8 +126,8 @@ class PaperOrderManager {
             }
         });
 
-        // Schedule 3:15 PM auto-cut check
-        this.scheduleAutoCut315();
+        // Schedule 3:10 PM auto-cut check
+        this.scheduleAutoCut310();
 
         // Start 3-second periodic telemetry heartbeat broadcast
         setInterval(() => {
@@ -404,18 +404,18 @@ class PaperOrderManager {
     }
 
     /**
-     * 3:15 PM Auto-Cut Timer
+     * 3:10 PM Auto-Cut Timer
      */
-    scheduleAutoCut315() {
+    scheduleAutoCut310() {
         const checkAutoCut = () => {
             const now = new Date();
             const hours = now.getHours();
             const minutes = now.getMinutes();
 
-            if ((hours === 15 && minutes >= 15) || hours > 15) {
+            if ((hours === 15 && minutes >= 10) || hours > 15) {
                 if (this.isOrderActive && this.activePosition) {
-                    console.log('⏰ [PAPER MANAGER] 3:15 PM Auto-Cut Triggered!');
-                    this.closePaperPosition("PAPER_AUTO_CUT_315_PM");
+                    console.log('⏰ [PAPER MANAGER] 3:10 PM Auto-Cut Triggered!');
+                    this.closePaperPosition("PAPER_AUTO_CUT_310_PM");
                 }
             }
         };
