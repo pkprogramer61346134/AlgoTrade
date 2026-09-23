@@ -4,7 +4,7 @@ const { WebSocket } = require('ws');
 const AlgoTradeWSClient = require('../server/wsClient');
 const DhanOptionStrikeFetcher = require('../dhanAPI/optionStrikeFetcher');
 
-const JOURNAL_PATH = path.join(__dirname, '../server/data/trade_journal.json');
+const JOURNAL_PATH = path.join(__dirname, 'trade_journal.json');
 
 // Dhan SDK fallback import
 let DhanSDK;
@@ -60,7 +60,7 @@ class SmartOrderManager {
     }
 
     /**
-     * Loads saved trade journal & balance from server/data/trade_journal.json
+     * Loads saved trade journal & balance from ordermanager/trade_journal.json
      */
     loadJournal() {
         try {
@@ -77,7 +77,7 @@ class SmartOrderManager {
     }
 
     /**
-     * Saves trade journal to server/data/trade_journal.json
+     * Saves trade journal to ordermanager/trade_journal.json
      */
     saveJournal() {
         try {
@@ -114,17 +114,22 @@ class SmartOrderManager {
             if (msg.type === 'FORWARD_MESSAGE') {
                 const payload = msg.payload;
 
-                // 1. Consensus Signal Event from consensusEngine
+                // 1. Live Nifty Tick forwarded
+                if (payload && (payload.type === 'LIVE_NIFTY_TICK' || payload.action === 'LIVE_NIFTY_TICK') && (payload.ltp || payload.currentLtp || payload.spotPrice)) {
+                    this.onSpotPriceTick(payload.ltp || payload.currentLtp || payload.spotPrice);
+                }
+
+                // 2. Consensus Signal Event from consensusEngine
                 if (payload && (payload.action === 'CONSENSUS_SIGNAL_RESPONSE' || payload.consensus)) {
                     this.handleConsensusSignal(payload.singleSignal || payload, msg.senderId);
                 }
 
-                // 2. Live Option Tick Update Event
+                // 3. Live Option Tick Update Event
                 if (payload && payload.action === 'LIVE_OPTION_TICK') {
                     this.onOptionPriceTick(payload.ltp);
                 }
 
-                // 3. Live Spot Price Update Event
+                // 4. Live Spot Price Update Event
                 if (payload && (payload.currentLtp || payload.spotPrice)) {
                     this.onSpotPriceTick(payload.currentLtp || payload.spotPrice);
                 }
@@ -396,9 +401,19 @@ class SmartOrderManager {
     broadcastTelemetry(event, data) {
         if (!this.wsClient || !this.wsClient.connected) return;
 
+        const winratePercent = this.todaySummary.totalTrades > 0 
+            ? `${((this.todaySummary.wins / this.todaySummary.totalTrades) * 100).toFixed(1)}%` 
+            : '0.0%';
+
+        const summaryObject = {
+            ...this.todaySummary,
+            winratePercent
+        };
+
         const telemetryPacket = {
             event,
             timestamp: Date.now(),
+            balance: this.accountBalance,
             account: {
                 availableFunds: this.accountBalance,
                 marginUsed: this.marginUsed
@@ -416,7 +431,8 @@ class SmartOrderManager {
                 trailingSL: this.activePosition.currentTrailingSL,
                 ratioText: this.activePosition.currentRatioText
             } : null,
-            todaySummary: this.todaySummary,
+            summary: summaryObject,
+            todaySummary: summaryObject,
             eventData: data
         };
 
