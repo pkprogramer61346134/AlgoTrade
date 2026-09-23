@@ -154,7 +154,8 @@ class PaperOrderManager {
     async executePaperOrderEntry(signalType, signal) {
         const spotPrice = signal.entry || 24500.0;
         const optionType = (signalType === 'BUY') ? 'CE' : 'PE';
-        const strikePrice = Math.round(spotPrice / 50) * 50;
+        // In-The-Money (ITM) Strike Selection: Math.floor for CE, Math.ceil for PE
+        const strikePrice = optionType === 'CE' ? Math.floor(spotPrice / 50) * 50 : Math.ceil(spotPrice / 50) * 50;
         const symbol = `NIFTY_${strikePrice}_${optionType}`;
 
         const basePremium = 120.0;

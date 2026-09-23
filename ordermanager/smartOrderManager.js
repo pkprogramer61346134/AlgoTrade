@@ -147,10 +147,10 @@ class SmartOrderManager {
     async executeSmartOrderEntry(signalType, signal) {
         const spotPrice = signal.entry || 24500.0;
 
-        // Select Strike Price (CE for BUY, PE for SELL)
+        // Select In-The-Money (ITM) Strike Price (CE for BUY, PE for SELL)
         const optionType = (signalType === 'BUY') ? 'CE' : 'PE';
-        // Round to nearest 50 strike (ATM)
-        const strikePrice = Math.round(spotPrice / 50) * 50;
+        // In-The-Money (ITM) Strike Selection: Math.floor for CE, Math.ceil for PE
+        const strikePrice = optionType === 'CE' ? Math.floor(spotPrice / 50) * 50 : Math.ceil(spotPrice / 50) * 50;
         const symbol = `NIFTY_${strikePrice}_${optionType}`;
 
         // Estimate Option Premium (approx ~120 for ATM option)
