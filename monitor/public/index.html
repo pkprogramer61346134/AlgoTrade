@@ -410,7 +410,7 @@
                 // Evaluation Timestamp
                 const timeElem = document.getElementById('telemetryLastTime');
                 if (timeElem) {
-                    const evalTimeStr = payload.evalTime ? `${payload.evalDate} ${payload.evalTime}` : new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' });
+                    const evalTimeStr = payload.evalTime ? `${payload.evalDate} ${payload.evalTime} IST` : new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' });
                     timeElem.innerText = evalTimeStr;
                 }
 
@@ -423,8 +423,14 @@
                     const pill = document.getElementById(`stratPill${sId}`);
                     if (!box || !pill) continue;
 
-                    const sig = activeSignals.find(s => s.strategyId === `strat-${sId}` || s.strategyId === sId);
-                    const state = strategyStates.find(s => s.strategyId === `strat-${sId}` || s.strategyId === sId);
+                    const matchStrat = (s) => {
+                        if (!s || !s.strategyId) return false;
+                        const idStr = String(s.strategyId).toUpperCase();
+                        return idStr.includes(`STRAT_${sId}_`) || idStr.includes(`_${sId}_`) || idStr === `STRAT_${sId}` || idStr === `STRAT-${sId}` || idStr === String(sId);
+                    };
+
+                    const sig = activeSignals.find(matchStrat);
+                    const state = strategyStates.find(matchStrat);
 
                     const voteType = sig ? sig.type : (state ? state.type : 'NEUTRAL');
 

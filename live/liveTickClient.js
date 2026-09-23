@@ -103,19 +103,40 @@ class LiveTickClient {
      * Handles an incoming live market price tick
      */
     onTick(ltp, volume = 0, dateObj = new Date()) {
-        const timeStr = dateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+        // Enforce IST Timezone (Asia/Kolkata) for all date & time components regardless of server OS
+        const istFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Kolkata',
+            hour12: false,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        const parts = istFormatter.formatToParts(dateObj);
+        let year = '', month = '', day = '', hour = '0', minute = '0', second = '0';
+        for (const p of parts) {
+            if (p.type === 'year') year = p.value;
+            if (p.type === 'month') month = p.value;
+            if (p.type === 'day') day = p.value;
+            if (p.type === 'hour') hour = p.value;
+            if (p.type === 'minute') minute = p.value;
+            if (p.type === 'second') second = p.value;
+        }
+
+        const dateStr = `${year}-${month}-${day}`;
+        const timeStr = `${hour}:${minute}:${second}`;
+        const candleMin = Math.floor(parseInt(minute, 10) / this.interval) * this.interval;
+        const candleTimeStr = `${hour}:${String(candleMin).padStart(2, '0')}`;
+        const epochSec = Math.floor(dateObj.getTime() / 1000);
 
         // 1. Verify Market Session Hours (09:15 AM to 03:30 PM IST)
         if (!this.isMarketSession(dateObj)) {
             console.log(`🔴 [LIVE TICK CLIENT] Market Session Closed (09:15 AM - 03:30 PM IST). Tick ignored: ${timeStr} IST | LTP: ₹${ltp}`);
             return;
         }
-
-        const dateStr = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-        const hours = String(dateObj.getHours()).padStart(2, '0');
-        const minutes = Math.floor(dateObj.getMinutes() / this.interval) * this.interval;
-        const candleTimeStr = `${hours}:${String(minutes).padStart(2, '0')}`;
-        const epochSec = Math.floor(dateObj.getTime() / 1000);
 
         // Check if starting a new 5-minute candle
         if (!this.currentCandle || this.currentCandle.time !== candleTimeStr || this.currentCandle.date !== dateStr) {
