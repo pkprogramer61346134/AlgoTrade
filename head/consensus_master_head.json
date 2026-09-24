@@ -2,6 +2,11 @@
   "id": "consensus_master_head",
   "name": "👑 Master Head Multi-Strategy Engine (10 Core Daily Active Strategies)",
   "enabled": true,
+  "executionSettings": {
+    "paperTradeEnabled": true,
+    "realTradeEnabled": false,
+    "routingMode": "PAPER"
+  },
   "strategies": [
     {
       "id": "STRAT_1_SUPERTREND_VWAP",

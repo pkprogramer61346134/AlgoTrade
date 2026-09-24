@@ -686,6 +686,23 @@ class ConsensusEngineService {
         this.activeRoutingMode = 'PAPER'; // DEFAULT: PAPER ONLY (Real Live Dhan Trading OFF)
     }
 
+    getExecutionSettings() {
+        try {
+            const config = loadStrategyConfig("consensus_master_head.json");
+            const settings = config.executionSettings || {};
+            const paperEnabled = settings.paperTradeEnabled !== undefined ? Boolean(settings.paperTradeEnabled) : true;
+            const realEnabled = settings.realTradeEnabled !== undefined ? Boolean(settings.realTradeEnabled) : false;
+            const routingMode = settings.routingMode || (realEnabled && paperEnabled ? 'BOTH' : (realEnabled ? 'REAL' : 'PAPER'));
+            return {
+                paperTradeEnabled: paperEnabled,
+                realTradeEnabled: realEnabled,
+                routingMode: routingMode.toUpperCase()
+            };
+        } catch (e) {
+            return { paperTradeEnabled: true, realTradeEnabled: false, routingMode: 'PAPER' };
+        }
+    }
+
     connect(wsUrl = 'ws://localhost:8080', clientId = 'consensusEngine') {
         this.wsUrl = wsUrl;
         this.clientId = clientId;
@@ -800,43 +817,32 @@ class ConsensusEngineService {
                     }
                 });
 
-                // 2. Route Signal to Order Managers based on execution mode (DEFAULT: BOTH)
+                // 2. Route Signal to Order Managers based on consensus_master_head.json executionSettings
                 if (singleSignal.consensus && singleSignal.consensus !== 'NO_SIGNAL') {
-                    if (effectiveMode === 'BOTH' || (effectiveMode !== 'REAL' && effectiveMode !== 'PAPER')) {
-                        console.log(`🚀 [CONSENSUS ROUTING] Forwarding Dual Signals to "paperOrderManager" AND "orderManager"...`);
-                        this.sendRaw({
-                            type: 'SEND_MESSAGE',
-                            recipientId: 'paperOrderManager',
-                            payload: { action: 'CONSENSUS_SIGNAL_RESPONSE', mode: 'PAPER', singleSignal }
-                        });
-                        this.sendRaw({
-                            type: 'SEND_MESSAGE',
-                            recipientId: 'orderManager',
-                            payload: { action: 'CONSENSUS_SIGNAL_RESPONSE', mode: 'REAL', singleSignal }
-                        });
-                    } else if (effectiveMode === 'REAL' || targetRecipient === 'orderManager') {
-                        console.log(`🚀 [CONSENSUS ROUTING] Forwarding Real Trading Signal to "orderManager"...`);
-                        this.sendRaw({
-                            type: 'SEND_MESSAGE',
-                            recipientId: 'orderManager',
-                            payload: {
-                                action: 'CONSENSUS_SIGNAL_RESPONSE',
-                                mode: 'REAL',
-                                singleSignal
-                            }
-                        });
-                    } else {
-                        // PAPER TRADING ("paperOrderManager")
+                    const execSettings = this.getExecutionSettings();
+                    const isPaperAllowed = execSettings.paperTradeEnabled;
+                    const isRealAllowed = execSettings.realTradeEnabled;
+
+                    if (isPaperAllowed && (effectiveMode === 'PAPER' || effectiveMode === 'BOTH')) {
                         console.log(`📝 [CONSENSUS ROUTING] Forwarding Signal to Paper Trading Manager ("paperOrderManager")...`);
                         this.sendRaw({
                             type: 'SEND_MESSAGE',
                             recipientId: 'paperOrderManager',
-                            payload: {
-                                action: 'CONSENSUS_SIGNAL_RESPONSE',
-                                mode: 'PAPER',
-                                singleSignal
-                            }
+                            payload: { action: 'CONSENSUS_SIGNAL_RESPONSE', mode: 'PAPER', routingMode: 'PAPER', singleSignal }
                         });
+                    } else {
+                        console.log(`🔒 [CONSENSUS ROUTING] Paper Trading is DISABLED in consensus_master_head.json (paperTradeEnabled: false). Skipping paperOrderManager.`);
+                    }
+
+                    if (isRealAllowed && (effectiveMode === 'REAL' || effectiveMode === 'BOTH')) {
+                        console.log(`🚀 [CONSENSUS ROUTING] Forwarding Real Signal to Order Manager ("orderManager")...`);
+                        this.sendRaw({
+                            type: 'SEND_MESSAGE',
+                            recipientId: 'orderManager',
+                            payload: { action: 'CONSENSUS_SIGNAL_RESPONSE', mode: 'REAL', routingMode: 'REAL', singleSignal }
+                        });
+                    } else {
+                        console.log(`🔒 [CONSENSUS ROUTING] Real Dhan Trading is DISABLED in consensus_master_head.json (realTradeEnabled: false). Skipping orderManager.`);
                     }
                 }
 
