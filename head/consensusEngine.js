@@ -683,7 +683,7 @@ class ConsensusEngineService {
         this.connected = false;
         this.clientId = 'consensusEngine';
         this.wsUrl = 'ws://localhost:8080';
-        this.activeRoutingMode = 'BOTH'; // DEFAULT: BOTH (Paper Trading + Real Dhan Order Manager)
+        this.activeRoutingMode = 'PAPER'; // DEFAULT: PAPER ONLY (Real Live Dhan Trading OFF)
     }
 
     connect(wsUrl = 'ws://localhost:8080', clientId = 'consensusEngine') {
