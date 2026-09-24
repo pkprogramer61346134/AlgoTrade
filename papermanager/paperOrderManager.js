@@ -43,6 +43,10 @@ class PaperOrderManager {
         // Trailing SL Steps (1:1.5, 1:2.5, 1:3, 1:3.5, 1:4, 1:4.5, 1:5+)
         this.trailingRatioSteps = [1.5, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
+        // Telemetry Throttling Configuration (2 Seconds smooth refresh rate)
+        this.lastTelemetryTime = 0;
+        this.telemetryThrottleMs = 2000;
+
         this.autoCutTimer = null;
         this.loadJournal();
     }
@@ -120,10 +124,10 @@ class PaperOrderManager {
         // Schedule 3:10 PM auto-cut check
         this.scheduleAutoCut310();
 
-        // 500ms periodic telemetry heartbeat broadcast for UI
+        // 2-second periodic telemetry heartbeat broadcast for smooth UI without flickering
         setInterval(() => {
             this.broadcastTelemetry("PAPER_HEARTBEAT", null);
-        }, 500);
+        }, 2000);
 
         console.log(`✅ [PAPER MANAGER] Running & Listening. Virtual Balance: ₹${this.virtualBalance}`);
     }
@@ -370,6 +374,14 @@ class PaperOrderManager {
      */
     broadcastTelemetry(event, data) {
         if (!this.wsClient || !this.wsClient.connected) return;
+
+        const now = Date.now();
+        const isCriticalEvent = event.includes('OPENED') || event.includes('CLOSED') || event.includes('FAILED') || event.includes('REJECTED');
+
+        if (!isCriticalEvent && (now - this.lastTelemetryTime < this.telemetryThrottleMs)) {
+            return; // Skip rapid updates to keep UI smooth and readable
+        }
+        this.lastTelemetryTime = now;
 
         const telemetryPacket = {
             event,

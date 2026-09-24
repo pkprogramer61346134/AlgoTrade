@@ -641,31 +641,35 @@ async function evaluateSingleConsensusSignalAsync(candles, i = -1, data = {}) {
     consolidated.reasoningLog = subEval.reasoningLog;
     consolidated.strategyStates = strategyStates;
 
-    // Broadcast comprehensive consensus & sub-engine telemetry over WebSocket to monitorClient
+    // Broadcast comprehensive consensus & sub-engine telemetry over WebSocket to monitorClient (2-second smooth refresh rate)
     if (consensusService && consensusService.connected) {
-        consensusService.sendRaw({
-            type: 'SEND_MESSAGE',
-            recipientId: 'monitorClient',
-            payload: {
-                type: 'CONSENSUS_UPDATE',
-                warmupCandleCount: preparedCandles.length,
-                routingMode: consensusService.activeRoutingMode || 'BOTH',
-                consensus: consolidated.consensus,
-                stratBuyCount: consolidated.stratBuyCount || 0,
-                stratSellCount: consolidated.stratSellCount || 0,
-                buyVotes: subEval.buyVotes,
-                sellVotes: subEval.sellVotes,
-                subEngineVotes: subEval.subEngineVotes,
-                reasoningLog: subEval.reasoningLog,
-                activeSignals: triggeredSignals,
-                strategyStates: strategyStates,
-                totalStrategies: 10,
-                spotPrice: preparedCandles[index] ? preparedCandles[index].close : null,
-                evalTime: preparedCandles[index] ? preparedCandles[index].time : '',
-                evalDate: preparedCandles[index] ? preparedCandles[index].date : '',
-                timestamp: Date.now()
-            }
-        });
+        const now = Date.now();
+        if (!consensusService.lastConsensusBroadcastTime || (now - consensusService.lastConsensusBroadcastTime >= 2000)) {
+            consensusService.lastConsensusBroadcastTime = now;
+            consensusService.sendRaw({
+                type: 'SEND_MESSAGE',
+                recipientId: 'monitorClient',
+                payload: {
+                    type: 'CONSENSUS_UPDATE',
+                    warmupCandleCount: preparedCandles.length,
+                    routingMode: consensusService.activeRoutingMode || 'BOTH',
+                    consensus: consolidated.consensus,
+                    stratBuyCount: consolidated.stratBuyCount || 0,
+                    stratSellCount: consolidated.stratSellCount || 0,
+                    buyVotes: subEval.buyVotes,
+                    sellVotes: subEval.sellVotes,
+                    subEngineVotes: subEval.subEngineVotes,
+                    reasoningLog: subEval.reasoningLog,
+                    activeSignals: triggeredSignals,
+                    strategyStates: strategyStates,
+                    totalStrategies: 10,
+                    spotPrice: preparedCandles[index] ? preparedCandles[index].close : null,
+                    evalTime: preparedCandles[index] ? preparedCandles[index].time : '',
+                    evalDate: preparedCandles[index] ? preparedCandles[index].date : '',
+                    timestamp: now
+                }
+            });
+        }
     }
 
     consolidated.warmupCandleCount = preparedCandles.length;
