@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 AlgoTrade - Master Consensus Engine Terminal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Header -->
+        <header class="top-header">
+            <div class="brand-box">
+                <div class="brand-logo">🧠</div>
+                <div>
+                    <h1 class="brand-title">AlgoTrade Master Consensus Terminal</h1>
+                    <p class="brand-subtitle">10 Core Daily Active Strategies Multi-Confluence Engine</p>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="nifty-spot-pill">
+                    <span class="spot-label">📈 NIFTY 50 SPOT:</span>
+                    <strong class="spot-val" id="niftySpotVal">₹23,072.55</strong>
+                </div>
+                <div class="status-pill online" id="connectionBadge">
+                    <span class="dot"></span>
+                    <span id="connText">WS CONNECTED</span>
+                </div>
+                <div class="mode-badge">
+                    <span>ROUTING:</span>
+                    <strong id="routingModeText">BOTH (PAPER + REAL)</strong>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main KPI Summary Grid -->
+        <section class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-label">Active Core Strategies</div>
+                <div class="kpi-value val-purple" id="kpiTotalStrategies">10 Active</div>
+                <div class="kpi-subtext" id="kpiStrategyVotes">Votes: 0 BUY / 0 SELL</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label">Overall Market Trend</div>
+                <div class="kpi-value val-green" id="kpiMarketTrend">UP ⬆️</div>
+                <div class="kpi-subtext" id="kpiTrendSubtext">Trend: BULLISH CONFLUENCE</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label">Consensus Output Signal</div>
+                <div class="kpi-value val-amber" id="kpiConsensusSignal">WAITING</div>
+                <div class="kpi-subtext" id="kpiSignalConfidence">Confidence: 0.0%</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label">Paper / Real Routing Status</div>
+                <div class="kpi-value" id="kpiRoutingStatus">PAPER: ON | REAL: OFF</div>
+                <div class="kpi-subtext" id="kpiRoutingMode">Active Mode: PAPER</div>
+            </div>
+        </section>
+
+        <!-- Main Dashboard Content Grid -->
+        <main class="dashboard-layout">
+            <!-- 10 Active Strategies Panel -->
+            <div class="panel strategies-panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>👑 10 Core Daily Active Strategies (Live YES / NO Votes)</h2>
+                        <div class="panel-subtitle" id="liveVotesSummary">Live Signals: 0 YES (BUY) | 0 YES (SELL) | 10 NO (HOLD)</div>
+                    </div>
+                    <span class="badge-status active">ALL 10 MONITORED</span>
+                </div>
+
+                <div class="strategies-grid" id="strategiesGrid">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+
+            <!-- Signal Trigger & Control Console Panel -->
+            <div class="panel controls-panel">
+                <div class="panel-header">
+                    <h2>⚡ Consensus Engine Signal Console</h2>
+                </div>
+                <p class="panel-desc">Trigger test consensus evaluations across all 10 strategies:</p>
+
+                <div class="test-buttons-grid">
+                    <button class="btn btn-buy" onclick="triggerConsensusTest('BUY')">
+                        📈 Evaluate BUY (TREND UP)
+                    </button>
+                    <button class="btn btn-sell" onclick="triggerConsensusTest('SELL')">
+                        📉 Evaluate SELL (TREND DOWN)
+                    </button>
+                </div>
+
+                <div class="system-logs-box">
+                    <div class="log-title">Master Head Consensus Log</div>
+                    <div class="logs-container" id="logsContainer">
+                        <div class="log-line">ℹ️ Terminal Connected to AlgoTrade WebSocket Network...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -11,6 +11,9 @@ const fs = require('fs');
 const path = require('path');
 const indicators = require('../indicators');
 
+const HeadWS = require('./headws');
+const HeadRouter = require('./headrouter');
+
 const CONFIG_DIR = path.join(__dirname, '../strategies_config');
 
 /**
@@ -683,11 +686,11 @@ const { WebSocket } = require('ws');
 
 class ConsensusEngineService {
     constructor() {
-        this.ws = null;
-        this.connected = false;
         this.clientId = 'consensusEngine';
         this.wsUrl = 'ws://localhost:8080';
-        this.activeRoutingMode = 'PAPER'; // DEFAULT: PAPER ONLY (Real Live Dhan Trading OFF)
+        this.activeRoutingMode = 'PAPER';
+        this.headWS = new HeadWS(this.wsUrl, this.clientId);
+        this.headRouter = new HeadRouter(this.headWS);
     }
 
     getExecutionSettings() {
@@ -707,53 +710,27 @@ class ConsensusEngineService {
         }
     }
 
-    connect(wsUrl = 'ws://localhost:8080', clientId = 'consensusEngine') {
+    async connect(wsUrl = 'ws://localhost:8080', clientId = 'consensusEngine') {
         this.wsUrl = wsUrl;
         this.clientId = clientId;
 
-        try {
-            console.log(`📡 [CONSENSUS ENGINE WS] Connecting to ${this.wsUrl} as "${this.clientId}"...`);
-            this.ws = new WebSocket(this.wsUrl);
-
-            this.ws.on('open', () => {
-                this.connected = true;
-                console.log(`✅ [CONSENSUS ENGINE WS] Connected to WebSocket Server.`);
-                this.sendRaw({ type: 'REGISTER', clientId: this.clientId });
-            });
-
-            this.ws.on('message', (rawData) => {
-                try {
-                    const message = JSON.parse(rawData.toString());
-                    this.handleWsMessage(message);
-                } catch (e) {
-                    console.error('[CONSENSUS ENGINE WS] Failed to parse message:', e.message);
-                }
-            });
-
-            this.ws.on('close', () => {
-                this.connected = false;
-                console.warn(`⚠️ [CONSENSUS ENGINE WS] Connection closed. Reconnecting in 3s...`);
-                setTimeout(() => this.connect(this.wsUrl, this.clientId), 3000);
-            });
-
-            this.ws.on('error', (err) => {
-                console.error(`❌ [CONSENSUS ENGINE WS] Error: ${err.message}`);
-            });
-        } catch (err) {
-            console.error(`❌ [CONSENSUS ENGINE WS] Connection error: ${err.message}`);
-        }
+        console.log(`📡 [CONSENSUS ENGINE WS] Connecting via HeadWS...`);
+        await this.headWS.connect(this.wsUrl, this.clientId, (msg) => {
+            this.handleWsMessage(msg);
+        });
+        this.headRouter.setWsConnector(this.headWS);
     }
 
     requestCandlesFromHubOverWS(startDate, endDate, symbol = "NIFTY_50", interval = "5") {
         return new Promise((resolve) => {
-            if (!this.connected || !this.ws) {
+            if (!this.headWS.isConnected()) {
                 return resolve([]);
             }
 
             const timeout = setTimeout(() => {
                 console.warn('⚠️ [CONSENSUS WS WARMUP] WebSocket request to candleDataHub timed out after 3s.');
-                if (this.ws) {
-                    this.ws.removeListener('message', messageHandler);
+                if (this.headWS.ws) {
+                    this.headWS.ws.removeListener('message', messageHandler);
                 }
                 resolve([]);
             }, 3000);
@@ -765,14 +742,14 @@ class ConsensusEngineService {
                         const payload = message.payload;
                         if (payload && payload.action === 'CANDLE_DATA_RESPONSE') {
                             clearTimeout(timeout);
-                            this.ws.removeListener('message', messageHandler);
+                            if (this.headWS.ws) this.headWS.ws.removeListener('message', messageHandler);
                             resolve(payload.candles || []);
                         }
                     }
                 } catch (e) {}
             };
 
-            this.ws.on('message', messageHandler);
+            if (this.headWS.ws) this.headWS.ws.on('message', messageHandler);
 
             this.sendRaw({
                 type: 'SEND_MESSAGE',
@@ -803,62 +780,41 @@ class ConsensusEngineService {
                 console.log(`🔀 [CONSENSUS ROUTING MODE UPDATED] Active mode changed to: "${this.activeRoutingMode}"`);
             }
 
+            if (payload && (payload.type === 'LIVE_NIFTY_TICK' || payload.action === 'LIVE_NIFTY_TICK' || payload.action === 'EVALUATE_CONSENSUS' || payload.ltp || payload.spotPrice || payload.currentLtp)) {
+                const spotLtp = payload.ltp || payload.spotPrice || payload.currentLtp;
+                if (spotLtp && !isNaN(spotLtp)) {
+                    this.lastNiftySpotPrice = spotLtp;
+                    this.sendRaw({
+                        type: 'SEND_MESSAGE',
+                        recipientId: 'headTerminalUI',
+                        payload: {
+                            action: 'HEAD_NIFTY_SPOT_TICK',
+                            spotPrice: spotLtp,
+                            timestamp: Date.now()
+                        }
+                    });
+                }
+            }
+
             if (payload && (payload.action === 'EVALUATE_SIGNAL' || payload.action === 'EVALUATE_CONSENSUS')) {
-                const { candles, index = -1, mode = null, targetRecipient = null } = payload;
+                const { candles, index = -1, mode = null } = payload;
                 const effectiveMode = (mode || this.activeRoutingMode || 'BOTH').toUpperCase();
                 console.log(`🧠 [CONSENSUS ENGINE WS] Received signal request from "${message.senderId}" (Mode: ${effectiveMode})...`);
 
                 const singleSignal = await evaluateSingleConsensusSignalAsync(candles, index);
+                const execSettings = this.getExecutionSettings();
+                execSettings.routingMode = effectiveMode;
 
-                // 1. Send response back to requesting sender
-                this.sendRaw({
-                    type: 'SEND_MESSAGE',
-                    recipientId: message.senderId,
-                    payload: {
-                        status: 'SUCCESS',
-                        action: 'CONSENSUS_SIGNAL_RESPONSE',
-                        singleSignal
-                    }
-                });
+                // Route signal via HeadRouter
+                this.headRouter.routeConsensusSignal(singleSignal, message.senderId, execSettings);
 
-                // 2. Route Signal to Order Managers based on consensus_master_head.json executionSettings
-                if (singleSignal.consensus && singleSignal.consensus !== 'NO_SIGNAL') {
-                    const execSettings = this.getExecutionSettings();
-                    const isPaperAllowed = execSettings.paperTradeEnabled;
-                    const isRealAllowed = execSettings.realTradeEnabled;
-
-                    if (isPaperAllowed && (effectiveMode === 'PAPER' || effectiveMode === 'BOTH')) {
-                        console.log(`📝 [CONSENSUS ROUTING] Forwarding Signal to Paper Trading Manager ("paperOrderManager")...`);
-                        this.sendRaw({
-                            type: 'SEND_MESSAGE',
-                            recipientId: 'paperOrderManager',
-                            payload: { action: 'CONSENSUS_SIGNAL_RESPONSE', mode: 'PAPER', routingMode: 'PAPER', singleSignal }
-                        });
-                    } else {
-                        console.log(`🔒 [CONSENSUS ROUTING] Paper Trading is DISABLED in consensus_master_head.json (paperTradeEnabled: false). Skipping paperOrderManager.`);
-                    }
-
-                    if (isRealAllowed && (effectiveMode === 'REAL' || effectiveMode === 'BOTH')) {
-                        console.log(`🚀 [CONSENSUS ROUTING] Forwarding Real Signal to Order Manager ("orderManager")...`);
-                        this.sendRaw({
-                            type: 'SEND_MESSAGE',
-                            recipientId: 'orderManager',
-                            payload: { action: 'CONSENSUS_SIGNAL_RESPONSE', mode: 'REAL', routingMode: 'REAL', singleSignal }
-                        });
-                    } else {
-                        console.log(`🔒 [CONSENSUS ROUTING] Real Dhan Trading is DISABLED in consensus_master_head.json (realTradeEnabled: false). Skipping orderManager.`);
-                    }
-                }
-
-                console.log(`📤 [CONSENSUS ENGINE WS] Returned SINGLE signal (${singleSignal.consensus}) to "${message.senderId}"`);
+                console.log(`📤 [CONSENSUS ENGINE WS] Evaluated SINGLE signal (${singleSignal.consensus}) for Mode: ${effectiveMode}`);
             }
         }
     }
 
     sendRaw(obj) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(obj));
-        }
+        this.headWS.sendRaw(obj);
     }
 }
 

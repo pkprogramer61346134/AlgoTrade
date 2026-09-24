@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔴 AlgoTrade - Real Money Execution Terminal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Header -->
+        <header class="top-header">
+            <div class="brand-box">
+                <div class="brand-logo">🔴</div>
+                <div>
+                    <h1 class="brand-title">AlgoTrade Real Money Terminal</h1>
+                    <p class="brand-subtitle">Live Dhan API Execution, PnL & Risk Management System</p>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="status-pill online" id="connectionBadge">
+                    <span class="dot"></span>
+                    <span id="connText">WS CONNECTED</span>
+                </div>
+                <div class="mode-badge">
+                    <span>MODE:</span>
+                    <strong id="routingModeText">REAL MONEY (DHAN API)</strong>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main KPI Summary Grid -->
+        <section class="kpi-grid">
+            <div class="kpi-card balance-card">
+                <div class="kpi-label">Real Dhan Account Balance</div>
+                <div class="kpi-value" id="kpiRealBalance">₹0.00</div>
+                <div class="kpi-subtext">Verified Dhan Funds</div>
+            </div>
+
+            <div class="kpi-card pnl-card">
+                <div class="kpi-label">Today Realized PnL</div>
+                <div class="kpi-value val-green" id="kpiRealizedPnl">+₹0.00</div>
+                <div class="kpi-subtext" id="kpiTradeStats">0 Trades / 0.0% Winrate</div>
+            </div>
+
+            <div class="kpi-card live-pnl-card">
+                <div class="kpi-label">Live Open Position PnL</div>
+                <div class="kpi-value val-green" id="kpiUnrealizedPnl">+₹0.00</div>
+                <div class="kpi-subtext" id="kpiPnlPercentage">0.00% Return</div>
+            </div>
+
+            <div class="kpi-card margin-card">
+                <div class="kpi-label">Real Margin Used</div>
+                <div class="kpi-value" id="kpiMarginUsed">₹0.00</div>
+                <div class="kpi-subtext" id="kpiAvailableMargin">Available: ₹0.00</div>
+            </div>
+        </section>
+
+        <!-- Main Dashboard Content Grid -->
+        <main class="dashboard-layout">
+            <!-- Active Position & Control Panel -->
+            <div class="panel active-position-panel">
+                <div class="panel-header">
+                    <h2>🎯 Active Real Dhan Position</h2>
+                    <span class="badge-status idle" id="posStatusBadge">IDLE / NO REAL POSITION</span>
+                </div>
+
+                <div class="active-contract-box">
+                    <div class="contract-symbol" id="posSymbol">None (Waiting for Consensus Signal)</div>
+                    <div class="contract-meta" id="posMetaDetails">-- | Option Type: -- | Security ID: --</div>
+                </div>
+
+                <div class="position-stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Entry Premium</span>
+                        <span class="stat-value" id="posEntryPrice">₹0.00</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Current Market LTP</span>
+                        <span class="stat-value" id="posCurrentLtp">₹0.00</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Target Profit (TP)</span>
+                        <span class="stat-value val-green" id="posTargetTp">₹0.00</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Initial Stop Loss</span>
+                        <span class="stat-value val-red" id="posInitialSl">₹0.00</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Trailing SL</span>
+                        <span class="stat-value val-purple" id="posTrailingSl">₹0.00</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">1R Milestone Step</span>
+                        <span class="stat-value val-amber" id="posMilestoneStep">1:0</span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar for Peak High -->
+                <div class="peak-tracker-box">
+                    <div class="tracker-header">
+                        <span>Peak High Reached: <strong id="posPeakHigh">₹0.00</strong></span>
+                        <span>Quantity: <strong id="posQuantity">65 Qty</strong></span>
+                    </div>
+                </div>
+
+                <!-- Control Actions -->
+                <div class="control-actions">
+                    <button class="btn btn-danger" id="btnClosePosition" disabled onclick="closeRealPositionManual()">
+                        🛑 Close Active Real Dhan Position
+                    </button>
+                </div>
+            </div>
+
+            <!-- Signal Trigger & Control Panel -->
+            <div class="panel controls-panel">
+                <div class="panel-header">
+                    <h2>⚡ Real Trade Execution Console</h2>
+                </div>
+                <p class="panel-desc">Real Dhan API execution status & manual testing options:</p>
+
+                <div class="test-buttons-grid">
+                    <button class="btn btn-buy" onclick="triggerTestSignal('BUY')">
+                        📈 Test Real BUY Signal
+                    </button>
+                    <button class="btn btn-sell" onclick="triggerTestSignal('SELL')">
+                        📉 Test Real SELL Signal
+                    </button>
+                </div>
+
+                <div class="system-logs-box">
+                    <div class="log-title">Real Money Execution Log</div>
+                    <div class="logs-container" id="logsContainer">
+                        <div class="log-line">ℹ️ Terminal Connected to AlgoTrade WebSocket Network...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Closed Trade History Table -->
+        <section class="panel history-panel">
+            <div class="panel-header">
+                <h2>📜 Today's Real Dhan Trade History</h2>
+                <span class="history-count" id="historyCount">0 Closed Trades</span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Time</th>
+                            <th>Symbol</th>
+                            <th>Type</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>Qty</th>
+                            <th>Net PnL</th>
+                            <th>Exit Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <tr class="empty-row">
+                            <td colspan="9">No closed real trades recorded today.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

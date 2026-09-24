@@ -2,16 +2,20 @@ const path = require('path');
 const { exec, fork } = require('child_process');
 const { ensureValidDhanToken } = require('./dhanAPI/autoTokenRefresh');
 
-function openTerminalWindow(title, scriptPath) {
+function openTerminalWindow(title, scriptPathWithArgs) {
+    const parts = scriptPathWithArgs.trim().split(/\s+/);
+    const scriptPath = parts[0];
+    const args = parts.slice(1);
     const fullPath = path.resolve(__dirname, scriptPath);
-    console.log(`⏳ Launching Service: [${title}] (${scriptPath})...`);
+    const argsStr = args.join(' ');
+    console.log(`⏳ Launching Service: [${title}] (${scriptPathWithArgs})...`);
     
     if (process.platform === 'win32') {
-        const cmd = `start "${title}" cmd /k "title ${title} && node "${fullPath}""`;
+        const cmd = `start "${title}" cmd /k "title ${title} && node "${fullPath}" ${argsStr}"`;
         exec(cmd, { cwd: __dirname });
     } else {
         try {
-            const child = fork(fullPath, [], { cwd: __dirname, stdio: 'inherit' });
+            const child = fork(fullPath, args, { cwd: __dirname, stdio: 'inherit' });
             child.on('error', (err) => console.error(`❌ [${title}] Fork Error:`, err.message));
         } catch (e) {
             console.error(`❌ [${title}] Failed to fork service:`, e.message);
@@ -54,6 +58,12 @@ async function orchestrateMultiTerminalSystem() {
     await new Promise((r) => setTimeout(r, 1500));
 
     // ---------------------------------------------------------------------------------
+    // STEP 2B: DEDICATED MASTER HEAD WEB TERMINAL (PORT 3003)
+    // ---------------------------------------------------------------------------------
+    openTerminalWindow('🧠 2B. Head Web Terminal (Port 3003)', 'head/headServer.js --port=3003');
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // ---------------------------------------------------------------------------------
     // STEP 3: CANDLE DATA HUB
     // ---------------------------------------------------------------------------------
     openTerminalWindow('📊 3. Candle Data Hub', 'Candlehub/candleDataHub.js');
@@ -66,9 +76,21 @@ async function orchestrateMultiTerminalSystem() {
     await new Promise((r) => setTimeout(r, 1000));
 
     // ---------------------------------------------------------------------------------
+    // STEP 4C: DEDICATED PAPER WEB TERMINAL (PORT 3001)
+    // ---------------------------------------------------------------------------------
+    openTerminalWindow('📝 4C. Paper Web Terminal (Port 3001)', 'papermanager/paperServer.js --port=3001');
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // ---------------------------------------------------------------------------------
     // STEP 4B: REAL MONEY ORDER MANAGER (DHAN API)
     // ---------------------------------------------------------------------------------
     openTerminalWindow('🔴 4B. Real Money Manager', 'ordermanager/smartOrderManager.js');
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // ---------------------------------------------------------------------------------
+    // STEP 4D: DEDICATED REAL MONEY WEB TERMINAL (PORT 3002)
+    // ---------------------------------------------------------------------------------
+    openTerminalWindow('🔴 4D. Real Web Terminal (Port 3002)', 'ordermanager/realServer.js --port=3002');
     await new Promise((r) => setTimeout(r, 1000));
 
     // ---------------------------------------------------------------------------------
@@ -78,19 +100,15 @@ async function orchestrateMultiTerminalSystem() {
     await new Promise((r) => setTimeout(r, 1000));
 
     // ---------------------------------------------------------------------------------
-    // STEP 6: CENTRAL WEB MONITOR UI (PORT 3000)
+    // STEP 6: BACKTEST CLIENT ENGINE (ON-DEMAND WEB UI READY)
     // ---------------------------------------------------------------------------------
-    openTerminalWindow('🖥️ 6. Web Monitor UI (Port 3000)', 'monitor/monitorClient.js');
-    await new Promise((r) => setTimeout(r, 1000));
-
-    // ---------------------------------------------------------------------------------
-    // STEP 7: BACKTEST CLIENT ENGINE (ON-DEMAND WEB UI READY)
-    // ---------------------------------------------------------------------------------
-    openTerminalWindow('🧪 7. Backtest Client', 'backtest/backtestClient.js');
+    openTerminalWindow('🧪 6. Backtest Client', 'backtest/backtestClient.js');
 
     console.log('\n=================================================================================');
-    console.log('✅ ALL 7 ALGOTRADE SERVICES LAUNCHED IN SEPARATE TERMINAL WINDOWS!');
-    console.log('🌐 Web Dashboard: http://localhost:3000 (Or http://<VM_IP>:3000)');
+    console.log('✅ ALL ALGOTRADE SERVICES LAUNCHED IN SEPARATE TERMINAL WINDOWS!');
+    console.log('📝 Dedicated Paper Terminal: http://localhost:3001');
+    console.log('🔴 Dedicated Real Money Terminal: http://localhost:3002');
+    console.log('🧠 Dedicated Head Consensus Terminal: http://localhost:3003');
     console.log('=================================================================================\n');
 }
 

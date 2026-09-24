@@ -175,7 +175,7 @@ class LiveTickClient {
         // Forward updated live candle array to assigned consensusEngine over WebSocket
         this.forwardToConsensusEngine();
 
-        // Broadcast live tick to monitorClient, paperOrderManager, and orderManager
+        // Broadcast live tick to consensusEngine, monitorClient, paperOrderManager, and orderManager
         if (this.wsClient && this.wsClient.connected) {
             const tickPacket = {
                 type: 'LIVE_NIFTY_TICK',
@@ -183,6 +183,7 @@ class LiveTickClient {
                 ltp: ltp,
                 timeStr: timeStr
             };
+            this.wsClient.sendMessage(tickPacket, 'consensusEngine');
             this.wsClient.sendMessage(tickPacket, 'monitorClient');
             this.wsClient.sendMessage(tickPacket, 'paperOrderManager');
             this.wsClient.sendMessage(tickPacket, 'orderManager');
@@ -199,6 +200,7 @@ class LiveTickClient {
             action: 'EVALUATE_CONSENSUS',
             symbol: this.symbol,
             interval: String(this.interval),
+            ltp: this.currentCandle ? this.currentCandle.close : null,
             currentLtp: this.currentCandle ? this.currentCandle.close : null,
             candles: this.candles
         }, this.targetClient);
