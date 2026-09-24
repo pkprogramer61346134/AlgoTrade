@@ -239,18 +239,19 @@ class PaperOrderManager {
     }
 
     /**
-     * Handles spot price ticks with ZERO latency (0ms delay) for ultra-fast PnL and Trailing SL updates
+     * Handles spot price ticks with ZERO latency (0ms delay) for ultra-fast PnL and Trailing SL updates.
+     * Uses Dynamic Option Delta Engine for ultra-accurate option price estimation across ATM/ITM/OTM strikes.
      */
     onSpotPriceTick(spotPrice) {
         if (!this.isOrderActive || !this.activePosition || !spotPrice) return;
         const pos = this.activePosition;
 
-        // 1. Instant tick calculation (0ms delay) using spot delta for ultra-responsive live PnL & SL tracking
+        // 1. Instant tick calculation (0ms delay) using Dynamic Option Delta Engine
         const entrySpot = pos.entrySpot || spotPrice;
         const spotDelta = spotPrice - entrySpot;
-        const optionDelta = pos.optionType === 'CE' ? 0.55 : -0.55;
+        const optionDelta = this.calculateDynamicDelta(spotPrice, pos.strikePrice, pos.optionType);
         const estimatedLtp = Number((pos.entryPrice + (spotDelta * optionDelta)).toFixed(2));
-        const finalLtp = Math.max(1.0, estimatedLtp);
+        const finalLtp = Math.max(0.50, estimatedLtp);
 
         // Immediately evaluate SL/TP & broadcast telemetry (0ms latency!)
         this.onOptionPriceTick(finalLtp);
@@ -265,6 +266,29 @@ class PaperOrderManager {
             .catch(() => {
                 // Soft fallback to spot delta price if Dhan API is throttled
             });
+    }
+
+    /**
+     * Dynamic Option Delta Engine:
+     * Calculates real-time option delta based on spot price, strike price, and option type ('CE'/'PE').
+     * ATM Delta ~ 0.52 (CE) / -0.52 (PE).
+     * Accurately scales and clamps ITM/OTM delta between [0.08, 0.92] (CE) and [-0.92, -0.08] (PE).
+     */
+    calculateDynamicDelta(spotPrice, strikePrice, optionType) {
+        const isCe = optionType === 'CE';
+        if (!strikePrice || strikePrice <= 0 || !spotPrice || spotPrice <= 0) {
+            return isCe ? 0.52 : -0.52;
+        }
+
+        const diff = spotPrice - strikePrice;
+
+        if (isCe) {
+            const baseDelta = 0.52 + (diff * 0.002);
+            return Math.max(0.08, Math.min(0.92, baseDelta));
+        } else {
+            const baseDelta = -0.52 + (diff * 0.002);
+            return Math.min(-0.08, Math.max(-0.92, baseDelta));
+        }
     }
 
     /**
