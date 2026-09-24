@@ -85,9 +85,10 @@ class DhanOptionStrikeFetcher {
 
         // 2. If ATM strike exceeds maxBudget or is missing, search strikes sorted by closeness to spotPrice
         if (!chosenSideObj) {
+            const MAX_STRIKE_DISTANCE = 150; // Max 150 points (3 strikes) from spot price allowed
             const sortedStrikes = Object.keys(ocMap)
                 .map(k => ({ key: k, strike: parseFloat(k) }))
-                .filter(item => !isNaN(item.strike))
+                .filter(item => !isNaN(item.strike) && Math.abs(item.strike - spotPrice) <= MAX_STRIKE_DISTANCE)
                 .sort((a, b) => Math.abs(a.strike - spotPrice) - Math.abs(b.strike - spotPrice)); // Closest to ATM first!
 
             let bestFallback = null;
@@ -112,7 +113,13 @@ class DhanOptionStrikeFetcher {
                 }
             }
 
-            // If balance is too low for any strike, use the absolute closest strike with valid price
+            // If maxBudget is active and no near-ATM strike fits within budget, abort trade instead of buying deep OTM junk!
+            if (!chosenSideObj && maxBudget && maxBudget > 0) {
+                const reqAtmMargin = (bestFallback?.ltp || 100) * qty;
+                throw new Error(`[DHAN OPTION ERROR] Insufficient account balance for ATM/Near-ATM strike! Available: ₹${maxBudget.toFixed(2)}, Required: ~₹${reqAtmMargin.toFixed(2)}. Aborted trade to prevent buying deep OTM option.`);
+            }
+
+            // Fallback for non-budget calls
             if (!chosenSideObj && bestFallback) {
                 targetKey = bestFallback.item.key;
                 chosenStrike = bestFallback.item.strike;

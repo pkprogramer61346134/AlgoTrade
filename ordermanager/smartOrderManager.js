@@ -275,7 +275,8 @@ class SmartOrderManager {
 
         // Calculate Option Premium SL & Target Profit (15 Premium Points Risk, 1:2.2 RR Target)
         const riskPoints = 15.0;
-        const initialSL = Number((entryPremium - riskPoints).toFixed(2));
+        const rawSL = entryPremium - riskPoints;
+        const initialSL = Number((rawSL > 0 ? rawSL : Math.max(0.50, entryPremium * 0.5)).toFixed(2));
         const targetProfit = Number((entryPremium + (riskPoints * 2.2)).toFixed(2));
 
         // Create Active Position State
@@ -333,7 +334,8 @@ class SmartOrderManager {
                     const entryPrice = Number(openDhanPos.buyAvg || openDhanPos.costPrice || 0);
                     const optionType = symbol.endsWith('CE') || symbol.includes('CE') ? 'CE' : 'PE';
                     const riskPoints = 15.0;
-                    const initialSL = Number((entryPrice - riskPoints).toFixed(2));
+                    const rawSL = entryPrice - riskPoints;
+                    const initialSL = Number((rawSL > 0 ? rawSL : Math.max(0.50, entryPrice * 0.5)).toFixed(2));
                     const targetProfit = Number((entryPrice + (riskPoints * 2.2)).toFixed(2));
                     const serverUnrealizedPnl = Number(openDhanPos.unrealizedProfit || openDhanPos.unrealizedPnl || 0.0);
                     const derivedLtp = qty > 0 ? Number((entryPrice + (serverUnrealizedPnl / qty)).toFixed(2)) : entryPrice;
@@ -395,6 +397,13 @@ class SmartOrderManager {
                         this.activePosition.currentLtp = derivedLtp;
                     }
                 }
+            } else if (this.isOrderActive) {
+                // Ghost Position Protection: Position absent on Dhan broker servers! Auto-clear local memory position state!
+                console.warn(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} does NOT exist on Dhan broker servers. Clearing ghost position state.`);
+                this.activePosition = null;
+                this.isOrderActive = false;
+                this.marginUsed = 0;
+                this.broadcastTelemetry("GHOST_POSITION_CLEARED", { reason: "Position absent from Dhan broker active positions" });
             }
             return posList;
         } catch (err) {

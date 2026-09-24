@@ -199,7 +199,8 @@ class PaperOrderManager {
 
         // Calculate Option Premium SL & Target Profit (15 Premium Points Risk, 1:2.2 RR Target)
         const riskPoints = 15.0;
-        const initialSL = Number((entryPremium - riskPoints).toFixed(2));
+        const rawSL = entryPremium - riskPoints;
+        const initialSL = Number((rawSL > 0 ? rawSL : Math.max(0.50, entryPremium * 0.5)).toFixed(2));
         const targetProfit = Number((entryPremium + (riskPoints * 2.2)).toFixed(2));
 
         // Create Active Paper Position State
