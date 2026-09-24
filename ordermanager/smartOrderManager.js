@@ -324,13 +324,20 @@ class SmartOrderManager {
             const posRes = await this.dhan.portfolio.getPositions();
             const posList = Array.isArray(posRes?.data) ? posRes.data : (Array.isArray(posRes) ? posRes : []);
 
+            // Helper to get real netQty safely (preventing 0 || 65 falsy bug)
+            const getNetQty = (p) => {
+                if (p.netQty !== undefined && p.netQty !== null) return Number(p.netQty);
+                if (p.positionQty !== undefined && p.positionQty !== null) return Number(p.positionQty);
+                return 0;
+            };
+
             if (!this.activePosition || !this.isOrderActive) {
-                // Active Position Recovery: If no active trade in memory, but open position exists on Dhan broker
-                const openDhanPos = posList.find(p => Number(p.netQty || p.positionQty || 0) > 0 && (p.exchangeSegment === 'NSE_FNO' || p.segment === 'NSE_FNO'));
+                // Active Position Recovery: Only recover if REAL netQty > 0 on Dhan broker
+                const openDhanPos = posList.find(p => getNetQty(p) > 0 && (p.exchangeSegment === 'NSE_FNO' || p.segment === 'NSE_FNO'));
                 if (openDhanPos) {
                     const symbol = openDhanPos.tradingSymbol || openDhanPos.symbol;
                     const securityId = openDhanPos.securityId;
-                    const qty = Number(openDhanPos.netQty || openDhanPos.positionQty || 65);
+                    const qty = getNetQty(openDhanPos) || 65;
                     const entryPrice = Number(openDhanPos.buyAvg || openDhanPos.costPrice || 0);
                     const optionType = symbol.endsWith('CE') || symbol.includes('CE') ? 'CE' : 'PE';
                     const riskPoints = 15.0;
@@ -370,12 +377,11 @@ class SmartOrderManager {
             const liveMatch = posList.find(p => String(p.securityId) === secIdStr || p.tradingSymbol === this.activePosition.symbol);
 
             if (liveMatch) {
-                // Check if position was closed manually on Dhan App/Web Terminal
-                const netQty = Number(liveMatch.netQty || liveMatch.positionQty || 0);
+                // Check if position was closed on Dhan App/Web Terminal
+                const netQty = getNetQty(liveMatch);
                 if (netQty === 0 && this.isOrderActive) {
-                    console.log(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} closed externally on Dhan App/Terminal. Auto-closing in bot state.`);
+                    console.log(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} closed on Dhan App/Terminal. Auto-clearing bot state.`);
                     const exitPrice = Number(liveMatch.sellAvg || liveMatch.costPrice || this.activePosition.currentLtp);
-                    const netPnl = Number(liveMatch.realizedProfit || liveMatch.rnlProfit || 0.0);
                     this.activePosition.currentLtp = exitPrice;
                     this.closePosition("EXTERNALLY_CLOSED_DHAN_APP");
                     return posList;
