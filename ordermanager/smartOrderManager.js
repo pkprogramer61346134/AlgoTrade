@@ -6,7 +6,7 @@ const DhanOptionStrikeFetcher = require('../dhanAPI/optionStrikeFetcher');
 
 const JOURNAL_PATH = path.join(__dirname, 'trade_journal.json');
 
-// Dhan SDK fallback import
+// Dhan SDK import
 let DhanSDK;
 try {
     DhanSDK = require('../dhanAPI').DhanSDK;
@@ -15,16 +15,15 @@ try {
 }
 
 /**
- * SMART ORDER MANAGER
+ * SMART ORDER MANAGER (Real Dhan API Execution Engine)
  * 
- * 1. Connects to WebSocket Server as "orderManager".
- * 2. Listens for Consensus Signals from "consensusEngine".
- * 3. Active Order Guard: Ignores incoming signals if a trade is already active.
- * 4. Option Strike Selector: Interacts with Dhan Funds & Option Chain to pick optimal ATM/ITM strike.
- * 5. Premium SL & Trailing Engine: Calculates Option SL & trails SL progressively (1:1.5, 1:2.5, 1:3, 1:3.5, 1:4, 1:4.5, 1:5+).
- * 6. 1R Breathing Room: Prevents early exits from market noise/wicks.
- * 7. Live Telemetry Stream: Broadcasts live PnL, trailing SL levels, and trade summary over WebSocket to "monitorClient".
- * 8. 3:15 PM Auto-Cut: Automatically closes active position at market close.
+ * Flow:
+ * 1. Signal Received -> Guard check (Active position & REAL routing mode)
+ * 2. Step 1: Check Real Dhan Account Balance
+ * 3. Step 2: Strike Selection via Dhan Option Chain based on Available Balance
+ * 4. Step 3: REAL Market BUY Order via Dhan API
+ * 5. Track Target Profit (TP) & Trailing SL via Real Dhan Option Ticks & Position Sync
+ * 6. Zero dummy data, zero fake fallbacks - Errors broadcasted directly to Monitor UI
  */
 class SmartOrderManager {
     constructor(options = {}) {
@@ -51,10 +50,10 @@ class SmartOrderManager {
             realizedPnl: 0.0
         };
 
-        // Trailing SL Configuration
+        // Trailing SL Configuration Steps (1:1.5, 1:2.5, 1:3, 1:3.5, 1:4, 1:4.5, 1:5+)
         this.trailingRatioSteps = [1.5, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         
-        // Auto-cut timer at 3:15 PM
+        // Auto-cut timer at 3:10 PM IST
         this.autoCutTimer = null;
         this.loadJournal();
     }
@@ -69,7 +68,7 @@ class SmartOrderManager {
                 this.accountBalance = Number(data.accountBalance) || 0.0;
                 this.todaySummary = data.todaySummary || this.todaySummary;
                 this.tradeHistory = data.tradeHistory || [];
-                console.log(`📖 [SMART ORDER MANAGER] Loaded Trade Journal. Account Balance: ₹${this.accountBalance}`);
+                console.log(`📖 [SMART ORDER MANAGER] Loaded Trade Journal. Balance: ₹${this.accountBalance}`);
             }
         } catch (e) {
             console.warn(`⚠️ [SMART ORDER MANAGER] Could not load trade journal: ${e.message}`);
@@ -90,15 +89,15 @@ class SmartOrderManager {
             const dir = path.dirname(JOURNAL_PATH);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(JOURNAL_PATH, JSON.stringify(data, null, 2), 'utf-8');
-            console.log(`💾 [SMART ORDER MANAGER] Trade Journal saved to ${JOURNAL_PATH}`);
+            console.log(`💾 [SMART ORDER MANAGER] Journal saved to ${JOURNAL_PATH}`);
         } catch (e) {
-            console.error(`❌ [SMART ORDER MANAGER] Failed to save trade journal: ${e.message}`);
+            console.error(`❌ [SMART ORDER MANAGER] Failed to save journal: ${e.message}`);
         }
     }
 
     async init() {
         console.log('===========================================================');
-        console.log('🚀 [SMART ORDER MANAGER] Initializing Order Management System...');
+        console.log('🚀 [SMART ORDER MANAGER] Initializing Real Dhan Order Management System...');
         console.log('===========================================================');
 
         // Connect to WebSocket Server
@@ -125,33 +124,29 @@ class SmartOrderManager {
                 }
 
                 // 3. Live Option Tick Update Event
-                if (payload && payload.action === 'LIVE_OPTION_TICK') {
+                if (payload && payload.action === 'LIVE_OPTION_TICK' && payload.ltp) {
                     this.onOptionPriceTick(payload.ltp);
-                }
-
-                // 4. Live Spot Price Update Event
-                if (payload && (payload.currentLtp || payload.spotPrice)) {
-                    this.onSpotPriceTick(payload.currentLtp || payload.spotPrice);
                 }
             }
         });
 
-        // Fetch real account balance if Dhan API is configured
+        // Step 1: Refresh real account balance from Dhan API
         await this.refreshAccountBalance();
 
         // Schedule 3:10 PM auto-cut check
         this.scheduleAutoCut310();
 
-        // Start 500ms periodic telemetry heartbeat broadcast for ultra-responsive UI
+        // Telemetry heartbeat broadcast every 500ms for UI monitor
         setInterval(() => {
             this.broadcastTelemetry("HEARTBEAT", null);
         }, 500);
 
-        console.log(`✅ [SMART ORDER MANAGER] Running & Listening for signals. Target Monitor: "${this.monitorClientTarget}"`);
+        console.log(`✅ [SMART ORDER MANAGER] Running & Listening. Target Monitor: "${this.monitorClientTarget}"`);
     }
 
     /**
-     * Refreshes real account funds from Dhan API (No fake/dummy fallback funds)
+     * Step 1: Refreshes real account funds directly from Dhan API.
+     * Broadcasts error to monitor if Dhan API fails.
      */
     async refreshAccountBalance() {
         if (this.dhan && typeof this.dhan.funds?.getFundLimits === 'function') {
@@ -163,65 +158,82 @@ class SmartOrderManager {
                         this.accountBalance = realBal;
                     }
                     this.marginUsed = Number(fundRes.data.utilizedAmount || fundRes.data.marginUsed || 0.0);
-                    console.log(`💰 [SMART ORDER MANAGER] Real Dhan Account Balance: ₹${this.accountBalance}`);
+                    console.log(`💰 [SMART ORDER MANAGER] Real Dhan Balance: ₹${this.accountBalance}`);
                     await this.syncDhanLivePosition();
                     this.broadcastTelemetry("REAL_BALANCE_REFRESHED", null);
                     return;
                 } else {
-                    console.warn(`⚠️ [SMART ORDER MANAGER] Dhan Funds API warning:`, fundRes);
+                    const errMsg = fundRes?.message || 'Dhan Funds API returned invalid response';
+                    console.warn(`⚠️ [SMART ORDER MANAGER] Dhan Funds Notice: ${errMsg}`);
+                    this.broadcastTelemetry("DHAN_FUNDS_ERROR", { error: errMsg, response: fundRes });
                 }
             } catch (e) {
-                console.warn(`⚠️ [SMART ORDER MANAGER] Fund refresh notice: ${e.message}`);
+                console.error(`❌ [SMART ORDER MANAGER] Dhan Funds Exception: ${e.message}`);
+                this.broadcastTelemetry("DHAN_FUNDS_EXCEPTION", { error: e.message });
             }
         }
-        // Preserve loaded journal balance if API call is unconfigured or throttled
-        console.log(`💰 [SMART ORDER MANAGER] Account Balance Active: ₹${this.accountBalance}`);
         this.broadcastTelemetry("REAL_BALANCE_REFRESHED", null);
     }
 
     /**
-     * Step 1: Handles incoming Consensus Trading Signal from consensusEngine.js
+     * Handles incoming Consensus Signal
      */
     async handleConsensusSignal(signal, senderId) {
         console.log(`\n📩 [SMART ORDER MANAGER] Signal received from "${senderId}":`, signal.consensus || signal.type);
 
-        // Active Order Guard: Ignore new signals if a trade is already active
+        // Guard 1: Skip if system routing mode is not REAL or BOTH
+        if (signal.routingMode && signal.routingMode !== 'REAL' && signal.routingMode !== 'BOTH') {
+            console.warn(`🔒 [SMART ORDER MANAGER GUARD] Signal routing mode is "${signal.routingMode}". Real order execution skipped.`);
+            return;
+        }
+
+        // Guard 2: Skip if trade is already active
         if (this.isOrderActive || this.activePosition) {
-            console.warn(`🔒 [SMART ORDER MANAGER GUARD] Active trade is running (${this.activePosition.symbol}). IGNORING incoming signal!`);
+            console.warn(`🔒 [SMART ORDER MANAGER GUARD] Active trade running (${this.activePosition.symbol}). Signal ignored!`);
             this.broadcastTelemetry("SIGNAL_IGNORED_ACTIVE_POSITION", { reason: "Active position currently running", signal });
             return;
         }
 
         const signalType = signal.consensus || signal.type;
         if (!signalType || signalType === 'NO_SIGNAL' || signalType === 'NONE') {
-            console.log('ℹ️ [SMART ORDER MANAGER] Signal is NO_SIGNAL. Standing by.');
             return;
         }
 
-        console.log(`⚡ [SMART ORDER MANAGER] Valid ${signalType} signal approved! Proceeding to Option Strike Selection...`);
+        console.log(`⚡ [SMART ORDER MANAGER] Approved ${signalType} signal! Executing Real Dhan Trade...`);
         await this.executeSmartOrderEntry(signalType, signal);
     }
 
     /**
-     * Step 2: Dynamic Strike Price Selection & Order Entry using Real Dhan Market Data
+     * Step 2 & 3: Strike Selection & REAL Dhan Market BUY Order Execution
      */
     async executeSmartOrderEntry(signalType, signal) {
         const spotPrice = Number(signal.entry || signal.spotPrice || signal.currentLtp || 0);
         if (!spotPrice || spotPrice <= 0) {
-            console.error(`❌ [SMART ORDER MANAGER] Missing or invalid Nifty spot price in signal:`, signal);
-            this.broadcastTelemetry("ORDER_FAILED_INVALID_SPOT", { error: "Missing or invalid Nifty spot price in signal", signal });
+            const errStr = "Invalid or missing Nifty spot price in signal";
+            console.error(`❌ [SMART ORDER MANAGER] ${errStr}`);
+            this.broadcastTelemetry("ORDER_FAILED_INVALID_SPOT", { error: errStr, signal });
+            return;
+        }
+
+        // Step 1 Check: Verify Real Dhan Account Balance
+        await this.refreshAccountBalance();
+        if (!this.accountBalance || this.accountBalance <= 0) {
+            const errStr = `Insufficient Dhan funds (Balance: ₹${this.accountBalance})`;
+            console.error(`❌ [SMART ORDER MANAGER] ${errStr}`);
+            this.broadcastTelemetry("ORDER_FAILED_ZERO_BALANCE", { error: errStr, availableBalance: this.accountBalance });
             return;
         }
 
         const optionType = (signalType === 'BUY') ? 'CE' : 'PE';
 
+        // Step 2 Check: Resolve Strike Price via Real Dhan Market Option Chain
         let optionDetails;
         try {
-            console.log(`🔍 [SMART ORDER MANAGER] Querying Dhan API Option Chain for Nifty spot ₹${spotPrice} (${optionType}) with Account Balance ₹${this.accountBalance}...`);
+            console.log(`🔍 [SMART ORDER MANAGER] Resolving Dhan Option Strike for Spot ₹${spotPrice} (${optionType})...`);
             optionDetails = await this.strikeFetcher.resolveOptionStrike(spotPrice, optionType, this.accountBalance);
         } catch (err) {
-            console.error(`❌ [SMART ORDER MANAGER DHAN API ERROR] Could not fetch real option strike: ${err.message}`);
-            this.broadcastTelemetry("ORDER_FAILED_DHAN_API", { error: err.message, signal });
+            console.error(`❌ [SMART ORDER MANAGER DHAN OPTION CHAIN ERROR] ${err.message}`);
+            this.broadcastTelemetry("ORDER_FAILED_DHAN_OPTION_CHAIN", { error: err.message, signal });
             return;
         }
 
@@ -230,50 +242,56 @@ class SmartOrderManager {
         const entryPremium = Number(optionDetails.liveLtp.toFixed(2));
         const securityId = optionDetails.securityId;
 
-        const qty = 65; // 1 Lot Nifty = 65 Qty (NSE Lot Size)
+        const qty = 65; // 1 Lot Nifty = 65 Qty
         const requiredMargin = entryPremium * qty;
 
         if (this.accountBalance < requiredMargin) {
-            console.error(`❌ [SMART ORDER MANAGER] Insufficient funds! Required: ₹${requiredMargin}, Available: ₹${this.accountBalance}`);
-            this.broadcastTelemetry("ORDER_FAILED_FUNDS", { requiredMargin, availableBalance: this.accountBalance });
+            const errStr = `Required margin ₹${requiredMargin} exceeds available balance ₹${this.accountBalance}`;
+            console.error(`❌ [SMART ORDER MANAGER] ${errStr}`);
+            this.broadcastTelemetry("ORDER_FAILED_INSUFFICIENT_MARGIN", { requiredMargin, availableBalance: this.accountBalance });
             return;
         }
 
-        // Submit Real Order to Dhan API
+        // Step 3: Submit REAL Market BUY Order to Dhan API
         let realDhanOrderId = `ORD_${Date.now()}`;
-        if (this.dhan && typeof this.dhan.orders?.placeOrder === 'function') {
-            try {
-                console.log(`🚀 [SMART ORDER MANAGER DHAN API] Submitting REAL Order to Dhan API for ${symbol} (SecID: ${securityId}, Qty: ${qty})...`);
-                const realOrderResult = await this.dhan.orders.placeOrder({
-                    transactionType: 'BUY',
-                    exchangeSegment: 'NSE_FNO',
-                    productType: 'INTRADAY',
-                    orderType: 'MARKET',
-                    validity: 'DAY',
-                    securityId: String(securityId),
-                    quantity: qty,
-                    price: 0
-                });
-
-                console.log(`📩 [SMART ORDER MANAGER DHAN API RESPONSE]:`, JSON.stringify(realOrderResult, null, 2));
-
-                if (realOrderResult && (realOrderResult.status === 'success' || realOrderResult.orderId || realOrderResult.data?.orderId)) {
-                    realDhanOrderId = realOrderResult.orderId || realOrderResult.data?.orderId || realDhanOrderId;
-                    console.log(`✅ [DHAN API REAL ORDER SUBMITTED] Order ID: ${realDhanOrderId}`);
-                } else {
-                    const errMsg = realOrderResult?.errorData?.errorMessage || realOrderResult?.message || (realOrderResult?.errorData ? JSON.stringify(realOrderResult.errorData) : 'Dhan API order rejected');
-                    console.error(`❌ [DHAN API REAL ORDER REJECTED]: ${errMsg}`);
-                    this.broadcastTelemetry("REAL_ORDER_REJECTED_DHAN_API", { error: errMsg, response: realOrderResult });
-                    return;
-                }
-            } catch (dhanErr) {
-                console.error(`❌ [DHAN API REAL ORDER EXCEPTION]: ${dhanErr.message}`);
-                this.broadcastTelemetry("REAL_ORDER_FAILED_DHAN_API", { error: dhanErr.message });
-                return;
-            }
+        if (!this.dhan || typeof this.dhan.orders?.placeOrder !== 'function') {
+            const errStr = "Dhan SDK uninitialized or placeOrder function unavailable";
+            console.error(`❌ [SMART ORDER MANAGER] ${errStr}`);
+            this.broadcastTelemetry("ORDER_FAILED_DHAN_SDK_MISSING", { error: errStr });
+            return;
         }
 
-        // Calculate Option Premium SL & Target Profit (15 Premium Points Risk, 1:2.2 RR Target)
+        try {
+            console.log(`🚀 [SMART ORDER MANAGER DHAN API] Submitting REAL Order for ${symbol} (SecID: ${securityId}, Qty: ${qty})...`);
+            const realOrderResult = await this.dhan.orders.placeOrder({
+                transactionType: 'BUY',
+                exchangeSegment: 'NSE_FNO',
+                productType: 'INTRADAY',
+                orderType: 'MARKET',
+                validity: 'DAY',
+                securityId: String(securityId),
+                quantity: qty,
+                price: 0
+            });
+
+            console.log(`📩 [DHAN API RESPONSE]:`, JSON.stringify(realOrderResult, null, 2));
+
+            if (realOrderResult && (realOrderResult.status === 'success' || realOrderResult.orderId || realOrderResult.data?.orderId)) {
+                realDhanOrderId = realOrderResult.orderId || realOrderResult.data?.orderId || realDhanOrderId;
+                console.log(`✅ [REAL DHAN ORDER EXECUTED] Order ID: ${realDhanOrderId}`);
+            } else {
+                const errMsg = realOrderResult?.errorData?.errorMessage || realOrderResult?.message || 'Dhan API BUY order rejected';
+                console.error(`❌ [DHAN API ORDER REJECTED]: ${errMsg}`);
+                this.broadcastTelemetry("REAL_ORDER_REJECTED_DHAN_API", { error: errMsg, response: realOrderResult });
+                return;
+            }
+        } catch (dhanErr) {
+            console.error(`❌ [DHAN API ORDER EXCEPTION]: ${dhanErr.message}`);
+            this.broadcastTelemetry("REAL_ORDER_FAILED_DHAN_API", { error: dhanErr.message });
+            return;
+        }
+
+        // Target Profit & Stop Loss Calculation (15 pts Risk, 1:2.2 RR TP Target)
         const riskPoints = 15.0;
         const rawSL = entryPremium - riskPoints;
         const initialSL = Number((rawSL > 0 ? rawSL : Math.max(0.50, entryPremium * 0.5)).toFixed(2));
@@ -295,7 +313,7 @@ class SmartOrderManager {
             targetProfit,
             highestPriceSeen: entryPremium,
             riskPoints,
-            currentMilestoneIndex: -1, // No milestone reached yet
+            currentMilestoneIndex: -1,
             currentRatioText: '1:0',
             unrealizedPnl: 0.0,
             openedAt: new Date().toLocaleTimeString()
@@ -304,18 +322,21 @@ class SmartOrderManager {
         this.isOrderActive = true;
         this.marginUsed = requiredMargin;
 
-        console.log(`✅ [SMART ORDER MANAGER ENTRY] Real Dhan Trade Executed Successfully!`);
+        console.log(`===========================================================`);
+        console.log(`✅ [SMART ORDER MANAGER ENTRY CONFIRMED]`);
         console.log(`   - Order ID: ${this.activePosition.orderId}`);
-        console.log(`   - Contract: ${symbol} (SecurityID: ${securityId})`);
-        console.log(`   - Real Dhan Entry Premium: ₹${entryPremium}`);
-        console.log(`   - Initial SL: ₹${initialSL} (Risk = ₹${riskPoints} / Lot)`);
+        console.log(`   - Symbol: ${symbol} (SecID: ${securityId})`);
+        console.log(`   - Entry Premium: ₹${entryPremium}`);
+        console.log(`   - Target Profit (TP): ₹${targetProfit}`);
+        console.log(`   - Initial SL: ₹${initialSL} (Risk = ₹${riskPoints}/Lot)`);
+        console.log(`===========================================================`);
 
         this.broadcastTelemetry("POSITION_OPENED", this.activePosition);
     }
 
     /**
      * Direct Dhan API Positions Sync: Queries GET /positions directly from Dhan servers.
-     * Uses Dhan server pre-calculated unrealizedProfit, official buyAvg, and open netQty.
+     * Updates real live unrealized PnL, Buy Avg, and syncs position closure on Dhan app.
      */
     async syncDhanLivePosition() {
         if (!this.dhan || typeof this.dhan.portfolio?.getPositions !== 'function') return null;
@@ -324,7 +345,6 @@ class SmartOrderManager {
             const posRes = await this.dhan.portfolio.getPositions();
             const posList = Array.isArray(posRes?.data) ? posRes.data : (Array.isArray(posRes) ? posRes : []);
 
-            // Helper to get real netQty safely
             const getNetQty = (p) => {
                 if (p.netQty !== undefined && p.netQty !== null) return Number(p.netQty);
                 if (p.positionQty !== undefined && p.positionQty !== null) return Number(p.positionQty);
@@ -363,7 +383,7 @@ class SmartOrderManager {
                         initialSL,
                         currentTrailingSL: initialSL,
                         targetProfit,
-                        highestPriceSeen: Math.max(entryPrice, derivedLtp),
+                        highestPriceSeen: entryPrice,
                         riskPoints,
                         currentMilestoneIndex: -1,
                         currentRatioText: '1:0',
@@ -371,7 +391,7 @@ class SmartOrderManager {
                         openedAt: new Date().toLocaleTimeString()
                     };
                     this.isOrderActive = true;
-                    console.log(`🔄 [SMART ORDER MANAGER RECOVERY] Restored active Dhan position: ${symbol} (SecID: ${securityId}, BuyAvg: ₹${entryPrice}, Qty: ${qty})`);
+                    console.log(`🔄 [SMART ORDER MANAGER RECOVERY] Restored active Dhan position: ${symbol} (BuyAvg: ₹${entryPrice}, Qty: ${qty})`);
                 }
                 return posList;
             }
@@ -388,17 +408,15 @@ class SmartOrderManager {
             });
 
             if (liveMatch) {
-                // Check if position was closed on Dhan App/Web Terminal
                 const netQty = getNetQty(liveMatch);
                 if (netQty === 0 && this.isOrderActive) {
-                    console.log(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} closed on Dhan App/Terminal. Auto-clearing bot state.`);
+                    console.log(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} closed on Dhan App/Terminal.`);
                     const exitPrice = Number(liveMatch.sellAvg || liveMatch.costPrice || this.activePosition.currentLtp);
                     this.activePosition.currentLtp = exitPrice;
                     this.closePosition("EXTERNALLY_CLOSED_DHAN_APP");
                     return posList;
                 }
 
-                // Official Dhan Server Pre-Calculated Live PnL & Buy Avg
                 const serverUnrealizedPnl = Number(liveMatch.unrealizedProfit || liveMatch.unrealizedPnl || 0.0);
                 const officialBuyAvg = Number(liveMatch.buyAvg || liveMatch.costPrice || 0);
 
@@ -406,17 +424,8 @@ class SmartOrderManager {
                     this.activePosition.entryPrice = officialBuyAvg;
                 }
                 this.activePosition.unrealizedPnl = serverUnrealizedPnl;
-                
-                // Deriving current LTP from server unrealized profit
-                if (this.activePosition.qty > 0) {
-                    const derivedLtp = Number((this.activePosition.entryPrice + (serverUnrealizedPnl / this.activePosition.qty)).toFixed(2));
-                    if (derivedLtp > 0) {
-                        this.activePosition.currentLtp = derivedLtp;
-                    }
-                }
             } else if (this.isOrderActive) {
-                // Ghost Position Protection: Position absent on Dhan broker servers! Auto-clear local memory position state!
-                console.warn(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} does NOT exist on Dhan broker servers. Clearing ghost position state.`);
+                console.warn(`⚠️ [SMART ORDER MANAGER DHAN SYNC] Position ${this.activePosition.symbol} absent on Dhan servers. Auto-clearing state.`);
                 this.activePosition = null;
                 this.isOrderActive = false;
                 this.marginUsed = 0;
@@ -430,62 +439,38 @@ class SmartOrderManager {
     }
 
     /**
-     * Handles spot price ticks with ZERO latency (0ms delay) for ultra-fast PnL and Trailing SL updates.
-     * Uses Dynamic Option Delta Engine for ultra-accurate option price estimation across ATM/ITM/OTM strikes.
+     * Handles live spot price ticks & fetches real Option LTP from Dhan API
      */
     onSpotPriceTick(spotPrice) {
         if (!this.isOrderActive || !this.activePosition || !spotPrice) return;
         const pos = this.activePosition;
 
-        // 1. Instant tick calculation (0ms delay) using Dynamic Option Delta Engine
-        const entrySpot = pos.entrySpot || spotPrice;
-        const spotDelta = spotPrice - entrySpot;
-        const optionDelta = this.calculateDynamicDelta(spotPrice, pos.strikePrice, pos.optionType);
-        const estimatedLtp = Number((pos.entryPrice + (spotDelta * optionDelta)).toFixed(2));
-        const finalLtp = Math.max(0.50, estimatedLtp);
+        // Fetch real option strike LTP directly from Dhan API
+        this.strikeFetcher.fetchLiveOptionLtp(pos.strikePrice, pos.optionType, pos.securityId)
+            .then(realLtp => {
+                if (realLtp && realLtp > 0 && this.isOrderActive && this.activePosition) {
+                    this.onOptionPriceTick(realLtp);
+                }
+            })
+            .catch(err => {
+                this.broadcastTelemetry("DHAN_OPTION_TICK_NOTICE", { error: err.message, position: pos.symbol });
+            });
 
-        // Immediately evaluate SL/TP & broadcast telemetry (0ms latency!)
-        this.onOptionPriceTick(finalLtp);
-
-        // 2. Non-blocking asynchronous anchor sync with Dhan API GET /positions directly from Dhan Servers
+        // Sync position state with Dhan server GET /positions
         this.syncDhanLivePosition()
             .catch(() => {});
     }
 
     /**
-     * Dynamic Option Delta Engine:
-     * Calculates real-time option delta based on spot price, strike price, and option type ('CE'/'PE').
-     * ATM Delta ~ 0.52 (CE) / -0.52 (PE).
-     * Accurately scales and clamps ITM/OTM delta between [0.08, 0.92] (CE) and [-0.92, -0.08] (PE).
-     */
-    calculateDynamicDelta(spotPrice, strikePrice, optionType) {
-        const isCe = optionType === 'CE';
-        if (!strikePrice || strikePrice <= 0 || !spotPrice || spotPrice <= 0) {
-            return isCe ? 0.52 : -0.52;
-        }
-
-        const diff = spotPrice - strikePrice;
-
-        if (isCe) {
-            const baseDelta = 0.52 + (diff * 0.002);
-            return Math.max(0.08, Math.min(0.92, baseDelta));
-        } else {
-            const baseDelta = -0.52 + (diff * 0.002);
-            return Math.min(-0.08, Math.max(-0.92, baseDelta));
-        }
-    }
-
-    /**
-     * Step 3: Live Price Tick Handler & Stepless Trailing SL Engine
-     * Trails SL progressively: 1:1.5, 1:2.5, 1:3, 1:3.5, 1:4, 1:4.5, 1:5+ with 1R Breathing Room
+     * Live Option Price Tick Handler & Stepless Trailing SL Engine
      */
     onOptionPriceTick(ltp) {
-        if (!this.isOrderActive || !this.activePosition) return;
+        if (!this.isOrderActive || !this.activePosition || !ltp || ltp <= 0) return;
 
         const pos = this.activePosition;
         pos.currentLtp = Number(ltp.toFixed(2));
 
-        // Calculate Unrealized PnL
+        // Calculate Real Unrealized PnL
         const pnlPerShare = pos.currentLtp - pos.entryPrice;
         pos.unrealizedPnl = Number((pnlPerShare * pos.qty).toFixed(2));
 
@@ -494,9 +479,16 @@ class SmartOrderManager {
             pos.highestPriceSeen = pos.currentLtp;
         }
 
+        // Check Target Profit (TP) Hit (1:2.2 RR Target)
+        if (pos.targetProfit && pos.currentLtp >= pos.targetProfit) {
+            console.log(`🎯 [SMART ORDER MANAGER EXIT] Target Profit (TP) HIT! Price: ₹${pos.currentLtp} >= Target: ₹${pos.targetProfit}`);
+            this.closePosition("TARGET_PROFIT_HIT");
+            return;
+        }
+
         // Check Trailing SL Hit
         if (pos.currentLtp <= pos.currentTrailingSL) {
-            console.log(`🚨 [SMART ORDER MANAGER EXIT] Trailing SL HIT! Current Price: ₹${pos.currentLtp} <= Trailing SL: ₹${pos.currentTrailingSL}`);
+            console.log(`🚨 [SMART ORDER MANAGER EXIT] Trailing SL HIT! Price: ₹${pos.currentLtp} <= Trailing SL: ₹${pos.currentTrailingSL}`);
             this.closePosition("TRAILING_SL_HIT");
             return;
         }
@@ -506,45 +498,41 @@ class SmartOrderManager {
         const gainedPoints = pos.highestPriceSeen - pos.entryPrice;
         const currentRRRatio = gainedPoints / riskPts;
 
-        // Find highest milestone achieved
         for (let i = this.trailingRatioSteps.length - 1; i >= 0; i--) {
             const milestoneRatio = this.trailingRatioSteps[i];
             if (currentRRRatio >= milestoneRatio && i > pos.currentMilestoneIndex) {
                 pos.currentMilestoneIndex = i;
                 pos.currentRatioText = `1:${milestoneRatio}`;
 
-                // 1R Breathing Room Buffer Formula:
-                // Move Trailing SL to (MilestoneRatio - 1.0) * Risk
-                // e.g. at 1:1.5 -> SL moves to Cost (1:0)
-                // e.g. at 1:2.5 -> SL moves to +1.5R (1:1.5)
+                // 1R Breathing Room Formula:
                 const lockedRRatio = Math.max(0, milestoneRatio - 1.0);
                 const newTrailingSL = Number((pos.entryPrice + (lockedRRatio * pos.riskPoints)).toFixed(2));
 
                 if (newTrailingSL > pos.currentTrailingSL) {
                     const oldSL = pos.currentTrailingSL;
                     pos.currentTrailingSL = newTrailingSL;
-                    console.log(`📈 [SMART ORDER MANAGER TRAIL] Milestone ${pos.currentRatioText} Reached! Peak Price: ₹${pos.highestPriceSeen} | Trailing SL moved: ₹${oldSL} ➔ ₹${newTrailingSL} (Locked R:R: 1:${lockedRRatio})`);
+                    console.log(`📈 [SMART ORDER MANAGER TRAIL] Milestone ${pos.currentRatioText} Reached! Peak: ₹${pos.highestPriceSeen} | Trailing SL: ₹${oldSL} ➔ ₹${newTrailingSL}`);
                 }
                 break;
             }
         }
 
-        // Broadcast real-time telemetry to monitorClient on screen
+        // Broadcast live telemetry to monitor UI
         this.broadcastTelemetry("LIVE_TICK_UPDATE", this.activePosition);
     }
 
     /**
-     * Step 4: Close Active Position & Record PnL (Submits Real Exit Order to Dhan API)
+     * Step 4: Close Active Position & Submit REAL Market SELL Order to Dhan API
      */
     async closePosition(reason = "MANUAL_EXIT") {
         if (!this.isOrderActive || !this.activePosition) return;
 
         const pos = this.activePosition;
 
-        // Send Real Exit Order to Dhan API
+        // Submit REAL Exit Market SELL Order to Dhan API
         if (this.dhan && pos.securityId && typeof this.dhan.orders?.placeOrder === 'function') {
             try {
-                console.log(`🚀 [SMART ORDER MANAGER DHAN EXIT] Submitting Real Exit Order to Dhan API for ${pos.symbol} (SecID: ${pos.securityId})...`);
+                console.log(`🚀 [SMART ORDER MANAGER DHAN EXIT] Submitting Real Exit Order for ${pos.symbol} (SecID: ${pos.securityId})...`);
                 const exitRes = await this.dhan.orders.placeOrder({
                     transactionType: 'SELL',
                     exchangeSegment: 'NSE_FNO',
@@ -555,9 +543,18 @@ class SmartOrderManager {
                     quantity: pos.qty,
                     price: 0
                 });
-                console.log(`📩 [DHAN EXIT ORDER RESPONSE]:`, JSON.stringify(exitRes, null, 2));
+
+                console.log(`📩 [DHAN EXIT RESPONSE]:`, JSON.stringify(exitRes, null, 2));
+                if (exitRes && (exitRes.status === 'success' || exitRes.orderId || exitRes.data?.orderId)) {
+                    console.log(`✅ [DHAN API REAL EXIT SUBMITTED] Order ID: ${exitRes.orderId || exitRes.data?.orderId}`);
+                } else {
+                    const errMsg = exitRes?.errorData?.errorMessage || exitRes?.message || 'Dhan exit order rejected';
+                    console.error(`⚠️ [DHAN API REAL EXIT REJECTED]: ${errMsg}`);
+                    this.broadcastTelemetry("REAL_EXIT_REJECTED_DHAN_API", { error: errMsg, response: exitRes });
+                }
             } catch (exitErr) {
-                console.error(`❌ [DHAN EXIT ORDER EXCEPTION]: ${exitErr.message}`);
+                console.error(`❌ [DHAN EXIT EXCEPTION]: ${exitErr.message}`);
+                this.broadcastTelemetry("REAL_EXIT_FAILED_DHAN_API", { error: exitErr.message });
             }
         }
 
@@ -592,12 +589,11 @@ class SmartOrderManager {
         console.log(`   - Reason: ${reason}`);
         console.log(`   - Contract: ${pos.symbol}`);
         console.log(`   - Entry: ₹${pos.entryPrice} | Exit: ₹${exitPrice}`);
-        console.log(`   - Peak Achieved: ₹${pos.highestPriceSeen} (Max R:R ${pos.currentRatioText})`);
         console.log(`   - Net PnL: ${netPnl >= 0 ? '+' : ''}₹${netPnl}`);
         console.log(`   - Updated Balance: ₹${this.accountBalance}`);
         console.log(`===========================================================`);
 
-        // Broadcast final exit telemetry to monitorClient
+        // Broadcast final exit telemetry to monitor UI
         this.broadcastTelemetry("POSITION_CLOSED", closedRecord);
 
         // Reset active position state
@@ -671,7 +667,6 @@ class SmartOrderManager {
                 if (p.type === 'minute') minutes = parseInt(p.value, 10);
             }
 
-            // Check if 3:10 PM IST (15:10) or later
             if ((hours === 15 && minutes >= 10) || hours > 15) {
                 if (this.isOrderActive && this.activePosition) {
                     console.log('⏰ [SMART ORDER MANAGER] 3:10 PM IST Auto-Cut Triggered!');
@@ -680,11 +675,11 @@ class SmartOrderManager {
             }
         };
 
-        this.autoCutTimer = setInterval(checkAutoCut, 60000); // Check every minute
+        this.autoCutTimer = setInterval(checkAutoCut, 60000);
     }
 }
 
-// Allow direct execution via command line (node ordermanager/smartOrderManager.js)
+// Allow direct execution via command line
 if (require.main === module) {
     async function runOrderManagerStandalone() {
         const orderManager = new SmartOrderManager();
