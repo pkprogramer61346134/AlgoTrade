@@ -1,0 +1,13 @@
+{
+  "initialBalance": 100000,
+  "maxBudgetPercent": 20,
+  "lots": 1,
+  "lotSize": 65,
+  "selectedStock": {
+    "securityId": "13",
+    "exchangeSegment": "IDX_I",
+    "symbol": "NIFTY",
+    "interval": "5",
+    "instrument": "INDEX"
+  }
+}

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoTrade Pro - NIFTY Backtest Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- HEADER / NAVIGATION -->
+        <header class="app-header">
+            <div class="brand-section">
+                <div class="brand-logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="brand-name">AlgoTrade <span class="badge-pro">PRO</span></span>
+                </div>
+                <div class="server-status">
+                    <span class="status-dot pulsing"></span>
+                    <span id="server-status-text">BACKTEST ENGINE</span>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="clock-display" id="clock-display">00:00:00 AM</div>
+            </div>
+
+            <div class="header-controls">
+                <a href="index.html" class="nav-link-btn">
+                    <span class="btn-icon">⚡</span> Live Trading Dashboard
+                </a>
+            </div>
+        </header>
+
+        <!-- DEDICATED BACKTEST MAIN CONTENT -->
+        <main class="dashboard-main">
+            <!-- BACKTEST CONTROLS CARD -->
+            <div class="backtest-controls-card glass-card">
+                <h2 class="section-title"><span class="title-icon">🧪</span> NIFTY Historical Strategy Backtesting Engine</h2>
+                <p class="section-desc">Evaluates consensusEngine.js signals candle-by-candle across historical datasets. Zero trailing SL, exact option contract strike selection, and monthly PnL breakdown.</p>
+                
+                <form id="backtest-form" onsubmit="runBacktest(event)" class="backtest-form-grid">
+                    <div class="form-group">
+                        <label>From Date</label>
+                        <input type="date" id="bt-from-date" value="2025-09-25" required>
+                    </div>
+                    <div class="form-group">
+                        <label>To Date</label>
+                        <input type="date" id="bt-to-date" value="2026-09-24" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Virtual Starting Balance (₹)</label>
+                        <input type="number" id="bt-balance" value="100000" step="1000" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Lots (NIFTY 65 Qty/Lot)</label>
+                        <input type="number" id="bt-lots" value="1" min="1" max="50" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Candle Interval</label>
+                        <select id="bt-interval">
+                            <option value="5" selected>5 Minutes</option>
+                            <option value="15">15 Minutes</option>
+                            <option value="1">1 Minute</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Risk : Reward Ratio</label>
+                        <select id="bt-rr-ratio">
+                            <option value="1">1 : 1</option>
+                            <option value="1.5">1 : 1.5</option>
+                            <option value="2" selected>1 : 2 (Default)</option>
+                            <option value="2.5">1 : 2.5</option>
+                            <option value="3">1 : 3</option>
+                        </select>
+                    </div>
+                    <div class="form-group btn-group">
+                        <button type="submit" id="bt-submit-btn" class="btn btn-primary">
+                            <span id="bt-btn-text">🚀 Run Backtest Engine</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- RESULTS CONTAINER -->
+            <div id="backtest-results-container" class="display-none">
+                <!-- BACKTEST SUMMARY KPI ROW -->
+                <div class="kpi-grid">
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-header"><span class="kpi-title">Initial vs Final Balance</span><span class="kpi-icon">💰</span></div>
+                        <div class="kpi-value" id="bt-res-final">₹0.00</div>
+                        <div class="kpi-footer"><span class="kpi-subtext">Initial: <span id="bt-res-initial">₹100,000</span></span></div>
+                    </div>
+
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-header"><span class="kpi-title">Net Realized PnL</span><span class="kpi-icon">📈</span></div>
+                        <div class="kpi-value" id="bt-res-netpnl">₹0.00</div>
+                        <div class="kpi-footer"><span id="bt-res-pnl-badge" class="badge-neutral">0%</span></div>
+                    </div>
+
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-header"><span class="kpi-title">Win Rate & Trades</span><span class="kpi-icon">🏆</span></div>
+                        <div class="kpi-value" id="bt-res-winrate">0.0%</div>
+                        <div class="kpi-footer"><span class="kpi-subtext">Total: <span id="bt-res-trades">0</span> | Win: <span id="bt-res-wins">0</span> | Loss: <span id="bt-res-losses">0</span></span></div>
+                    </div>
+
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-header"><span class="kpi-title">Max Drawdown</span><span class="kpi-icon">📉</span></div>
+                        <div class="kpi-value text-danger" id="bt-res-drawdown">₹0.00</div>
+                        <div class="kpi-footer"><span class="kpi-subtext" id="bt-res-dd-percent">-0.00%</span></div>
+                    </div>
+                </div>
+
+
+                <!-- BACKTEST TRADES TABLE -->
+                <div class="section-container">
+                    <h3 class="sub-title"><span class="title-icon">📜</span> Backtest Simulated Trades Log</h3>
+                    <div class="table-card glass-card">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Entry Time</th>
+                                        <th>Symbol</th>
+                                        <th>Type</th>
+                                        <th>R:R Ratio</th>
+                                        <th>Entry Spot</th>
+                                        <th>Entry LTP</th>
+                                        <th>Exit Time</th>
+                                        <th>Exit LTP</th>
+                                        <th>Reason</th>
+                                        <th>PnL (₹)</th>
+                                        <th>Balance After</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bt-history-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="backtest_app.js"></script>
+</body>
+</html>

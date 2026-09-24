@@ -1,0 +1,17 @@
+{
+  "trailingEnabled": true,
+  "breathingRoomPoints": 0.5,
+  "maxBudgetPercent": 20,
+  "defaultBudget": 20000,
+  "targetRatio": "1:4",
+  "autoTrailOnTR1": true,
+  "autoTrailOnTR2": true,
+  "autoTrailOnTR3": true,
+  "selectedStock": {
+    "securityId": "13",
+    "exchangeSegment": "IDX_I",
+    "symbol": "NIFTY",
+    "interval": "5",
+    "instrument": "INDEX"
+  }
+}

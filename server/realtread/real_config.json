@@ -1,0 +1,12 @@
+{
+  "realTradeEnabled": true,
+  "maxBudgetPercent": 20,
+  "defaultBudget": 20000,
+  "selectedStock": {
+    "securityId": "13",
+    "exchangeSegment": "IDX_I",
+    "symbol": "NIFTY",
+    "interval": "5",
+    "instrument": "INDEX"
+  }
+}

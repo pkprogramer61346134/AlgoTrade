@@ -1,0 +1,17 @@
+{
+  "paperTradeEnabled": true,
+  "initialBalance": 100000,
+  "currentBalance": 100132.6,
+  "totalPnl": 132.6,
+  "totalTrades": 1,
+  "winningTrades": 1,
+  "losingTrades": 0,
+  "selectedStock": {
+    "securityId": "13",
+    "exchangeSegment": "IDX_I",
+    "symbol": "NIFTY",
+    "interval": "5",
+    "instrument": "INDEX"
+  },
+  "maxBudgetPercent": 20
+}

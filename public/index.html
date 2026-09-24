@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoTrade Pro - Realtime Trading Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- HEADER / NAVIGATION -->
+        <header class="app-header">
+            <div class="brand-section">
+                <div class="brand-logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="brand-name">AlgoTrade <span class="badge-pro">PRO</span></span>
+                </div>
+                <div class="server-status">
+                    <span class="status-dot pulsing"></span>
+                    <span id="server-status-text">SYSTEM ONLINE</span>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="clock-display" id="clock-display">00:00:00 AM</div>
+                <div class="market-scrip-badge">
+                    <span class="scrip-icon">📈</span>
+                    <span id="scrip-symbol">NIFTY 50: <strong id="header-live-price">₹0.00</strong></span>
+                </div>
+            </div>
+
+            <div class="header-controls">
+                <div class="control-toggle-group">
+                    <span class="toggle-label">Paper Trade</span>
+                    <label class="switch">
+                        <input type="checkbox" id="paper-toggle" checked onchange="togglePaperTrade(this.checked)">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
+                <div class="control-toggle-group">
+                    <span class="toggle-label danger-label">Real Trade</span>
+                    <label class="switch danger-switch">
+                        <input type="checkbox" id="real-toggle" onchange="toggleRealTrade(this.checked)">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
+                <a href="backtest.html" class="nav-link-btn">
+                    <span class="btn-icon">🧪</span> Backtest Engine
+                </a>
+            </div>
+        </header>
+
+        <!-- MAIN UNIFIED DASHBOARD CONTENT -->
+        <main class="dashboard-main">
+
+            <!-- 1. CENTRAL STRATEGY CONSENSUS HEAD SECTION -->
+            <section class="section-container consensus-head-section">
+                <div class="glass-card consensus-head-card">
+                    <div class="consensus-head-header">
+                        <div class="head-title-group">
+                            <h2>🧠 Central Strategy Consensus Head</h2>
+                            <span class="head-subtitle">Evaluates All Technical Strategies in Master Control Loop</span>
+                        </div>
+                        <div class="consensus-badge-container">
+                            <span id="consensus-signal-badge" class="badge-neutral badge-xl">⚪ NO SIGNAL / WAITING</span>
+                        </div>
+                    </div>
+
+                    <div class="consensus-metrics-row">
+                        <div class="metric-box">
+                            <span class="m-label">Live NIFTY Spot</span>
+                            <span class="m-val highlight" id="consensus-live-spot">₹0.00</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="m-label">Entry Price</span>
+                            <span class="m-val" id="consensus-entry">--</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="m-label">Target (TR)</span>
+                            <span class="m-val text-success" id="consensus-target">--</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="m-label">Stop Loss (SL)</span>
+                            <span class="m-val text-danger" id="consensus-sl">--</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="m-label">Confidence</span>
+                            <span class="m-val" id="consensus-confidence">0%</span>
+                        </div>
+                    </div>
+
+                    <!-- STRATEGY VOTING BREAKDOWN TABLE -->
+                    <div class="strategy-votes-container">
+                        <h3 class="sub-title">Strategy Votes Breakdown</h3>
+                        <div class="table-responsive">
+                            <table class="data-table compact-table">
+                                <thead>
+                                    <tr>
+                                        <th>Strategy Name</th>
+                                        <th>Status</th>
+                                        <th>Vote Signal</th>
+                                        <th>Confidence</th>
+                                        <th>Target (TR)</th>
+                                        <th>Stop Loss (SL)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="consensus-strategies-tbody">
+                                    <tr><td colspan="6" class="text-center text-muted">Awaiting Market Feed...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. TWO-COLUMN GRID: PAPER TRADING & REAL TRADING -->
+            <div class="trading-terminals-grid">
+                
+                <!-- LEFT TERMINAL: PAPER TRADING -->
+                <section class="terminal-column">
+                    <div class="terminal-header">
+                        <h2 class="terminal-title">📄 Paper Trading Terminal</h2>
+                        <span class="status-pill badge-success" id="paper-terminal-badge">ACTIVE</span>
+                    </div>
+
+                    <!-- PAPER KPI GRID -->
+                    <div class="kpi-grid compact-kpi">
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-header"><span class="kpi-title">Dummy Balance</span><span class="kpi-icon">💰</span></div>
+                            <div class="kpi-value" id="paper-balance">₹1,00,000.00</div>
+                            <div class="kpi-footer"><span class="kpi-subtext">Initial: <span id="paper-initial">₹100,000</span></span></div>
+                        </div>
+
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-header"><span class="kpi-title">Realized PnL</span><span class="kpi-icon">📊</span></div>
+                            <div class="kpi-value" id="paper-total-pnl">₹0.00</div>
+                            <div class="kpi-footer"><span id="paper-pnl-badge" class="badge-neutral">0.00%</span></div>
+                        </div>
+
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-header"><span class="kpi-title">Win Rate</span><span class="kpi-icon">🏆</span></div>
+                            <div class="kpi-value" id="paper-winrate">0.0%</div>
+                            <div class="kpi-footer"><span class="kpi-subtext">Total: <span id="paper-trades-count">0</span> (Win: <span id="paper-wins">0</span> | Loss: <span id="paper-losses">0</span>)</span></div>
+                        </div>
+                    </div>
+
+                    <!-- ACTIVE PAPER POSITION CARD -->
+                    <div class="section-container">
+                        <h3 class="sub-title"><span class="title-icon">⚡</span> Active Paper Position <span id="paper-position-status-badge" class="status-pill status-closed">NO POSITION</span></h3>
+                        <div id="paper-active-position-card" class="active-trade-card glass-card empty-card">
+                            <div class="empty-state-message">
+                                <span class="empty-icon">⏳</span>
+                                <p>No active paper position open.</p>
+                                <span class="empty-subtext">Listening for Consensus Engine Signals...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PAPER TRADE HISTORY TABLE -->
+                    <div class="section-container">
+                        <h3 class="sub-title"><span class="title-icon">📜</span> Paper Execution History</h3>
+                        <div class="table-card glass-card">
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Time</th>
+                                            <th>Symbol</th>
+                                            <th>Type</th>
+                                            <th>Entry</th>
+                                            <th>Exit</th>
+                                            <th>Qty</th>
+                                            <th>Reason</th>
+                                            <th>PnL (₹)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="paper-history-tbody">
+                                        <tr><td colspan="9" class="text-center text-muted">No paper trades logged.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- RIGHT TERMINAL: REAL TRADING -->
+                <section class="terminal-column">
+                    <div class="terminal-header">
+                        <h2 class="terminal-title">🔴 Real Account Broker Terminal</h2>
+                        <span class="status-pill badge-neutral" id="real-terminal-badge">DISABLED</span>
+                    </div>
+
+                    <!-- REAL KPI GRID -->
+                    <div class="kpi-grid compact-kpi">
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-header"><span class="kpi-title">Dhan Live Funds</span><span class="kpi-icon">💰</span></div>
+                            <div class="kpi-value text-success" id="real-available-funds">₹679.52</div>
+                            <div class="kpi-footer"><span class="kpi-subtext">Client ID: <span id="real-client-id">1101323815</span></span></div>
+                        </div>
+
+                        <div class="kpi-card glass-card border-danger">
+                            <div class="kpi-header"><span class="kpi-title">Broker Engine</span><span class="kpi-icon">🛑</span></div>
+                            <div class="kpi-value" id="real-engine-state">DISABLED</div>
+                            <div class="kpi-footer"><span class="kpi-subtext">Dhan Broker API</span></div>
+                        </div>
+
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-header"><span class="kpi-title">Active Broker Position</span><span class="kpi-icon">📌</span></div>
+                            <div class="kpi-value" id="real-active-symbol">NONE</div>
+                            <div class="kpi-footer"><span class="kpi-subtext" id="real-active-pnl">PnL: ₹0.00</span></div>
+                        </div>
+                    </div>
+
+                    <!-- ACTIVE REAL POSITION CARD -->
+                    <div class="section-container">
+                        <h3 class="sub-title"><span class="title-icon">⚡</span> Active Real Capital Position</h3>
+                        <div id="real-active-position-card" class="active-trade-card glass-card empty-card">
+                            <div class="empty-state-message">
+                                <span class="empty-icon">🛡️</span>
+                                <p>Real Trading is currently disabled.</p>
+                                <span class="empty-subtext">Toggle Real Trade in top right corner to activate live execution.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- REAL TRADE AUDIT HISTORY TABLE -->
+                    <div class="section-container">
+                        <h3 class="sub-title"><span class="title-icon">📜</span> Real Trade Audit Logs</h3>
+                        <div class="table-card glass-card">
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Time</th>
+                                            <th>Symbol</th>
+                                            <th>Type</th>
+                                            <th>Entry</th>
+                                            <th>Exit</th>
+                                            <th>Qty</th>
+                                            <th>Reason</th>
+                                            <th>PnL (₹)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="real-history-tbody">
+                                        <tr><td colspan="9" class="text-center text-muted">No real trades logged.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
