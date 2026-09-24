@@ -53,9 +53,9 @@ class SmartOrderManager {
         // Trailing SL Configuration Steps (1:1.5, 1:2.5, 1:3, 1:3.5, 1:4, 1:4.5, 1:5+)
         this.trailingRatioSteps = [1.5, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         
-        // Telemetry Throttling Configuration (2 Seconds smooth refresh rate)
+        // Telemetry Throttling Configuration (500ms smooth stream flow)
         this.lastTelemetryTime = 0;
-        this.telemetryThrottleMs = 2000;
+        this.telemetryThrottleMs = 500;
 
         // Auto-cut timer at 3:10 PM IST
         this.autoCutTimer = null;
@@ -140,11 +140,10 @@ class SmartOrderManager {
         // Schedule 3:10 PM auto-cut check
         this.scheduleAutoCut310();
 
-        // Telemetry heartbeat broadcast every 500ms for UI monitor
-        // 2-second periodic telemetry heartbeat broadcast for smooth UI without flickering
+        // 500ms smooth telemetry stream flow
         setInterval(() => {
             this.broadcastTelemetry("HEARTBEAT", null);
-        }, 2000);
+        }, 500);
 
         console.log(`✅ [SMART ORDER MANAGER] Running & Listening. Target Monitor: "${this.monitorClientTarget}"`);
     }
