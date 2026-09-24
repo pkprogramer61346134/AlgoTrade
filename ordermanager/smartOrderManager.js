@@ -324,19 +324,22 @@ class SmartOrderManager {
             const posRes = await this.dhan.portfolio.getPositions();
             const posList = Array.isArray(posRes?.data) ? posRes.data : (Array.isArray(posRes) ? posRes : []);
 
-            // Helper to get real netQty safely (preventing 0 || 65 falsy bug)
+            // Helper to get real netQty safely
             const getNetQty = (p) => {
                 if (p.netQty !== undefined && p.netQty !== null) return Number(p.netQty);
                 if (p.positionQty !== undefined && p.positionQty !== null) return Number(p.positionQty);
                 return 0;
             };
 
+            const getSecId = (p) => String(p.securityId || p.security_id || p.secId || '');
+            const getSymbol = (p) => String(p.tradingSymbol || p.symbol || p.customSymbol || '');
+
             if (!this.activePosition || !this.isOrderActive) {
                 // Active Position Recovery: Only recover if REAL netQty > 0 on Dhan broker
                 const openDhanPos = posList.find(p => getNetQty(p) > 0 && (p.exchangeSegment === 'NSE_FNO' || p.segment === 'NSE_FNO'));
                 if (openDhanPos) {
-                    const symbol = openDhanPos.tradingSymbol || openDhanPos.symbol;
-                    const securityId = openDhanPos.securityId;
+                    const symbol = getSymbol(openDhanPos);
+                    const securityId = getSecId(openDhanPos);
                     const qty = getNetQty(openDhanPos) || 65;
                     const entryPrice = Number(openDhanPos.buyAvg || openDhanPos.costPrice || 0);
                     const optionType = symbol.endsWith('CE') || symbol.includes('CE') ? 'CE' : 'PE';
@@ -368,13 +371,21 @@ class SmartOrderManager {
                         openedAt: new Date().toLocaleTimeString()
                     };
                     this.isOrderActive = true;
-                    console.log(`🔄 [SMART ORDER MANAGER RECOVERY] Restored active Dhan position: ${symbol} (BuyAvg: ₹${entryPrice}, Qty: ${qty})`);
+                    console.log(`🔄 [SMART ORDER MANAGER RECOVERY] Restored active Dhan position: ${symbol} (SecID: ${securityId}, BuyAvg: ₹${entryPrice}, Qty: ${qty})`);
                 }
                 return posList;
             }
 
-            const secIdStr = String(this.activePosition.securityId);
-            const liveMatch = posList.find(p => String(p.securityId) === secIdStr || p.tradingSymbol === this.activePosition.symbol);
+            const activeSecId = String(this.activePosition.securityId || '');
+            const activeSym = String(this.activePosition.symbol || '');
+
+            const liveMatch = posList.find(p => {
+                const pSecId = getSecId(p);
+                const pSym = getSymbol(p);
+                if (activeSecId && pSecId && activeSecId === pSecId) return true;
+                if (activeSym && pSym && (activeSym === pSym || pSym.includes(activeSym) || activeSym.includes(pSym))) return true;
+                return false;
+            });
 
             if (liveMatch) {
                 // Check if position was closed on Dhan App/Web Terminal
