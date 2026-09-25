@@ -11,8 +11,7 @@ const CONFIG_FILE = path.join(__dirname, 'trailing_config.json');
 const DEFAULT_CONFIG = {
     trailingEnabled: true,
     breathingRoomPoints: 0.50,   // "Saas lene ke points" buffer (e.g. 0.50 points buffer to prevent noise SL trigger)
-    maxBudgetPercent: 20,         // Use max 20% of account balance per trade
-    defaultBudget: 20000.00,      // Fallback budget if account balance is unavailable
+    maxBudgetPercent: 100,        // Use 100% of available account balance per trade
     targetRatio: "1:4",           // Initial Order Target set at 1:4 (TR4)
     autoTrailOnTR1: true,         // Trail to Cost-to-Cost when TR1 is hit
     autoTrailOnTR2: true,         // Trail to TR1 when TR2 is hit

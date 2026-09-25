@@ -10,8 +10,7 @@ const CONFIG_FILE = path.join(__dirname, 'real_config.json');
 
 const DEFAULT_CONFIG = {
     realTradeEnabled: false,    // Disabled by default for account safety
-    maxBudgetPercent: 20,       // Max 20% of funds per trade
-    defaultBudget: 20000.00,    // Default budget limit
+    maxBudgetPercent: 100,      // Max 100% of funds per trade
     selectedStock: {
         securityId: "13",
         exchangeSegment: "IDX_I",

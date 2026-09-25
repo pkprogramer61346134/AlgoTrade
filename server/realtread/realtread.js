@@ -168,12 +168,12 @@ class RealTradeEngine {
     async executeRealOrder(signal, selectedStock) {
         const optionType = signal.consensus === "BUY" ? "CE" : "PE";
         const cfg = realConfig.getConfig();
-        let maxBudget = Number(cfg.defaultBudget || 10000);
-
         // Fetch live funds first
         await this.fetchLiveFunds();
+        const pct = Number(cfg.maxBudgetPercent || 100) / 100;
+        let maxBudget = 10000;
         if (this.latestFunds && Number(this.latestFunds.availabelBalance) > 0) {
-            maxBudget = Math.min(maxBudget, Number(this.latestFunds.availabelBalance));
+            maxBudget = Number((Number(this.latestFunds.availabelBalance) * pct).toFixed(2));
         }
 
         console.log(`🚀 [REAL BROKER ORDER] Triggering Real Trade for ${optionType} | Spot: ₹${signal.entry} | Budget: ₹${maxBudget}`);

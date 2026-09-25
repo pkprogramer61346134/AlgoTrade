@@ -1,8 +1,7 @@
 {
   "trailingEnabled": true,
   "breathingRoomPoints": 0.5,
-  "maxBudgetPercent": 20,
-  "defaultBudget": 20000,
+  "maxBudgetPercent": 100,
   "targetRatio": "1:4",
   "autoTrailOnTR1": true,
   "autoTrailOnTR2": true,

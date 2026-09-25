@@ -1,5 +1,6 @@
 const config = require("./token/config");
 const WebSocket = require("ws");
+const { DhanMarketData } = require("./dhan-market-data");
 
 class DhanLivePrice {
     constructor(options = {}) {
@@ -10,6 +11,7 @@ class DhanLivePrice {
         this.ws = null;
         this.candleData = null;
         this.lastCandleTimestamp = null;
+        this.pollTimer = null;
     }
 
     async getLatestCandle(
@@ -147,6 +149,44 @@ class DhanLivePrice {
             instrument,
             minutes
         );
+
+        const marketData = new DhanMarketData();
+        const fetchRestQuote = async () => {
+            try {
+                const res = await marketData.getMarketQuote({ [exchangeSegment]: [Number(securityId)] });
+                const quoteObj = res?.data?.data?.[exchangeSegment]?.[String(securityId)];
+                if (quoteObj && quoteObj.last_price > 0) {
+                    const now = new Date();
+                    onData({
+                        price: quoteObj.last_price,
+                        quantity: quoteObj.last_quantity || 0,
+                        date: now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+                        time: now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }),
+                        open: quoteObj.ohlc?.open || quoteObj.last_price,
+                        high: quoteObj.ohlc?.high || quoteObj.last_price,
+                        low: quoteObj.ohlc?.low || quoteObj.last_price,
+                        close: quoteObj.ohlc?.close || quoteObj.last_price,
+                        volume: quoteObj.volume || 100,
+                        candleOpen: this.candleData?.candleOpen || quoteObj.ohlc?.open || quoteObj.last_price,
+                        candleHigh: this.candleData?.candleHigh || quoteObj.ohlc?.high || quoteObj.last_price,
+                        candleLow: this.candleData?.candleLow || quoteObj.ohlc?.low || quoteObj.last_price,
+                        candleClose: this.candleData?.candleClose || quoteObj.ohlc?.close || quoteObj.last_price,
+                        candleVolume: this.candleData?.candleVolume || quoteObj.volume || 100,
+                        dayOpen: quoteObj.ohlc?.open || quoteObj.last_price,
+                        dayClose: quoteObj.ohlc?.close || quoteObj.last_price,
+                        dayHigh: quoteObj.ohlc?.high || quoteObj.last_price,
+                        dayLow: quoteObj.ohlc?.low || quoteObj.last_price
+                    });
+                }
+            } catch (e) {}
+        };
+
+        // Immediately fetch REST Quote on start so UI receives live price instantly
+        fetchRestQuote();
+
+        // 2.5s fallback polling loop
+        if (this.pollTimer) clearInterval(this.pollTimer);
+        this.pollTimer = setInterval(fetchRestQuote, 2500);
 
         const wsUrl =
             `wss://api-feed.dhan.co?version=2` +
@@ -292,6 +332,10 @@ class DhanLivePrice {
     }
 
     close() {
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+        }
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;

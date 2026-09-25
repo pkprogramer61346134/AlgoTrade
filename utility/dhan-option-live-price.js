@@ -9,6 +9,7 @@
 
 const config = require("./token/config");
 const WebSocket = require("ws");
+const { DhanMarketData } = require("./dhan-market-data");
 
 class DhanOptionLivePrice {
     constructor(options = {}) {
@@ -19,6 +20,7 @@ class DhanOptionLivePrice {
         this.ws = null;
         this.isConnected = false;
         this.subscribedSecurityId = null;
+        this.pollTimer = null;
     }
 
     /**
@@ -55,6 +57,45 @@ class DhanOptionLivePrice {
             this.accessToken = freshConfig.ACCESS_TOKEN || this.accessToken;
             this.baseUrl = freshConfig.BASE_URL || this.baseUrl;
         } catch (e) {}
+
+        const marketData = new DhanMarketData();
+        const fetchRestQuote = async () => {
+            try {
+                const res = await marketData.getMarketQuote({ [exchangeSegment]: [Number(securityId)] });
+                const quoteObj = res?.data?.data?.[exchangeSegment]?.[String(securityId)];
+                if (quoteObj && quoteObj.last_price > 0) {
+                    const price = Number(quoteObj.last_price.toFixed(2));
+                    const diff = buyPrice > 0 ? (price - buyPrice) : 0;
+                    const livePnl = Number((diff * qty).toFixed(2));
+                    const pnlPctVal = buyPrice > 0 ? ((diff / buyPrice) * 100) : 0;
+                    const pnlPercent = `${pnlPctVal >= 0 ? '+' : ''}${pnlPctVal.toFixed(2)}%`;
+
+                    onTick({
+                        securityId,
+                        liveLtp: price,
+                        buyPrice,
+                        qty,
+                        livePnl,
+                        pnlPercent,
+                        volume: quoteObj.volume || 0,
+                        buyQuantity: quoteObj.buy_quantity || 0,
+                        sellQuantity: quoteObj.sell_quantity || 0,
+                        dayOpen: quoteObj.ohlc?.open || price,
+                        dayClose: quoteObj.ohlc?.close || price,
+                        dayHigh: quoteObj.ohlc?.high || price,
+                        dayLow: quoteObj.ohlc?.low || price,
+                        timestamp: Date.now()
+                    });
+                }
+            } catch (e) {}
+        };
+
+        // Immediately fetch REST quote for option
+        fetchRestQuote();
+
+        // 2.5s fallback polling loop
+        if (this.pollTimer) clearInterval(this.pollTimer);
+        this.pollTimer = setInterval(fetchRestQuote, 2500);
 
         const wsUrl = `wss://api-feed.dhan.co?version=2&token=${this.accessToken}&clientId=${this.clientId}&authType=2`;
         this.ws = new WebSocket(wsUrl);
@@ -159,6 +200,10 @@ class DhanOptionLivePrice {
      * Disconnect WebSocket stream
      */
     close() {
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+        }
         if (this.ws) {
             this.ws.close();
             this.ws = null;

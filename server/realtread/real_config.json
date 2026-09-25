@@ -1,7 +1,6 @@
 {
   "realTradeEnabled": true,
-  "maxBudgetPercent": 20,
-  "defaultBudget": 20000,
+  "maxBudgetPercent": 100,
   "selectedStock": {
     "securityId": "13",
     "exchangeSegment": "IDX_I",
