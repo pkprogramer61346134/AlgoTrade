@@ -17,6 +17,7 @@ const realTradeEngine = require('./server/realtread/realtread');
 const { DhanLivePrice } = require('./utility/dhan-live-price');
 const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { createUIServer } = require('./server/ui_server');
+const { ensureValidDhanToken } = require('./utility/token/autoTokenRefresh');
 
 let latestLivePrice = 0;
 let latestTickTime = null;
@@ -55,6 +56,13 @@ console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (main.js)");
 console.log("==========================================================================");
 
 async function startMasterSystem() {
+    console.log("🔑 [DHAN AUTH] Checking & Ensuring Valid Dhan Access Token via TOTP...");
+    try {
+        await ensureValidDhanToken();
+    } catch (authErr) {
+        console.warn(`⚠️ [DHAN AUTH WARN] Auto token refresh notice: ${authErr.message}`);
+    }
+
     const cfg = mainConfig.getConfig();
     const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
 
