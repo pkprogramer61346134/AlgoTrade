@@ -4,11 +4,13 @@
  * 
  * Features:
  * Uses cached-historical-data.js to load NIFTY candles and send them candle-by-candle (tick-by-tick).
+ * Can be run directly via CLI: `node server/backtesting/backtesting.js`
  */
 
 const fs = require('fs');
 const path = require('path');
 const { getCachedCandles } = require('../../utility/usedfull/cached-historical-data');
+const { evaluateConsensusEngine, computeIndicators } = require('../../utility/usedfull/Engines/consensusEngine');
 
 const REPORT_FILE = path.join(__dirname, 'backtest_report.json');
 
@@ -24,7 +26,7 @@ class BacktestEngine {
      * @param {string} params.fromDate - Start Date ("YYYY-MM-DD")
      * @param {string} params.toDate - End Date ("YYYY-MM-DD")
      * @param {string} [params.interval="5"] - Candle interval in minutes ("1", "5", "15")
-     * @param {Function} [onCandleTick] - Callback function triggered for each candle (candle, index, totalCandles)
+     * @param {Function} [onCandleTick] - Optional Callback function triggered for each candle (candle, index, totalCandles)
      * @returns {Promise<Array>} Array of all historical candles
      */
     async streamHistoricalCandles(params = {}, onCandleTick = null) {
@@ -55,11 +57,25 @@ class BacktestEngine {
 
         console.log(`✅ [HISTORICAL STREAMER] Loaded ${candles.length} candles. Streaming candle-by-candle...\n`);
 
+        // Pre-compute indicators for fast evaluation
+        const precomputed = computeIndicators(candles, {});
+
         // Send candles tick-by-tick / candle-by-candle
-        for (let i = 0; i < candles.length; i++) {
+        for (let i = 20; i < candles.length; i++) {
             const candle = candles[i];
+            const closePrice = Number(candle.close || candle.candleClose);
+            const timeStr = `${candle.date || ''} ${candle.time || ''}`;
+
             if (typeof onCandleTick === 'function') {
                 await onCandleTick(candle, i, candles.length);
+            } else {
+                // Default CLI action: evaluate consensus engine for each candle
+                const signal = await evaluateConsensusEngine(candles, i, { precomputed });
+                if (signal && (signal.consensus === "BUY" || signal.consensus === "SELL")) {
+                    console.log(`🎯 [SIGNAL DETECTED] ${timeStr} | Signal: ${signal.consensus} | Entry Spot: ₹${signal.entry} | Strategy: ${signal.strategyName}`);
+                } else {
+                    console.log(`⌛ [CANDLE TICK ${i + 1}/${candles.length}] ${timeStr} | Spot Close: ₹${closePrice}`);
+                }
             }
         }
 
@@ -94,4 +110,21 @@ class BacktestEngine {
     }
 }
 
-module.exports = new BacktestEngine();
+const engine = new BacktestEngine();
+
+// CLI Direct Execution Support: `node server/backtesting/backtesting.js`
+if (require.main === module) {
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    console.log(`\n🚀 [CLI EXECUTION] Running Backtesting Streamer directly...\n`);
+    engine.streamHistoricalCandles({
+        fromDate: "2026-09-25",
+        toDate: todayStr,
+        interval: "5"
+    }).then(candles => {
+        console.log(`\n✅ [CLI COMPLETE] Finished streaming ${candles.length} candles.`);
+    }).catch(err => {
+        console.error(`❌ [CLI ERROR] ${err.message}`);
+    });
+}
+
+module.exports = engine;
