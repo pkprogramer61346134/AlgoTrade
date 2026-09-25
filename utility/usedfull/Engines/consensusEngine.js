@@ -234,10 +234,10 @@ function getStrategyFailureReason(c, i, candles, strat, computed) {
     const spotPrice = c.close || c.candleClose || c.price;
     const vwapVal = computed.vwap ? computed.vwap[i] : null;
     const stObj = computed.supertrend ? computed.supertrend[i] : null;
-    const rvolVal = computed.rvol ? computed.rvol[i] : 1.0;
-    const rsiVal = computed.rsi ? computed.rsi[i] : 50.0;
+    const rvolVal = (computed.rvol && computed.rvol[i] !== null) ? computed.rvol[i] : 1.0;
+    const rsiVal = (computed.rsi && computed.rsi[i] !== null) ? computed.rsi[i] : null;
     const adxObj = computed.adx ? computed.adx[i] : null;
-    const adxVal = adxObj && adxObj.adx !== undefined ? adxObj.adx : 25.0;
+    const adxVal = (adxObj && adxObj.adx !== null && adxObj.adx !== undefined) ? adxObj.adx : null;
 
     const e10 = computed.ema10 ? computed.ema10[i] : null;
     const eFast = computed.emaFast ? computed.emaFast[i] : null;
@@ -260,9 +260,9 @@ function getStrategyFailureReason(c, i, candles, strat, computed) {
         for (const r of strat.rules.buy) {
             if (r.target === "supertrend" && !isStBull) reasons.push("Supertrend Bearish/Neutral");
             if (r.target === "vwap" && (vwapVal === null || spotPrice <= vwapVal)) reasons.push(`Price Below VWAP (₹${spotPrice.toFixed(1)} <= ₹${vwapVal ? vwapVal.toFixed(1) : 'N/A'})`);
-            if (r.target === "rsi" && rsiVal < (r.value || 50)) reasons.push(`RSI Low (${rsiVal.toFixed(1)} < ${r.value || 50})`);
+            if (r.target === "rsi" && (rsiVal === null || rsiVal < (r.value || 50))) reasons.push(`RSI Low (${rsiVal !== null ? rsiVal.toFixed(1) : 'N/A'} < ${r.value || 50})`);
             if (r.target === "rvol" && (rvolVal || 1.0) < (r.value || minRvol)) reasons.push(`RVOL Low (${(rvolVal || 1.0).toFixed(2)} < ${r.value || minRvol})`);
-            if (r.target === "adx" && adxVal < (r.value || minAdx)) reasons.push(`ADX Weak (${adxVal.toFixed(1)} < ${r.value || minAdx})`);
+            if (r.target === "adx" && (adxVal === null || adxVal < (r.value || minAdx))) reasons.push(`ADX Weak (${adxVal !== null ? adxVal.toFixed(1) : 'N/A'} < ${r.value || minAdx})`);
             if (r.target === "orb" && (!orbObj || !orbObj.high || spotPrice <= orbObj.high)) reasons.push(`Below ORB High (₹${orbObj?.high ? orbObj.high.toFixed(1) : 'N/A'})`);
             if (r.target === "tripleEMA" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) reasons.push("EMA 10/20/50 Not Bullish");
             if (r.target === "ema" && (eFast === null || eSlow === null || eFast <= eSlow)) reasons.push("EMA Fast <= Slow");
