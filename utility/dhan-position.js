@@ -12,21 +12,26 @@ const config = require("./token/config");
 class DhanPosition {
 
     constructor(options = {}) {
-
-        // Dhan credentials
-        this.clientId =
-            options.clientId ||
-            config.CLIENT_ID;
-
-        this.accessToken =
-            options.accessToken ||
-            config.ACCESS_TOKEN;
-
-        this.baseUrl =
-            options.baseUrl ||
-            config.BASE_URL;
+        this.options = options;
     }
 
+    getAuth() {
+        try {
+            delete require.cache[require.resolve("./token/config")];
+            const freshConfig = require("./token/config");
+            return {
+                clientId: this.options.clientId || freshConfig.CLIENT_ID,
+                accessToken: this.options.accessToken || freshConfig.ACCESS_TOKEN,
+                baseUrl: this.options.baseUrl || freshConfig.BASE_URL
+            };
+        } catch (e) {
+            return {
+                clientId: this.options.clientId || config.CLIENT_ID,
+                accessToken: this.options.accessToken || config.ACCESS_TOKEN,
+                baseUrl: this.options.baseUrl || config.BASE_URL
+            };
+        }
+    }
 
     /**
      * Get Live Positions
@@ -35,17 +40,18 @@ class DhanPosition {
      * लेकर केवल useful fields return करेगा.
      */
     async getPosition() {
+        const auth = this.getAuth();
 
         const response = await fetch(
-            `${this.baseUrl}/positions`,
+            `${auth.baseUrl}/positions`,
             {
                 method: "GET",
 
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json",
-                    "access-token": this.accessToken,
-                    "client-id": this.clientId
+                    "access-token": auth.accessToken,
+                    "client-id": auth.clientId
                 }
             }
         );

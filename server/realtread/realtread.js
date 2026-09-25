@@ -131,11 +131,20 @@ class RealTradeEngine {
     async executeRealOrder(signal, selectedStock) {
         const optionType = signal.consensus === "BUY" ? "CE" : "PE";
         const cfg = realConfig.getConfig();
+        let maxBudget = Number(cfg.defaultBudget || 10000);
+
+        // Fetch live funds first
+        await this.fetchLiveFunds();
+        if (this.latestFunds && Number(this.latestFunds.availabelBalance) > 0) {
+            maxBudget = Math.min(maxBudget, Number(this.latestFunds.availabelBalance));
+        }
+
+        console.log(`🚀 [REAL BROKER ORDER] Triggering Real Trade for ${optionType} | Spot: ₹${signal.entry} | Budget: ₹${maxBudget}`);
 
         return await trailingSLEngine.executeTrailingTrade({
             spotPrice: signal.entry,
             optionType: optionType,
-            maxBudget: cfg.defaultBudget,
+            maxBudget: maxBudget,
             isPaper: false, // REAL BROKER ORDER!
             signal: signal,
             strategyId: signal.strategyId,
