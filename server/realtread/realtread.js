@@ -67,13 +67,13 @@ class RealTradeEngine {
     }
 
     /**
-     * Sync Active Position with Dhan Broker Account Live Positions
+     * Sync Active Position with Dhan Broker Account Live Positions (Guard Verification Only)
      */
     async syncPositionsWithBroker() {
         try {
             const posRes = await this.dhanPosition.getPosition();
-            if (posRes.status === "success" && Array.isArray(posRes.data)) {
-                const activeOnBroker = posRes.data.filter(p => Number(p.netQty || 0) !== 0);
+            if (posRes && posRes.status === "success" && Array.isArray(posRes.data)) {
+                const activeOnBroker = posRes.data.filter(p => p && Number(p.netQty || 0) !== 0);
                 if (activeOnBroker.length === 0) {
                     if (trailingSLEngine.activePosition) {
                         console.log("ℹ️ [DHAN BROKER SYNC] No open positions found on Dhan Broker account. Resetting active position to null.");
@@ -81,7 +81,7 @@ class RealTradeEngine {
                         trailingSLEngine.saveRecords();
                     }
                 } else if (trailingSLEngine.activePosition) {
-                    const match = activeOnBroker.find(p => String(p.securityId) === String(trailingSLEngine.activePosition.securityId));
+                    const match = activeOnBroker.find(p => p && String(p.securityId) === String(trailingSLEngine.activePosition.securityId));
                     if (!match) {
                         console.log(`ℹ️ [DHAN BROKER SYNC] Security ${trailingSLEngine.activePosition.securityId} not found in Dhan Broker open positions. Resetting active position to null.`);
                         trailingSLEngine.activePosition = null;
@@ -166,27 +166,35 @@ class RealTradeEngine {
      * Order Execution: Selects Best Option Strike & places REAL order via server/trailingsl/trailingsl.js
      */
     async executeRealOrder(signal, selectedStock) {
-        const optionType = signal.consensus === "BUY" ? "CE" : "PE";
-        const cfg = realConfig.getConfig();
-        // Fetch live funds first
-        await this.fetchLiveFunds();
-        const pct = Number(cfg.maxBudgetPercent || 100) / 100;
-        let maxBudget = 10000;
-        if (this.latestFunds && Number(this.latestFunds.availabelBalance) > 0) {
-            maxBudget = Number((Number(this.latestFunds.availabelBalance) * pct).toFixed(2));
+        try {
+            this.lastError = null;
+            const optionType = signal.consensus === "BUY" ? "CE" : "PE";
+            const cfg = realConfig.getConfig();
+            // Fetch live funds first
+            await this.fetchLiveFunds();
+            const pct = Number(cfg.maxBudgetPercent || 100) / 100;
+            let maxBudget = 10000;
+            if (this.latestFunds && Number(this.latestFunds.availabelBalance) > 0) {
+                maxBudget = Number((Number(this.latestFunds.availabelBalance) * pct).toFixed(2));
+            }
+
+            console.log(`🚀 [REAL BROKER ORDER] Triggering Real Trade for ${optionType} | Spot: ₹${signal.entry} | Budget: ₹${maxBudget}`);
+
+            const pos = await trailingSLEngine.executeTrailingTrade({
+                spotPrice: signal.entry,
+                optionType: optionType,
+                maxBudget: maxBudget,
+                isPaper: false, // REAL BROKER ORDER!
+                signal: signal,
+                strategyId: signal.strategyId,
+                strategyName: signal.strategyName
+            });
+            return pos;
+        } catch (err) {
+            console.error(`❌ [REAL BROKER ORDER ERROR] ${err.message}`);
+            this.lastError = err.message;
+            return { status: "ERROR", message: err.message };
         }
-
-        console.log(`🚀 [REAL BROKER ORDER] Triggering Real Trade for ${optionType} | Spot: ₹${signal.entry} | Budget: ₹${maxBudget}`);
-
-        return await trailingSLEngine.executeTrailingTrade({
-            spotPrice: signal.entry,
-            optionType: optionType,
-            maxBudget: maxBudget,
-            isPaper: false, // REAL BROKER ORDER!
-            signal: signal,
-            strategyId: signal.strategyId,
-            strategyName: signal.strategyName
-        });
     }
 
     /**
@@ -212,7 +220,7 @@ class RealTradeEngine {
         if (Date.now() - (this.lastTradeFetch || 0) > 15000) {
             this.lastTradeFetch = Date.now();
             this.dhanOrders.getTradeHistory().then(res => {
-                if (res.status === "success" && Array.isArray(res.data)) {
+                if (res && res.status === "success" && Array.isArray(res.data)) {
                     this.brokerTradesHistory = res.data.map(t => ({
                         tradeId: t.orderId || t.exchangeOrderId || `TRD_${t.tradeId}`,
                         entryTime: t.createTime || t.exchangeTime || '',
@@ -244,6 +252,7 @@ class RealTradeEngine {
             losingTrades: trailingStatus.losingTrades || 0,
             winrate: trailingStatus.winrate || "0%",
             activePosition: trailingStatus.activePosition,
+            lastError: this.lastError || null,
             history: this.brokerTradesHistory.length > 0 ? this.brokerTradesHistory : trailingStatus.history
         };
     }

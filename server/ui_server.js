@@ -61,18 +61,27 @@ function createUIServer(port = 3000) {
         }
     });
 
-    // 3. Update Central Config (Paper & Real Trading Toggles)
+    // 3. Update Central Config (Paper & Real Trading Toggles - Password Protected: pavan61346134)
     app.post('/api/config', (req, res) => {
         try {
+            const { paperTradeEnabled, realTradeEnabled, password } = req.body || {};
+
+            // Password verification for toggles
+            if (paperTradeEnabled !== undefined || realTradeEnabled !== undefined) {
+                if (password !== "pavan61346134") {
+                    return res.status(401).json({ status: "error", message: "Incorrect Password! Access Denied." });
+                }
+            }
+
             const updated = mainConfig.updateConfig(req.body);
             
             // Sync engines
-            if (req.body.paperTradeEnabled !== undefined) {
-                if (req.body.paperTradeEnabled) paperTradeEngine.startPaperTrading();
+            if (paperTradeEnabled !== undefined) {
+                if (paperTradeEnabled) paperTradeEngine.startPaperTrading();
                 else paperTradeEngine.stopPaperTrading();
             }
-            if (req.body.realTradeEnabled !== undefined) {
-                if (req.body.realTradeEnabled) realTradeEngine.startRealTrading();
+            if (realTradeEnabled !== undefined) {
+                if (realTradeEnabled) realTradeEngine.startRealTrading();
                 else realTradeEngine.stopRealTrading();
             }
 

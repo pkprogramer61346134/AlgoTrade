@@ -391,10 +391,12 @@ function renderRealDashboard(data, config = {}) {
             `;
         } else {
             posCard.className = "active-trade-card glass-card empty-card";
+            const errBanner = data.lastError ? `<p class="text-danger" style="margin-top:5px; font-weight:600;">⚠️ Notice: ${data.lastError}</p>` : '';
             posCard.innerHTML = `
                 <div class="empty-state-message">
-                    <span class="empty-icon">🛡️</span>
+                    <span class="empty-icon">${data.lastError ? '⚠️' : '🛡️'}</span>
                     <p>${isEnabled ? 'No active real position currently open.' : 'Real Trading is currently disabled.'}</p>
+                    ${errBanner}
                     <span class="empty-subtext">${isEnabled ? 'Listening for Consensus Signals...' : 'Toggle Real Trade in top right corner to activate live capital execution.'}</span>
                 </div>
             `;
@@ -403,28 +405,48 @@ function renderRealDashboard(data, config = {}) {
 }
 
 async function togglePaperTrade(status) {
+    const password = prompt("🔒 Enter Admin Password to toggle Paper Trading:");
+    if (!password) {
+        updateDashboard();
+        return;
+    }
     try {
-        await fetch(`${API_BASE}/api/config`, {
+        const response = await fetch(`${API_BASE}/api/config`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paperTradeEnabled: status })
+            body: JSON.stringify({ paperTradeEnabled: status, password })
         });
+        const result = await response.json();
+        if (result.status !== "success") {
+            alert(`❌ ${result.message || "Incorrect Password! Access Denied."}`);
+        }
         updateDashboard();
     } catch (e) {
         console.error("Failed to toggle paper trade:", e.message);
+        updateDashboard();
     }
 }
 
 async function toggleRealTrade(status) {
+    const password = prompt("🔒 Enter Admin Password to toggle Real Trading:");
+    if (!password) {
+        updateDashboard();
+        return;
+    }
     try {
-        await fetch(`${API_BASE}/api/config`, {
+        const response = await fetch(`${API_BASE}/api/config`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ realTradeEnabled: status })
+            body: JSON.stringify({ realTradeEnabled: status, password })
         });
+        const result = await response.json();
+        if (result.status !== "success") {
+            alert(`❌ ${result.message || "Incorrect Password! Access Denied."}`);
+        }
         updateDashboard();
     } catch (e) {
         console.error("Failed to toggle real trade:", e.message);
+        updateDashboard();
     }
 }
 

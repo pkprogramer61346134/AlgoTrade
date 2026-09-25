@@ -4,7 +4,7 @@
   "enabled": true,
   "minStrategyVotes": 3,
   "enableSignalConfirmation": true,
-  "confirmWaitMinutes": 0.5,
+  "confirmWaitMinutes": 0.6,
 
   "strategies": [
     {
