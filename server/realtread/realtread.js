@@ -52,11 +52,30 @@ class RealTradeEngine {
         console.log("==========================================================================\n");
 
         await this.fetchLiveFunds();
+        await this.syncPositionsWithBroker();
 
         // If an active real position exists, resume live option tracking
         if (trailingSLEngine.activePosition && trailingSLEngine.activePosition.status === "OPEN") {
             console.log(`📌 Resuming live option tracking for existing open real position: ${trailingSLEngine.activePosition.symbol}...`);
             trailingSLEngine.startOptionLiveTracking();
+        }
+    }
+
+    /**
+     * Sync Active Position with Dhan Broker Account Live Positions
+     */
+    async syncPositionsWithBroker() {
+        if (!trailingSLEngine.activePosition || trailingSLEngine.activePosition.status !== "OPEN") return;
+
+        try {
+            const livePosRes = await trailingSLEngine.executor.getLiveActivePosition(trailingSLEngine.activePosition.securityId);
+            if (livePosRes.status === "success" && !livePosRes.found) {
+                console.warn(`⚠️ [BROKER SYNC] Active position ${trailingSLEngine.activePosition.symbol} is NOT open on Dhan broker app. Clearing local state.`);
+                trailingSLEngine.activePosition = null;
+                trailingSLEngine.saveRecords();
+            }
+        } catch (e) {
+            console.warn(`⚠️ [BROKER SYNC NOTICE] ${e.message}`);
         }
     }
 
@@ -97,6 +116,9 @@ class RealTradeEngine {
      */
     async processSignal(signal, stockInfo = null) {
         if (!realConfig.getConfig().realTradeEnabled || !signal) return null;
+
+        // Auto-sync with Dhan Broker live position first
+        await this.syncPositionsWithBroker();
 
         // 1. Check if real trade is ALREADY active
         if (trailingSLEngine.activePosition && trailingSLEngine.activePosition.status === "OPEN") {
