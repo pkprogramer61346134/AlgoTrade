@@ -17,7 +17,7 @@ async function autoRefreshDhanToken() {
         try {
             if (fs.existsSync(CONFIG_PATH)) {
                 delete require.cache[require.resolve('./config')];
-                const freshConfig = require('../../dhanAPI/config');
+                const freshConfig = require('./config');
                 if (freshConfig && freshConfig.ACCESS_TOKEN) {
                     return {
                         status: "success",
@@ -235,7 +235,7 @@ async function ensureValidDhanToken(forceRefresh = false) {
         try {
             if (fs.existsSync(CONFIG_PATH)) {
                 delete require.cache[require.resolve('./config')];
-                config = require('../../dhanAPI/config');
+                config = require('./config');
             }
         } catch (e) {
             console.warn(`⚠️ Could not load config.js: ${e.message}`);
@@ -282,7 +282,7 @@ async function ensureValidDhanToken(forceRefresh = false) {
     if (refreshRes.status === "success") {
         try {
             delete require.cache[require.resolve('./config')];
-            const freshConfig = require('../../dhanAPI/config');
+            const freshConfig = require('./config');
             return {
                 status: "refreshed",
                 accessToken: freshConfig.ACCESS_TOKEN,
