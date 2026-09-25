@@ -334,6 +334,15 @@ function renderRealDashboard(data, config = {}) {
     if (posCard) {
         if (data.activePosition && data.activePosition.status === "OPEN") {
             const pos = data.activePosition;
+            const pnlVal = Number(pos.pnl || 0);
+            const pnlColor = pnlVal > 0 ? "text-success" : pnlVal < 0 ? "text-danger" : "";
+
+            const lvls = pos.levels || {};
+            const tr1 = lvls.tr1 || (pos.entryLtp + 1);
+            const tr4 = lvls.tr4 || pos.targetTr4 || (pos.entryLtp + 4);
+            const range = Math.max(0.1, tr4 - pos.entryLtp);
+            const progressPct = Math.min(100, Math.max(0, (((pos.currentLtp - pos.entryLtp) / range) * 100))).toFixed(1);
+
             posCard.className = "active-trade-card glass-card";
             posCard.innerHTML = `
                 <div class="trade-details-grid">
@@ -351,7 +360,32 @@ function renderRealDashboard(data, config = {}) {
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Unrealized PnL</div>
-                        <div class="item-val text-success">₹${pos.pnl || 0}</div>
+                        <div class="item-val ${pnlColor}">${pos.pnl >= 0 ? '+' : ''}₹${pos.pnl || 0} (${pos.pnlPercent || '0%'})</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Trailed Stop Loss</div>
+                        <div class="item-val text-danger">₹${pos.currentSl}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Target TR4 (1:4)</div>
+                        <div class="item-val text-success">₹${tr4}</div>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <span>Target Progress (Stage: ${pos.trailingStage || 'INITIAL'})</span>
+                        <span>${progressPct}% to TR4 Target</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${progressPct}%"></div>
+                    </div>
+                    <div class="targets-milestones-row">
+                        <span>Entry: ₹${pos.entryLtp}</span>
+                        <span>TR1: ₹${lvls.tr1 || '-'}</span>
+                        <span>TR2: ₹${lvls.tr2 || '-'}</span>
+                        <span>TR3: ₹${lvls.tr3 || '-'}</span>
+                        <span>TR4: ₹${tr4}</span>
                     </div>
                 </div>
             `;
