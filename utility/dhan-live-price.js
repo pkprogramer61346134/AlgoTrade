@@ -279,18 +279,23 @@ class DhanLivePrice {
         });
 
         this.ws.on("close", () => {
-            console.log("⚠️ Dhan Live Feed Closed. Reconnecting in 3 seconds...");
-            setTimeout(() => {
+            console.log("⚠️ Dhan Live Feed Closed. Reconnecting in 10 seconds...");
+            if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = setTimeout(() => {
                 try {
                     this.getLivePrice(securityId, exchangeSegment, interval, onData, instrument);
                 } catch (e) {
                     console.error("Dhan Live Feed Reconnect Error:", e.message);
                 }
-            }, 3000);
+            }, 10000);
         });
     }
 
     close() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         if (this.ws) {
             this.ws.removeAllListeners();
             this.ws.close();
