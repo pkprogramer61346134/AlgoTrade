@@ -58,14 +58,81 @@ class BacktestEngine {
         console.log(`✅ [HISTORICAL STREAMER] Loaded ${candles.length} candles. Streaming candle-by-candle...\n`);
 
         // Send candles tick-by-tick / candle-by-candle
-        for (let i = 20; i < candles.length; i++) {
-            const candle = candles[i];
-            const consensusResult = await evaluateConsensusEngine(candles, i);
+        for (let i = 0; i < candles.length; i++) {
+            const tick = candles[i];
+            tick.price = Number(tick.close || tick.candleClose || tick.price || 0);
 
-            console.log(`⌛ [CANDLE TICK ${i + 1}/${candles.length}] ${candle.date} ${candle.time} | Close: ₹${candle.close || candle.candleClose} | Consensus: ${consensusResult ? consensusResult.consensus : 'NO_SIGNAL'}`);
+            try {
+                // 4. Evaluate Consensus Engine on live tick with 200 warmup candles
+                const consensusResult = await evaluateConsensusEngine(tick, -1, {
+                    securityId: "13",
+                    exchangeSegment: "IDX_I",
+                    interval: interval,
+                    warmupCount: 200
+                });
 
-            if (typeof onCandleTick === 'function') {
-                await onCandleTick(candle, i, candles.length, consensusResult);
+                // 7. Live Console Strategy Monitor
+                let signalBadge = "⚪ NO SIGNAL / WAITING";
+                let waitTimerLine = "";
+
+                if (consensusResult.consensus === "BUY") signalBadge = "🟢 BUY SIGNAL CONFIRMED & TRIGGERED";
+                if (consensusResult.consensus === "SELL") signalBadge = "🔴 SELL SIGNAL CONFIRMED & TRIGGERED";
+                if (consensusResult.consensus === "WAITING_CONFIRMATION") {
+                    const elapsedMins = consensusResult.confirmation?.elapsedMins || 0;
+                    const reqMins = consensusResult.confirmation?.requiredWaitMins || 0.5;
+                    const remMins = consensusResult.confirmation?.remainingMins !== undefined ? consensusResult.confirmation.remainingMins : (reqMins - elapsedMins);
+                    const remSecs = Math.max(0, Math.round(remMins * 60));
+                    const rawDir = consensusResult.rawType === "BUY" ? "🟢 BUY" : "🔴 SELL";
+
+                    signalBadge = `⏳ WAITING CONFIRMATION [${rawDir}]`;
+                    waitTimerLine = `⏳ Signal Wait   : ${remSecs}s Remaining (${elapsedMins}m / ${reqMins}m Configured)`;
+                }
+
+                console.clear();
+                console.log("==========================================================================");
+                console.log("🧠 CENTRAL STRATEGY CONSENSUS HEAD - LIVE MARKET MONITOR");
+                console.log("==========================================================================");
+                console.log(`⏰ Time          : ${tick.date || ''} ${tick.time || ''}`);
+                console.log(`📈 Live NIFTY    : ₹${tick.price ? Number(tick.price).toFixed(2) : '0.00'}`);
+                console.log(`⚡ Final Consensus: ${signalBadge}`);
+                if (waitTimerLine) {
+                    console.log(waitTimerLine);
+                }
+                console.log(`📊 Votes Summary  : 🟢 ${consensusResult.buyVotes || 0} BUY | 🔴 ${consensusResult.sellVotes || 0} SELL (Min Required: ${consensusResult.minVotesRequired || 2})`);
+                console.log(`💪 Confidence    : ${consensusResult.confidence || '0%'}`);
+                console.log(`💵 Entry Price   : ${consensusResult.entry ? '₹' + consensusResult.entry : '--'}`);
+                console.log(`🎯 Target (TR)   : ${consensusResult.tr ? '₹' + consensusResult.tr : '--'}`);
+                console.log(`🛑 Stop Loss (SL): ${consensusResult.sl ? '₹' + consensusResult.sl : '--'}`);
+                console.log("--------------------------------------------------------------------------");
+                console.log("📋 STRATEGY VOTES BREAKDOWN:");
+
+                if (Array.isArray(consensusResult.strategyStates) && consensusResult.strategyStates.length > 0) {
+                    const tableData = consensusResult.strategyStates.map(s => {
+                        let voteText = "❌ NO (NEUTRAL)";
+                        if (s.vote === "BUY") voteText = "🟢 YES (BUY)";
+                        if (s.vote === "SELL") voteText = "🔴 YES (SELL)";
+
+                        return {
+                            "Strategy Name": s.strategyName || s.strategyId,
+                            "Vote Status": voteText,
+                            "Reason / Key Filter": s.reason || "--",
+                            "Confidence": s.confidence || '70%',
+                            "Target (TR)": s.tr ? '₹' + s.tr : '--',
+                            "Stop Loss (SL)": s.sl ? '₹' + s.sl : '--'
+                        };
+                    });
+                    console.table(tableData);
+                } else {
+                    console.log("Awaiting Strategy Evaluations...");
+                }
+                console.log("==========================================================================");
+
+                if (typeof onCandleTick === 'function') {
+                    await onCandleTick(tick, i, candles.length, consensusResult);
+                }
+
+            } catch (err) {
+                console.error("❌ Consensus Engine Error:", err.message);
             }
         }
 
@@ -105,7 +172,6 @@ const engine = new BacktestEngine();
 // CLI Direct Execution Support: `node server/backtesting/backtesting.js`
 if (require.main === module) {
     const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-    console.log(`\n🚀 [CLI EXECUTION] Running Backtesting Streamer directly...\n`);
     engine.streamHistoricalCandles({
         fromDate: "2026-09-25",
         toDate: todayStr,
