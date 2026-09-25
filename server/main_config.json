@@ -1,6 +1,6 @@
 {
   "paperTradeEnabled": true,
-  "realTradeEnabled": true,
+  "realTradeEnabled": false,
   "selectedStock": {
     "securityId": "13",
     "exchangeSegment": "IDX_I",
