@@ -25,10 +25,6 @@ const trailingConfig = require('./config');
 const { selectBestOptionStrike } = require('../../utility/usedfull/select-best-strike');
 const { calculateOptionSLAndTargets } = require('../../utility/usedfull/option-sl-target');
 const { SmartOrderExecutor } = require('../../utility/usedfull/smart-order-executor');
-const { DhanOptionLivePrice } = require('../../utility/dhan-option-live-price');
-
-const TRADE_RECORD_FILE = path.join(__dirname, 'trade_record.json');
-
 /**
  * Helper: Retry async function up to maxRetries times with configurable delay in ms
  */
@@ -63,35 +59,18 @@ class TrailingSLEngine {
     }
 
     /**
-     * Load trade records from trade_record.json
+     * Load trade records in-memory (No file persistence - live Dhan API is ground truth)
      */
     loadRecords() {
-        try {
-            if (fs.existsSync(TRADE_RECORD_FILE)) {
-                const data = JSON.parse(fs.readFileSync(TRADE_RECORD_FILE, 'utf-8'));
-                this.activePosition = data.activePosition || null;
-                this.tradeHistory = Array.isArray(data.history) ? data.history : [];
-            }
-        } catch (e) {
-            console.warn(`⚠️ [TRAILING ENGINE] Notice loading trade_record.json: ${e.message}`);
-            this.activePosition = null;
-            this.tradeHistory = [];
-        }
+        this.activePosition = null;
+        this.tradeHistory = [];
     }
 
     /**
-     * Save trade records to trade_record.json
+     * Save trade records in-memory (No file persistence - live Dhan API is ground truth)
      */
     saveRecords() {
-        try {
-            const payload = {
-                activePosition: this.activePosition,
-                history: this.tradeHistory
-            };
-            fs.writeFileSync(TRADE_RECORD_FILE, JSON.stringify(payload, null, 2), 'utf-8');
-        } catch (e) {
-            console.error(`❌ [TRAILING ENGINE] Error saving trade_record.json: ${e.message}`);
-        }
+        // In-memory state only - real trades are fetched live from Dhan API
     }
 
     /**

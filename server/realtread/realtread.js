@@ -15,13 +15,18 @@
 const realConfig = require('./config');
 const trailingSLEngine = require('../trailingsl/trailingsl');
 const { DhanFunds } = require('../../utility/dhan-funds');
+const { DhanOrders } = require('../../utility/dhan-orders');
+const { DhanPosition } = require('../../utility/dhan-position');
 
 class RealTradeEngine {
     constructor() {
         this.isProcessingTick = false;
         this.dhanFunds = new DhanFunds();
+        this.dhanOrders = new DhanOrders();
+        this.dhanPosition = new DhanPosition();
         this.latestFunds = null;
         this.lastFundsFetch = 0;
+        this.brokerTradesHistory = [];
     }
 
     /**
@@ -65,17 +70,27 @@ class RealTradeEngine {
      * Sync Active Position with Dhan Broker Account Live Positions
      */
     async syncPositionsWithBroker() {
-        if (!trailingSLEngine.activePosition || trailingSLEngine.activePosition.status !== "OPEN") return;
-
         try {
-            const livePosRes = await trailingSLEngine.executor.getLiveActivePosition(trailingSLEngine.activePosition.securityId);
-            if (livePosRes.status === "success" && !livePosRes.found) {
-                console.warn(`⚠️ [BROKER SYNC] Active position ${trailingSLEngine.activePosition.symbol} is NOT open on Dhan broker app. Clearing local state.`);
-                trailingSLEngine.activePosition = null;
-                trailingSLEngine.saveRecords();
+            const posRes = await this.dhanPosition.getPosition();
+            if (posRes.status === "success" && Array.isArray(posRes.data)) {
+                const activeOnBroker = posRes.data.filter(p => Number(p.netQty || 0) !== 0);
+                if (activeOnBroker.length === 0) {
+                    if (trailingSLEngine.activePosition) {
+                        console.log("ℹ️ [DHAN BROKER SYNC] No open positions found on Dhan Broker account. Resetting active position to null.");
+                        trailingSLEngine.activePosition = null;
+                        trailingSLEngine.saveRecords();
+                    }
+                } else if (trailingSLEngine.activePosition) {
+                    const match = activeOnBroker.find(p => String(p.securityId) === String(trailingSLEngine.activePosition.securityId));
+                    if (!match) {
+                        console.log(`ℹ️ [DHAN BROKER SYNC] Security ${trailingSLEngine.activePosition.securityId} not found in Dhan Broker open positions. Resetting active position to null.`);
+                        trailingSLEngine.activePosition = null;
+                        trailingSLEngine.saveRecords();
+                    }
+                }
             }
         } catch (e) {
-            console.warn(`⚠️ [BROKER SYNC NOTICE] ${e.message}`);
+            console.warn(`⚠️ [DHAN BROKER SYNC NOTICE] ${e.message}`);
         }
     }
 
@@ -182,7 +197,7 @@ class RealTradeEngine {
     }
 
     /**
-     * Get Complete State Payload for UI Rendering
+     * Get Complete State Payload for UI Rendering (Directly from Dhan API)
      */
     getStatus() {
         const cfg = realConfig.getConfig();
@@ -191,6 +206,26 @@ class RealTradeEngine {
         // Refresh funds if older than 10 seconds
         if (Date.now() - this.lastFundsFetch > 10000) {
             this.fetchLiveFunds().catch(() => {});
+        }
+
+        // Fetch live trade audit history directly from Dhan Broker API
+        if (Date.now() - (this.lastTradeFetch || 0) > 15000) {
+            this.lastTradeFetch = Date.now();
+            this.dhanOrders.getTradeHistory().then(res => {
+                if (res.status === "success" && Array.isArray(res.data)) {
+                    this.brokerTradesHistory = res.data.map(t => ({
+                        tradeId: t.orderId || t.exchangeOrderId || `TRD_${t.tradeId}`,
+                        entryTime: t.createTime || t.exchangeTime || '',
+                        symbol: t.tradingSymbol || t.securityId,
+                        optionType: t.optionType || 'FNO',
+                        entryLtp: t.price || t.tradedPrice,
+                        exitLtp: t.tradedPrice,
+                        qty: t.quantity || t.tradedQuantity,
+                        exitReason: t.transactionType || 'EXECUTIVE',
+                        pnl: t.realizedProfit || 0
+                    }));
+                }
+            }).catch(() => {});
         }
 
         return {
@@ -209,7 +244,7 @@ class RealTradeEngine {
             losingTrades: trailingStatus.losingTrades || 0,
             winrate: trailingStatus.winrate || "0%",
             activePosition: trailingStatus.activePosition,
-            history: trailingStatus.history
+            history: this.brokerTradesHistory.length > 0 ? this.brokerTradesHistory : trailingStatus.history
         };
     }
 }

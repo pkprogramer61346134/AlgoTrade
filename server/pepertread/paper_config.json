@@ -1,7 +1,7 @@
 {
   "paperTradeEnabled": true,
-  "initialBalance": 100000,
-  "currentBalance": 100000,
+  "initialBalance": 10000,
+  "currentBalance": 10000,
   "totalPnl": 0,
   "totalTrades": 0,
   "winningTrades": 0,
