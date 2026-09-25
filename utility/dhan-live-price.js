@@ -129,6 +129,15 @@ class DhanLivePrice {
             throw new Error("Invalid interval");
         }
 
+        // Dynamically load freshest token config
+        try {
+            delete require.cache[require.resolve("./token/config")];
+            const freshConfig = require("./token/config");
+            this.clientId = freshConfig.CLIENT_ID || this.clientId;
+            this.accessToken = freshConfig.ACCESS_TOKEN || this.accessToken;
+            this.baseUrl = freshConfig.BASE_URL || this.baseUrl;
+        } catch (e) {}
+
         /*
          * Get latest candle initially.
          */
@@ -270,12 +279,20 @@ class DhanLivePrice {
         });
 
         this.ws.on("close", () => {
-            console.log("Dhan Live Feed Closed");
+            console.log("⚠️ Dhan Live Feed Closed. Reconnecting in 3 seconds...");
+            setTimeout(() => {
+                try {
+                    this.getLivePrice(securityId, exchangeSegment, interval, onData, instrument);
+                } catch (e) {
+                    console.error("Dhan Live Feed Reconnect Error:", e.message);
+                }
+            }, 3000);
         });
     }
 
     close() {
         if (this.ws) {
+            this.ws.removeAllListeners();
             this.ws.close();
             this.ws = null;
         }

@@ -47,6 +47,15 @@ class DhanOptionLivePrice {
 
         this.subscribedSecurityId = securityId;
 
+        // Dynamically load freshest token config
+        try {
+            delete require.cache[require.resolve("./token/config")];
+            const freshConfig = require("./token/config");
+            this.clientId = freshConfig.CLIENT_ID || this.clientId;
+            this.accessToken = freshConfig.ACCESS_TOKEN || this.accessToken;
+            this.baseUrl = freshConfig.BASE_URL || this.baseUrl;
+        } catch (e) {}
+
         const wsUrl = `wss://api-feed.dhan.co?version=2&token=${this.accessToken}&clientId=${this.clientId}&authType=2`;
         this.ws = new WebSocket(wsUrl);
 
