@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoTrade - NIFTY Backtesting Studio</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- HEADER BAR -->
+        <header class="top-header">
+            <div class="brand-box">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>AlgoTrade <span>Backtesting Studio</span></h1>
+                    <p class="subtitle">NIFTY Consensus Head & 4-Stage Trailing SL Engine Simulator</p>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="status-badge idle" id="serverStatusBadge">
+                    <span class="status-dot"></span>
+                    <span id="serverStatusText">Engine Ready</span>
+                </div>
+                <button class="btn btn-secondary" id="loadReportBtn" title="Load Cached Backtest Report">
+                    <i class="fa-solid fa-rotate-right"></i> Load Report
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT GRID -->
+        <main class="main-content">
+            
+            <!-- BACKTEST CONTROL FORM CARD -->
+            <section class="card control-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-sliders"></i> Backtest Configuration</h2>
+                    <span class="badge badge-outline">NIFTY INDEX</span>
+                </div>
+                
+                <form id="backtestForm" class="control-grid">
+                    <div class="form-group">
+                        <label for="fromDate"><i class="fa-regular fa-calendar"></i> From Date</label>
+                        <input type="date" id="fromDate" name="fromDate" value="2026-09-21" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="toDate"><i class="fa-regular fa-calendar-check"></i> To Date</label>
+                        <input type="date" id="toDate" name="toDate" value="2026-09-25" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="interval"><i class="fa-regular fa-clock"></i> Interval</label>
+                        <select id="interval" name="interval">
+                            <option value="1">1 Minute</option>
+                            <option value="5" selected>5 Minutes</option>
+                            <option value="15">15 Minutes</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="initialBalance"><i class="fa-solid fa-indian-rupee-sign"></i> Initial Capital (₹)</label>
+                        <input type="number" id="initialBalance" name="initialBalance" value="10000" step="1000">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maxLossPerTrade"><i class="fa-solid fa-shield-halved"></i> Max Loss / Trade (₹)</label>
+                        <input type="number" id="maxLossPerTrade" name="maxLossPerTrade" value="300" min="50" max="50000" step="50" placeholder="e.g. 300">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="lots"><i class="fa-solid fa-layer-group"></i> Lots (65 Qty/Lot)</label>
+                        <input type="number" id="lots" name="lots" value="1" min="1" max="50">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maxTradesPerDay"><i class="fa-solid fa-hand"></i> Max Trades / Day</label>
+                        <input type="number" id="maxTradesPerDay" name="maxTradesPerDay" value="3" min="1" max="20">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="targetMode"><i class="fa-solid fa-crosshairs"></i> Target & SL Mode</label>
+                        <select id="targetMode" name="targetMode">
+                            <option value="TRAILING" selected>4-Stage Trailing SL (Auto)</option>
+                            <option value="1:1">Fixed 1:1 Target (No Trailing)</option>
+                            <option value="1:2">Fixed 1:2 Target (No Trailing)</option>
+                            <option value="1:3">Fixed 1:3 Target (No Trailing)</option>
+                            <option value="1:4">Fixed 1:4 Target (No Trailing)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group btn-group">
+                        <button type="submit" class="btn btn-primary" id="runBacktestBtn">
+                            <i class="fa-solid fa-play"></i> Run Backtest
+                        </button>
+                    </div>
+                </form>
+
+                <!-- LIVE PROGRESS BAR & EVENT STATUS -->
+                <div class="progress-section" id="progressSection" style="display: none;">
+                    <div class="progress-info">
+                        <span id="progressStatusText">Starting backtest execution...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="live-stream-ticker" id="liveTickerText">
+                        <span class="ticker-dot"></span> Streaming tick-by-tick candles...
+                    </div>
+                </div>
+            </section>
+
+            <!-- KPI METRICS SUMMARY GRID -->
+            <section class="kpi-grid">
+                
+                <!-- NET PNL CARD -->
+                <div class="kpi-card pnl-card" id="kpiNetPnlCard">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Net Realized PnL</span>
+                        <div class="kpi-icon pnl-icon"><i class="fa-solid fa-wallet"></i></div>
+                    </div>
+                    <div class="kpi-value" id="kpiNetPnl">₹0.00</div>
+                    <div class="kpi-subtext">
+                        <span id="kpiNetPnlPercent" class="badge badge-neutral">+0.00%</span>
+                        <span class="sub-label">Return on Capital</span>
+                    </div>
+                </div>
+
+                <!-- WIN RATE CARD -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Win Rate %</span>
+                        <div class="kpi-icon win-icon"><i class="fa-solid fa-bullseye"></i></div>
+                    </div>
+                    <div class="kpi-value" id="kpiWinrate">0.0%</div>
+                    <div class="kpi-subtext">
+                        <span class="win-count" id="kpiWinCount">0 Wins</span>
+                        <span class="divider">/</span>
+                        <span class="loss-count" id="kpiLossCount">0 Losses</span>
+                    </div>
+                </div>
+
+                <!-- TOTAL TRADES CARD -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Total Trades</span>
+                        <div class="kpi-icon trade-icon"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+                    </div>
+                    <div class="kpi-value" id="kpiTotalTrades">0</div>
+                    <div class="kpi-subtext">
+                        <span class="sub-label">Avg Trade PnL: </span>
+                        <strong id="kpiAvgTradePnl">₹0.00</strong>
+                    </div>
+                </div>
+
+                <!-- MAX DRAWDOWN CARD -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Max Drawdown</span>
+                        <div class="kpi-icon dd-icon"><i class="fa-solid fa-chart-line-down"></i></div>
+                    </div>
+                    <div class="kpi-value danger-text" id="kpiMaxDrawdown">₹0.00</div>
+                    <div class="kpi-subtext">
+                        <span id="kpiMaxDrawdownPercent" class="badge badge-danger">0.00%</span>
+                        <span class="sub-label">Peak to Trough</span>
+                    </div>
+                </div>
+
+                <!-- PROFIT FACTOR CARD -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Profit Factor</span>
+                        <div class="kpi-icon pf-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+                    </div>
+                    <div class="kpi-value" id="kpiProfitFactor">0.00</div>
+                    <div class="kpi-subtext">
+                        <span class="sub-label">Target R:R </span>
+                        <strong class="highlight-text" id="kpiTargetRr">4-Stage Trailing</strong>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- RESULTS NAVIGATION TABS & TABLES -->
+            <section class="card results-card">
+                <div class="tab-nav">
+                    <button class="tab-btn active" data-tab="tradesTab">
+                        <i class="fa-solid fa-list-check"></i> Executed Trades Audit Log (<span id="tabTradesCount">0</span>)
+                    </button>
+                    <button class="tab-btn" data-tab="dailyTab">
+                        <i class="fa-solid fa-calendar-days"></i> Daily PnL Breakdown
+                    </button>
+                    <button class="tab-btn" data-tab="rulesTab">
+                        <i class="fa-solid fa-book-bookmark"></i> Strategy & Rules Guide
+                    </button>
+                </div>
+
+                <!-- TAB 1: EXECUTED TRADES AUDIT LOG -->
+                <div class="tab-content active" id="tradesTab">
+                    <div class="table-filter-bar">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="tradeSearchInput" placeholder="Filter by Trade ID, Date, Exit Reason...">
+                        </div>
+                        <div class="filter-btn-group">
+                            <button class="filter-btn active" data-filter="ALL">All</button>
+                            <button class="filter-btn" data-filter="WIN">Wins Only 🟢</button>
+                            <button class="filter-btn" data-filter="LOSS">Losses Only 🔴</button>
+                            <button class="filter-btn" data-filter="CE">CE (BUY)</button>
+                            <button class="filter-btn" data-filter="PE">PE (SELL)</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table class="data-table" id="tradesTable">
+                            <thead>
+                                <tr>
+                                    <th>Trade ID</th>
+                                    <th>Entry Date & Time</th>
+                                    <th>Type</th>
+                                    <th>Entry Spot (₹)</th>
+                                    <th>Initial SL (₹)</th>
+                                    <th>Target TR4 (₹)</th>
+                                    <th>Exit Date & Time</th>
+                                    <th>Exit Spot (₹)</th>
+                                    <th>Exit Reason</th>
+                                    <th class="text-right">Realized PnL (₹)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tradesTableBody">
+                                <tr class="empty-row">
+                                    <td colspan="10">No trades executed yet. Click "Run Backtest" to evaluate market history.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 2: DAILY BREAKDOWN -->
+                <div class="tab-content" id="dailyTab">
+                    <div class="table-wrapper">
+                        <table class="data-table" id="dailyTable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Total Trades</th>
+                                    <th>Winning Trades</th>
+                                    <th>Losing Trades</th>
+                                    <th>Win Rate</th>
+                                    <th class="text-right">Day Realized PnL (₹)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dailyTableBody">
+                                <tr class="empty-row">
+                                    <td colspan="6">No daily data available.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 3: STRATEGY & RULES GUIDE -->
+                <div class="tab-content" id="rulesTab">
+                    <div class="rules-container">
+                        <div class="rule-box">
+                            <h3><i class="fa-solid fa-brain"></i> Consensus Head Strategy Engine</h3>
+                            <p>Combines multi-indicator confirmation (Supertrend, VWAP, RSI, ADX, EMA, Candle Patterns) with 200 candle warmup before generating buy/sell signals.</p>
+                        </div>
+
+                        <div class="rule-box">
+                            <h3><i class="fa-solid fa-shield-halved"></i> Active Trade Block Guard</h3>
+                            <p>When an active position is <strong>OPEN</strong>, all subsequent signals are automatically blocked and ignored until the current position triggers its target or stop-loss.</p>
+                        </div>
+
+                        <div class="rule-box">
+                            <h3><i class="fa-solid fa-strikethrough"></i> 4-Stage Trailing Stop Loss Rules</h3>
+                            <ul>
+                                <li><strong>Initial Risk</strong>: Entry Spot \(\pm\) Risk Points (SL).</li>
+                                <li><strong>TR1 (1:1 Hit)</strong>: Trailed to <em>Cost-to-Cost (Entry Spot)</em>. Zero risk!</li>
+                                <li><strong>TR2 (1:2 Hit)</strong>: Trailed to <em>TR1 Target Level</em>.</li>
+                                <li><strong>TR3 (1:3 Hit)</strong>: Trailed to <em>TR2 Target Level</em>.</li>
+                                <li><strong>TR4 Target (1:4 Hit)</strong>: Exit trade at full target 1:4 profit!</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            <p>AlgoTrade © 2026 | Dedicated Backtest Engine v2.0 | NIFTY Index Simulation</p>
+        </footer>
+
+    </div>
+
+    <!-- Application Script -->
+    <script src="app.js"></script>
+</body>
+</html>

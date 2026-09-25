@@ -536,8 +536,8 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
     result.warmupCandleCount = candlesArray.length;
 
     // Signal Confirmation Waiting Logic
-    const enableConfirmation = Boolean(config.enableSignalConfirmation !== false && (config.confirmWaitMinutes || options.confirmWaitMinutes));
-    const reqWaitMins = Number(options.confirmWaitMinutes || config.confirmWaitMinutes || 5);
+    const reqWaitMins = Number(options.confirmWaitMinutes !== undefined ? options.confirmWaitMinutes : (config.confirmWaitMinutes || 5));
+    const enableConfirmation = Boolean(config.enableSignalConfirmation !== false && reqWaitMins > 0);
 
     if (enableConfirmation && (result.consensus === "BUY" || result.consensus === "SELL")) {
         const nowMs = Date.now();
