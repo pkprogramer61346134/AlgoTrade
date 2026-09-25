@@ -29,6 +29,28 @@ const { DhanOptionLivePrice } = require('../../utility/dhan-option-live-price');
 
 const TRADE_RECORD_FILE = path.join(__dirname, 'trade_record.json');
 
+/**
+ * Helper: Retry async function up to maxRetries times with configurable delay in ms
+ */
+async function retryAsync(fn, maxRetries = 5, delayMs = 1000, actionName = "Operation") {
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const result = await fn();
+            if (result !== null && result !== undefined) return result;
+            throw new Error(`${actionName} returned empty or null output.`);
+        } catch (err) {
+            lastError = err;
+            if (attempt < maxRetries) {
+                console.warn(`⚠️ [RETRY DELAY] ${actionName} failed (Attempt ${attempt}/${maxRetries}): ${err.message}. Retrying in ${delayMs}ms...`);
+                await new Promise(res => setTimeout(res, delayMs));
+            }
+        }
+    }
+    console.error(`❌ [RETRY EXHAUSTED] ${actionName} failed after ${maxRetries} attempts: ${lastError ? lastError.message : 'Unknown error'}`);
+    return null;
+}
+
 class PaperTrailingSLEngine {
     constructor() {
         this.optionTracker = null;
@@ -95,13 +117,17 @@ class PaperTrailingSLEngine {
         console.log(`💰 Available Dummy Balance: ₹${availableBalance.toFixed(2)} | Max Budget: ₹${maxBudget.toFixed(2)}`);
         console.log("==========================================================================\n");
 
-        // 1. Select Best Option Strike using Dummy Balance
-        const strikeRes = await selectBestOptionStrike({
-            spotPrice: signal.entry,
-            optionType: optionType,
-            maxBudget: Math.max(1000, maxBudget),
-            amountPercent: cfg.maxBudgetPercent
-        });
+        // 1. Select Best Option Strike using Paper Dummy Balance (Max 5 Retries with 1000ms Delay)
+        const strikeRes = await retryAsync(
+            () => selectBestOptionStrike({
+                spotPrice: signal.entry,
+                optionType: optionType,
+                maxBudget: Math.max(1000, maxBudget)
+            }),
+            5,
+            1000,
+            "Select Option Strike (Paper)"
+        );
 
         if (!strikeRes || !strikeRes.securityId) {
             console.warn(`⚠️ [PAPER ORDER NOTICE] Could not find suitable option contract.`);
@@ -119,13 +145,18 @@ class PaperTrailingSLEngine {
         // Deduct margin from dummy balance in config.js
         paperConfig.deductMargin(totalCost);
 
-        // 2. Calculate Option SL & Targets (TR1 - TR4) via option-sl-target.js
-        const levels = await calculateOptionSLAndTargets({
-            securityId: strikeRes.securityId,
-            entryPrice: strikeRes.liveLtp,
-            interval: "5",
-            method: "HYBRID"
-        });
+        // 2. Calculate Option SL & Targets (TR1 - TR4) via option-sl-target.js (Max 5 Retries with 1000ms Delay)
+        const levels = await retryAsync(
+            () => calculateOptionSLAndTargets({
+                securityId: strikeRes.securityId,
+                entryPrice: strikeRes.liveLtp,
+                interval: "5",
+                method: "HYBRID"
+            }),
+            5,
+            1000,
+            "Calculate Option SL & Targets (Paper)"
+        );
 
         const entryLtp = levels.entryPrice;
         const initialSl = levels.stopLoss.sl;
@@ -387,10 +418,13 @@ class PaperTrailingSLEngine {
      */
     getStatus() {
         const cfg = paperConfig.getConfig();
+        const activeMargin = (this.activePosition && this.activePosition.status === "OPEN") ? Number(this.activePosition.totalMargin || 0) : 0;
+        const availableBalance = Number(Math.max(0, (cfg.initialBalance || 10000) + (cfg.totalPnl || 0) - activeMargin).toFixed(2));
+
         return {
             enabled: cfg.paperTradeEnabled,
             initialBalance: cfg.initialBalance,
-            currentBalance: cfg.currentBalance,
+            currentBalance: availableBalance,
             totalPnl: cfg.totalPnl,
             totalTrades: cfg.totalTrades,
             winningTrades: cfg.winningTrades,

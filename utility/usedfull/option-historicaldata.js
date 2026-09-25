@@ -102,14 +102,37 @@ class CachedOptionHistoricalData {
         const fileName = this.getCacheFileName(securityId, exchangeSegment, interval, fromDate, toDate);
         const filePath = path.join(this.cacheDir, fileName);
 
+        const todayStr = this.formatDateStr(new Date());
+
         // 1. Check if cached file exists on disk with valid candles
         if (!forceRefresh && fs.existsSync(filePath)) {
             try {
                 const rawContent = fs.readFileSync(filePath, "utf-8");
                 const cachedCandles = JSON.parse(rawContent);
                 if (Array.isArray(cachedCandles) && cachedCandles.length > 0) {
-                    console.log(`💾 [OPTION DISK CACHE HIT] Loaded ${cachedCandles.length} candles from: ${fileName}`);
-                    return { source: "DISK_CACHE", fileName, filePath, candles: cachedCandles };
+                    let isStaleTodayFile = false;
+
+                    // If cache file is for TODAY's date, check if last candle is older than current market time (> 5 mins)
+                    if (fromDate === todayStr && toDate === todayStr) {
+                        const lastCandleInFile = cachedCandles[cachedCandles.length - 1];
+                        if (lastCandleInFile && (lastCandleInFile.time || lastCandleInFile.candleTime)) {
+                            const lastTimeStr = lastCandleInFile.time || lastCandleInFile.candleTime;
+                            const lastCandleSecs = this.parseTimeToSeconds(lastTimeStr);
+                            const nowSecs = this.parseTimeToSeconds(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
+
+                            // During market hours (9:15 AM = 33300s to 3:30 PM = 55800s), if last candle is > 5 mins (300s) old:
+                            if (nowSecs >= 33300 && nowSecs <= 55800 && (nowSecs - lastCandleSecs > 300)) {
+                                isStaleTodayFile = true;
+                            }
+                        }
+                    }
+
+                    if (!isStaleTodayFile) {
+                        console.log(`💾 [OPTION DISK CACHE HIT] Loaded ${cachedCandles.length} candles from: ${fileName}`);
+                        return { source: "DISK_CACHE", fileName, filePath, candles: cachedCandles };
+                    } else {
+                        console.log(`🔄 [OPTION TODAY REFRESH] Today's option cache (${fileName}) is outdated (> 5m old). Re-fetching latest candles from Dhan API...`);
+                    }
                 } else {
                     try { fs.unlinkSync(filePath); } catch (e) {}
                 }

@@ -136,7 +136,10 @@ class RealTradeEngine {
             spotPrice: signal.entry,
             optionType: optionType,
             maxBudget: cfg.defaultBudget,
-            isPaper: false // REAL BROKER ORDER!
+            isPaper: false, // REAL BROKER ORDER!
+            signal: signal,
+            strategyId: signal.strategyId,
+            strategyName: signal.strategyName
         });
     }
 
@@ -169,6 +172,11 @@ class RealTradeEngine {
                 utilizedAmount: 0,
                 withdrawableBalance: 679.52
             },
+            totalPnl: trailingStatus.totalPnl || 0,
+            totalTrades: trailingStatus.totalTrades || 0,
+            winningTrades: trailingStatus.winningTrades || 0,
+            losingTrades: trailingStatus.losingTrades || 0,
+            winrate: trailingStatus.winrate || "0%",
             activePosition: trailingStatus.activePosition,
             history: trailingStatus.history
         };

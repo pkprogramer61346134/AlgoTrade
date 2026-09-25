@@ -1,10 +1,10 @@
 {
   "paperTradeEnabled": true,
-  "initialBalance": 100000,
-  "currentBalance": 100132.6,
-  "totalPnl": 132.6,
-  "totalTrades": 1,
-  "winningTrades": 1,
+  "initialBalance": 10000,
+  "currentBalance": -21655,
+  "totalPnl": 0,
+  "totalTrades": 0,
+  "winningTrades": 0,
   "losingTrades": 0,
   "selectedStock": {
     "securityId": "13",
@@ -13,5 +13,5 @@
     "interval": "5",
     "instrument": "INDEX"
   },
-  "maxBudgetPercent": 20
+  "maxBudgetPercent": 100
 }

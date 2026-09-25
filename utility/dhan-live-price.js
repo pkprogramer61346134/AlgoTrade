@@ -207,29 +207,26 @@ class DhanLivePrice {
 
                 /*
                  * =========================
-                 * UPDATE CANDLE
-                 * =========================
-                 */
-
-                await this.getLatestCandle(
-                    securityId,
-                    exchangeSegment,
-                    instrument,
-                    minutes
-                );
-
-                /*
-                 * =========================
                  * FINAL DATA
                  * =========================
                  */
+
+                const now = new Date();
+                const dateStr = this.candleData?.date || now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+                const timeStr = this.candleData?.time || now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
 
                 onData({
                     price,
                     quantity,
 
-                    date: this.candleData?.date || null,
-                    time: this.candleData?.time || null,
+                    date: dateStr,
+                    time: timeStr,
+
+                    open: this.candleData?.candleOpen || price,
+                    high: this.candleData?.candleHigh ? Math.max(this.candleData.candleHigh, price) : price,
+                    low: this.candleData?.candleLow ? Math.min(this.candleData.candleLow, price) : price,
+                    close: price,
+                    volume: this.candleData?.candleVolume || volume || 100,
 
                     candleOpen:
                         this.candleData?.candleOpen ?? 0,

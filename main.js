@@ -1,25 +1,22 @@
 /**
- * AlgoTrade Master Control Center (main.js)
+ * AlgoTrade Master Control Loop (main.js)
  * Location: C:\AlgoTrade\main.js
  * 
- * Central Control Hub for:
- * 1. Central Dhan Live Market WebSocket Stream (`DhanLivePrice`).
- * 2. Central Consensus Engine Evaluation (`consensusEngine.js`).
- * 3. Central System Configuration Manager (`server/config_manager.js`).
- * 4. Paper Trading Engine (`server/pepertread/pepertread.js`).
- * 5. Real Trading Engine (`server/realtread/realtread.js`).
- * 6. Realtime Chrome Dashboard UI Server (`server/ui_server.js`).
+ * Integrated Components:
+ * 1. Master System Config (`server/main_config.json` via `config_manager.js`)
+ * 2. Dhan Live Price Feed (`utility/dhan-live-price.js`)
+ * 3. Strategy Consensus Engine (`utility/usedfull/Engines/consensusEngine.js`)
+ * 4. Paper Trading Engine (`server/pepertread/pepertread.js`)
+ * 5. Real Trading Engine (`server/realtread/realtread.js`)
+ * 6. UI Dashboard Server (`server/ui_server.js`)
  */
 
 const mainConfig = require('./server/config_manager');
 const paperTradeEngine = require('./server/pepertread/pepertread');
 const realTradeEngine = require('./server/realtread/realtread');
-const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { DhanLivePrice } = require('./utility/dhan-live-price');
+const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { createUIServer } = require('./server/ui_server');
-
-let centralMarketTracker = null;
-let uiServerInstance = null;
 
 let latestLivePrice = 0;
 let latestTickTime = null;
@@ -34,99 +31,14 @@ let latestConsensusResult = {
     strategyStates: []
 };
 
-console.log("==========================================================================");
-console.log("🚀 ALGOTRADE MASTER CONTROL CENTER (main.js)");
-console.log("==========================================================================");
+let uiServerInstance = null;
 
-/**
- * Start Central Live Market Stream & Central Consensus Evaluation
- */
-function startCentralLiveStream(selectedStock = null) {
-    const config = mainConfig.getConfig();
-    const scrip = selectedStock || config.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
-
-    if (centralMarketTracker) {
-        try { centralMarketTracker.close(); } catch (e) {}
-    }
-
-    console.log(`📡 [CENTRAL STREAM] Starting Central Live Feed & Consensus Engine for ${scrip.symbol} (${scrip.securityId})...`);
-    centralMarketTracker = new DhanLivePrice();
-
-    centralMarketTracker.getLivePrice(
-        scrip.securityId,
-        scrip.exchangeSegment,
-        scrip.interval || 5,
-        async (tick) => {
-            const price = Number(tick.ltp || tick.close || tick.price || 0);
-            if (!price || isNaN(price)) return;
-
-            latestLivePrice = price;
-            const now = new Date();
-            const dateStr = tick.date || now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-            const timeStr = tick.time || now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
-            latestTickTime = `${dateStr} ${timeStr}`;
-
-            const liveCandle = {
-                securityId: scrip.securityId,
-                exchangeSegment: scrip.exchangeSegment,
-                interval: scrip.interval || "5",
-                date: dateStr,
-                time: timeStr,
-                close: price
-            };
-
-            // 1. Central Evaluation in Consensus Engine
-            try {
-                const signal = await evaluateConsensusEngine(liveCandle, -1, { warmupCount: 200 });
-                latestConsensusResult = signal;
-
-                // 2. Broadcast signal to Paper Trading Engine if ON
-                if (mainConfig.getConfig().paperTradeEnabled) {
-                    await paperTradeEngine.processSignal(signal, scrip);
-                }
-
-                // 3. Broadcast signal to Real Trading Engine if ON
-                if (mainConfig.getConfig().realTradeEnabled) {
-                    await realTradeEngine.processSignal(signal, scrip);
-                }
-            } catch (err) {
-                console.error(`❌ [CENTRAL CONSENSUS ERROR] ${err.message}`);
-            }
-        },
-        scrip.instrument || "INDEX"
-    );
-}
-
-/**
- * Start UI Server for Chrome Dashboard
- */
 function startUIServer(port = 3000) {
     if (!uiServerInstance) {
         uiServerInstance = createUIServer(port);
     }
 }
 
-/**
- * Enable & Start Master Trading System
- */
-async function startMasterSystem() {
-    console.log("\n▶️ [CONTROL CENTER] Initializing AlgoTrade Master System...");
-    const cfg = mainConfig.getConfig();
-
-    if (cfg.paperTradeEnabled) {
-        await paperTradeEngine.startPaperTrading();
-    }
-    if (cfg.realTradeEnabled) {
-        await realTradeEngine.startRealTrading();
-    }
-
-    startCentralLiveStream(cfg.selectedStock);
-    startUIServer(3000);
-}
-
-/**
- * Get Realtime Central Market Payload for UI Dashboard
- */
 function getLiveMarketData() {
     return {
         livePrice: latestLivePrice,
@@ -138,15 +50,131 @@ function getLiveMarketData() {
     };
 }
 
-// Auto-start System if executed directly (node main.js)
-if (require.main === module) {
-    startMasterSystem();
+console.log("==========================================================================");
+console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (main.js)");
+console.log("==========================================================================");
+
+async function startMasterSystem() {
+    const cfg = mainConfig.getConfig();
+    const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
+
+    // 1. Initialize Paper Trading Engine if enabled
+    if (cfg.paperTradeEnabled) {
+        await paperTradeEngine.startPaperTrading();
+    }
+
+    // 2. Initialize Real Trading Engine if enabled
+    if (cfg.realTradeEnabled) {
+        await realTradeEngine.startRealTrading();
+    }
+
+    // 3. Start UI Dashboard Server (http://localhost:3000)
+    startUIServer(3000);
+
+    const tracker = new DhanLivePrice();
+
+    console.log(`📡 [LIVE STREAM] Starting Central Feed for ${scrip.symbol} (${scrip.securityId})...`);
+
+    tracker.getLivePrice(
+        scrip.securityId,
+        scrip.exchangeSegment,
+        Number(scrip.interval || 5),
+        async (tick) => {
+            try {
+                // Update live market payload for UI Server
+                latestLivePrice = Number(tick.price || 0);
+                latestTickTime = `${tick.date || ''} ${tick.time || ''}`;
+
+                // 4. Evaluate Consensus Engine on live tick with 200 warmup candles
+                const consensusResult = await evaluateConsensusEngine(tick, -1, {
+                    securityId: String(scrip.securityId),
+                    exchangeSegment: scrip.exchangeSegment,
+                    interval: String(scrip.interval || "5"),
+                    warmupCount: 200
+                });
+
+                latestConsensusResult = consensusResult;
+
+                // 5. Process Signal in Paper Trading Engine
+                if (mainConfig.getConfig().paperTradeEnabled) {
+                    await paperTradeEngine.processSignal(consensusResult, scrip);
+                }
+
+                // 6. Process Signal in Real Trading Engine
+                if (mainConfig.getConfig().realTradeEnabled) {
+                    await realTradeEngine.processSignal(consensusResult, scrip);
+                }
+
+                // 7. Live Console Strategy Monitor
+                let signalBadge = "⚪ NO SIGNAL / WAITING";
+                let waitTimerLine = "";
+
+                if (consensusResult.consensus === "BUY") signalBadge = "🟢 BUY SIGNAL CONFIRMED & TRIGGERED";
+                if (consensusResult.consensus === "SELL") signalBadge = "🔴 SELL SIGNAL CONFIRMED & TRIGGERED";
+                if (consensusResult.consensus === "WAITING_CONFIRMATION") {
+                    const elapsedMins = consensusResult.confirmation?.elapsedMins || 0;
+                    const reqMins = consensusResult.confirmation?.requiredWaitMins || 0.5;
+                    const remMins = consensusResult.confirmation?.remainingMins !== undefined ? consensusResult.confirmation.remainingMins : (reqMins - elapsedMins);
+                    const remSecs = Math.max(0, Math.round(remMins * 60));
+                    const rawDir = consensusResult.rawType === "BUY" ? "🟢 BUY" : "🔴 SELL";
+
+                    signalBadge = `⏳ WAITING CONFIRMATION [${rawDir}]`;
+                    waitTimerLine = `⏳ Signal Wait   : ${remSecs}s Remaining (${elapsedMins}m / ${reqMins}m Configured)`;
+                }
+
+                console.clear();
+                console.log("==========================================================================");
+                console.log("🧠 CENTRAL STRATEGY CONSENSUS HEAD - LIVE MARKET MONITOR");
+                console.log("==========================================================================");
+                console.log(`⏰ Time          : ${tick.date || ''} ${tick.time || ''}`);
+                console.log(`📈 Live NIFTY    : ₹${tick.price ? Number(tick.price).toFixed(2) : '0.00'}`);
+                console.log(`⚡ Final Consensus: ${signalBadge}`);
+                if (waitTimerLine) {
+                    console.log(waitTimerLine);
+                }
+                console.log(`📊 Votes Summary  : 🟢 ${consensusResult.buyVotes || 0} BUY | 🔴 ${consensusResult.sellVotes || 0} SELL (Min Required: ${consensusResult.minVotesRequired || 2})`);
+                console.log(`💪 Confidence    : ${consensusResult.confidence || '0%'}`);
+                console.log(`💵 Entry Price   : ${consensusResult.entry ? '₹' + consensusResult.entry : '--'}`);
+                console.log(`🎯 Target (TR)   : ${consensusResult.tr ? '₹' + consensusResult.tr : '--'}`);
+                console.log(`🛑 Stop Loss (SL): ${consensusResult.sl ? '₹' + consensusResult.sl : '--'}`);
+                console.log("--------------------------------------------------------------------------");
+                console.log("📋 STRATEGY VOTES BREAKDOWN:");
+
+                if (Array.isArray(consensusResult.strategyStates) && consensusResult.strategyStates.length > 0) {
+                    const tableData = consensusResult.strategyStates.map(s => {
+                        let voteText = "❌ NO (NEUTRAL)";
+                        if (s.vote === "BUY") voteText = "🟢 YES (BUY)";
+                        if (s.vote === "SELL") voteText = "🔴 YES (SELL)";
+
+                        return {
+                            "Strategy Name": s.strategyName || s.strategyId,
+                            "Vote Status": voteText,
+                            "Reason / Key Filter": s.reason || "--",
+                            "Confidence": s.confidence || '70%',
+                            "Target (TR)": s.tr ? '₹' + s.tr : '--',
+                            "Stop Loss (SL)": s.sl ? '₹' + s.sl : '--'
+                        };
+                    });
+                    console.table(tableData);
+                } else {
+                    console.log("Awaiting Strategy Evaluations...");
+                }
+                console.log("==========================================================================");
+                console.log("🌐 Chrome Dashboard UI Active at : http://localhost:3000");
+
+            } catch (err) {
+                console.error("❌ Consensus Engine Error:", err.message);
+            }
+        },
+        scrip.instrument || "INDEX"
+    );
 }
+
+// Auto-start master system
+startMasterSystem();
 
 module.exports = {
     startMasterSystem,
-    startCentralLiveStream,
-    startUIServer,
     getLiveMarketData,
     mainConfig,
     paperTradeEngine,

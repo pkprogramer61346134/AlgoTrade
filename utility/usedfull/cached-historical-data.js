@@ -107,14 +107,50 @@ class CachedHistoricalData {
         const fileName = this.getCacheFileName(securityId, exchangeSegment, interval, fromDate, toDate);
         const filePath = path.join(this.cacheDir, fileName);
 
+        // Helper to normalize candle OHLC & volume fields
+        const normalizeCandles = (arr) => {
+            if (!Array.isArray(arr)) return [];
+            return arr.map(c => ({
+                ...c,
+                open: Number(c.open ?? c.candleOpen ?? c.price ?? 0),
+                high: Number(c.high ?? c.candleHigh ?? c.price ?? 0),
+                low: Number(c.low ?? c.candleLow ?? c.price ?? 0),
+                close: Number(c.close ?? c.candleClose ?? c.price ?? 0),
+                volume: Number(c.volume ?? c.candleVolume ?? 0)
+            }));
+        };
+
+        const todayStr = this.formatDateStr(new Date());
+
         // 1. Check if cached file exists on disk with valid candles
         if (!forceRefresh && fs.existsSync(filePath)) {
             try {
                 const rawContent = fs.readFileSync(filePath, "utf-8");
                 const cachedCandles = JSON.parse(rawContent);
+
                 if (Array.isArray(cachedCandles) && cachedCandles.length > 0) {
-                    console.log(`💾 [DISK CACHE HIT] Loaded ${cachedCandles.length} candles from: ${fileName}`);
-                    return { source: "DISK_CACHE", fileName, filePath, candles: cachedCandles };
+                    let isStaleTodayFile = false;
+
+                    // If cache file is for TODAY's date, check if last candle is older than current market time (> 5 mins)
+                    if (fromDate === todayStr && toDate === todayStr) {
+                        const lastCandleInFile = cachedCandles[cachedCandles.length - 1];
+                        if (lastCandleInFile && lastCandleInFile.time) {
+                            const lastCandleSecs = this.parseTimeToSeconds(lastCandleInFile.time);
+                            const nowSecs = this.parseTimeToSeconds(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
+
+                            // During market hours (9:15 AM = 33300s to 3:30 PM = 55800s), if last candle is > 5 mins (300s) old:
+                            if (nowSecs >= 33300 && nowSecs <= 55800 && (nowSecs - lastCandleSecs > 300)) {
+                                isStaleTodayFile = true;
+                            }
+                        }
+                    }
+
+                    if (!isStaleTodayFile) {
+                        console.log(`💾 [DISK CACHE HIT] Loaded ${cachedCandles.length} candles from: ${fileName}`);
+                        return { source: "DISK_CACHE", fileName, filePath, candles: normalizeCandles(cachedCandles) };
+                    } else {
+                        console.log(`🔄 [TODAY CACHE REFRESH] Today's cache (${fileName}) is outdated. Re-fetching latest candles from Dhan API...`);
+                    }
                 } else {
                     // Remove 0-candle empty cache file so future calls re-attempt API
                     try { fs.unlinkSync(filePath); } catch (e) {}
@@ -151,14 +187,19 @@ class CachedHistoricalData {
             candles = [];
         }
 
+        const normalized = normalizeCandles(candles);
+
         // 3. Save / Download to local disk cache folder (including empty arrays for market holidays)
         try {
-            fs.writeFileSync(filePath, JSON.stringify(candles || [], null, 2), "utf-8");
+            if (!fs.existsSync(this.cacheDir)) {
+                fs.mkdirSync(this.cacheDir, { recursive: true });
+            }
+            fs.writeFileSync(filePath, JSON.stringify(normalized || [], null, 2), "utf-8");
         } catch (writeErr) {
             console.error(`❌ [CACHE SAVE ERROR] Failed to save file to disk: ${writeErr.message}`);
         }
 
-        return { source: "DHAN_API", fileName, filePath, candles: candles || [] };
+        return { source: "DHAN_API", fileName, filePath, candles: normalized };
     }
 
     /**
@@ -240,11 +281,11 @@ class CachedHistoricalData {
 
                 if (Array.isArray(dayRes.candles) && dayRes.candles.length > 0) {
                     let filteredDayCandles = dayRes.candles;
-                    // If target date matches effectiveAnchorDateStr and a cutoff time is provided, filter candles up to target time
+                    // If target date matches effectiveAnchorDateStr and a cutoff time is provided, filter candles strictly BEFORE target time (only closed candles)
                     if (dateStr === effectiveAnchorDateStr && targetTimeSeconds !== null) {
                         filteredDayCandles = dayRes.candles.filter(c => {
                             const candleSecs = this.parseTimeToSeconds(c.time);
-                            return candleSecs <= targetTimeSeconds;
+                            return candleSecs < targetTimeSeconds;
                         });
                     }
 
@@ -263,7 +304,7 @@ class CachedHistoricalData {
                 index: index + 1
             }));
 
-            console.log(`✅ [CANDLE COUNT COMPLETE] Returning exact ${slicedCandles.length} latest candles.`);
+            // console.log(`✅ [CANDLE COUNT COMPLETE] Returning exact ${slicedCandles.length} latest candles.`);
 
             return {
                 status: "success",

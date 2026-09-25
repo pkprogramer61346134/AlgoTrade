@@ -65,17 +65,35 @@ function renderLiveConsensus(data) {
     const targetEl = document.getElementById("consensus-target");
     const slEl = document.getElementById("consensus-sl");
     const confEl = document.getElementById("consensus-confidence");
+    const waitTimerEl = document.getElementById("consensus-wait-timer");
 
     if (badge) {
         if (c.consensus === "BUY") {
-            badge.innerText = "🟢 BUY SIGNAL TRIGGERED";
+            badge.innerText = "🟢 BUY SIGNAL CONFIRMED & TRIGGERED";
             badge.className = "badge-success badge-xl";
+            if (waitTimerEl) { waitTimerEl.innerText = "--"; waitTimerEl.className = "m-val text-muted"; }
         } else if (c.consensus === "SELL") {
-            badge.innerText = "🔴 SELL SIGNAL TRIGGERED";
+            badge.innerText = "🔴 SELL SIGNAL CONFIRMED & TRIGGERED";
             badge.className = "badge-danger badge-xl";
+            if (waitTimerEl) { waitTimerEl.innerText = "--"; waitTimerEl.className = "m-val text-muted"; }
+        } else if (c.consensus === "WAITING_CONFIRMATION") {
+            const elapsedMins = c.confirmation?.elapsedMins || 0;
+            const reqMins = c.confirmation?.requiredWaitMins || 0.5;
+            const remMins = c.confirmation?.remainingMins !== undefined ? c.confirmation.remainingMins : (reqMins - elapsedMins);
+            const remSecs = Math.max(0, Math.round(remMins * 60));
+            const rawDir = c.rawType === "BUY" ? "🟢 BUY" : "🔴 SELL";
+
+            badge.innerText = `⏳ WAITING CONFIRMATION [${rawDir}] (${remSecs}s Remaining)`;
+            badge.className = "badge-warning badge-xl";
+
+            if (waitTimerEl) {
+                waitTimerEl.innerText = `⏳ ${remSecs}s (${elapsedMins}m / ${reqMins}m)`;
+                waitTimerEl.className = "m-val text-warning font-mono";
+            }
         } else {
             badge.innerText = "⚪ NO SIGNAL / WAITING";
             badge.className = "badge-neutral badge-xl";
+            if (waitTimerEl) { waitTimerEl.innerText = "--"; waitTimerEl.className = "m-val text-muted"; }
         }
     }
 
@@ -89,16 +107,28 @@ function renderLiveConsensus(data) {
     if (tbody) {
         const states = c.strategyStates || [];
         if (states.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Listening for Market Ticks...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Listening for Market Ticks...</td></tr>`;
         } else {
             tbody.innerHTML = states.map(s => {
-                const voteClass = s.vote === "BUY" ? "badge-success" : s.vote === "SELL" ? "badge-danger" : "badge-neutral";
-                const trigClass = s.triggered ? "text-success" : "text-muted";
+                const isBuy = s.vote === "BUY";
+                const isSell = s.vote === "SELL";
+
+                const statusHtml = isBuy 
+                    ? `<span class="badge-success">🟢 YES (BUY)</span>` 
+                    : isSell 
+                    ? `<span class="badge-danger">🔴 YES (SELL)</span>` 
+                    : `<span class="badge-neutral">❌ NO (NEUTRAL)</span>`;
+
+                const voteSignalText = isBuy ? "YES (BUY)" : isSell ? "YES (SELL)" : "NO";
+                const voteSignalClass = isBuy ? "text-success" : isSell ? "text-danger" : "text-muted";
+                const reasonText = s.reason || "--";
+
                 return `
                     <tr>
                         <td><strong>${s.strategyName || s.strategyId}</strong></td>
-                        <td class="${trigClass}">${s.triggered ? '⚡ TRIGGERED' : '💤 NEUTRAL'}</td>
-                        <td><span class="${voteClass}">${s.vote || 'NEUTRAL'}</span></td>
+                        <td>${statusHtml}</td>
+                        <td class="${voteSignalClass}"><strong>${voteSignalText}</strong></td>
+                        <td class="text-secondary font-mono" style="font-size: 0.82rem;">${reasonText}</td>
                         <td>${s.confidence || '70%'}</td>
                         <td>${s.tr ? '₹' + s.tr : '--'}</td>
                         <td>${s.sl ? '₹' + s.sl : '--'}</td>

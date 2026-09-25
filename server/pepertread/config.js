@@ -37,8 +37,8 @@ class PaperConfigManager {
                 const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
                 const parsed = JSON.parse(raw);
                 const loaded = { ...DEFAULT_CONFIG, ...parsed };
-                if (isNaN(loaded.currentBalance) || loaded.currentBalance === null) {
-                    loaded.currentBalance = loaded.initialBalance || 100000;
+                if (isNaN(loaded.currentBalance) || loaded.currentBalance === null || loaded.currentBalance < 0) {
+                    loaded.currentBalance = (loaded.initialBalance || 100000) + (loaded.totalPnl || 0);
                 }
                 return loaded;
             }

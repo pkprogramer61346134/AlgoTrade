@@ -101,8 +101,13 @@ class HistoricalData {
                 // Candle number
                 index: candles.length + 1,
 
-                // Main price
+                // Main price & standard OHLC
                 price: result.close[i],
+                open: result.open[i],
+                high: result.high[i],
+                low: result.low[i],
+                close: result.close[i],
+                volume: result.volume ? result.volume[i] : 0,
 
                 // Historical API does not provide these
                 quantity: 0,
@@ -124,9 +129,6 @@ class HistoricalData {
 
                 // Historical API does not provide these
                 averagePrice: 0,
-                volume: result.volume
-                    ? result.volume[i]
-                    : 0,
 
                 sellQuantity: 0,
                 buyQuantity: 0,

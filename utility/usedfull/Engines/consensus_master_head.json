@@ -3,6 +3,8 @@
   "name": "👑 Master Head Multi-Strategy Engine (10 Core Daily Active Strategies)",
   "enabled": true,
   "minStrategyVotes": 3,
+  "enableSignalConfirmation": true,
+  "confirmWaitMinutes": 0.5,
 
   "strategies": [
     {

@@ -29,6 +29,28 @@ const { DhanOptionLivePrice } = require('../../utility/dhan-option-live-price');
 
 const TRADE_RECORD_FILE = path.join(__dirname, 'trade_record.json');
 
+/**
+ * Helper: Retry async function up to maxRetries times with configurable delay in ms
+ */
+async function retryAsync(fn, maxRetries = 5, delayMs = 1000, actionName = "Operation") {
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const result = await fn();
+            if (result !== null && result !== undefined) return result;
+            throw new Error(`${actionName} returned empty or null output.`);
+        } catch (err) {
+            lastError = err;
+            if (attempt < maxRetries) {
+                console.warn(`⚠️ [RETRY DELAY] ${actionName} failed (Attempt ${attempt}/${maxRetries}): ${err.message}. Retrying in ${delayMs}ms...`);
+                await new Promise(res => setTimeout(res, delayMs));
+            }
+        }
+    }
+    console.error(`❌ [RETRY EXHAUSTED] ${actionName} failed after ${maxRetries} attempts: ${lastError ? lastError.message : 'Unknown error'}`);
+    return null;
+}
+
 class TrailingSLEngine {
     constructor() {
         this.executor = new SmartOrderExecutor();
@@ -90,13 +112,18 @@ class TrailingSLEngine {
         console.log(`🚀 [TRAILING SL ENGINE] Executing Trade for ${optionType} | Spot: ₹${spotPrice} | Budget: ₹${maxBudget}`);
         console.log("==========================================================================\n");
 
-        // 1. Select Best Option Strike
-        const strikeRes = await selectBestOptionStrike({
-            spotPrice: spotPrice,
-            optionType: optionType,
-            maxBudget: maxBudget,
-            amountPercent: trailingConfig.getConfig().maxBudgetPercent
-        });
+        // 1. Select Best Option Strike (Max 5 Retries with 1000ms Delay)
+        const strikeRes = await retryAsync(
+            () => selectBestOptionStrike({
+                spotPrice: spotPrice,
+                optionType: optionType,
+                maxBudget: maxBudget,
+                amountPercent: trailingConfig.getConfig().maxBudgetPercent
+            }),
+            5,
+            1000,
+            "Select Option Strike (Real)"
+        );
 
         if (!strikeRes || !strikeRes.securityId) {
             throw new Error(`[TRAILING ENGINE ERROR] Could not select option strike for spot ₹${spotPrice}`);
@@ -104,13 +131,18 @@ class TrailingSLEngine {
 
         console.log(`✅ [STRIKE SELECTED] ${strikeRes.symbol} (ID: ${strikeRes.securityId}) | Live LTP: ₹${strikeRes.liveLtp}`);
 
-        // 2. Calculate Option SL & Targets (TR1 - TR4) via option-sl-target.js
-        const levels = await calculateOptionSLAndTargets({
-            securityId: strikeRes.securityId,
-            entryPrice: strikeRes.liveLtp,
-            interval: "5",
-            method: "HYBRID"
-        });
+        // 2. Calculate Option SL & Targets (TR1 - TR4) via option-sl-target.js (Max 5 Retries with 1000ms Delay)
+        const levels = await retryAsync(
+            () => calculateOptionSLAndTargets({
+                securityId: strikeRes.securityId,
+                entryPrice: strikeRes.liveLtp,
+                interval: "5",
+                method: "HYBRID"
+            }),
+            5,
+            1000,
+            "Calculate Option SL & Targets (Real)"
+        );
 
         const entryLtp = levels.entryPrice;
         const initialSl = levels.stopLoss.sl;
@@ -130,15 +162,20 @@ class TrailingSLEngine {
         let orderRes = { status: "PAPER_PLACED", orderId: "TRAIL_PAPER_" + Date.now() };
 
         if (!isPaper) {
-            orderRes = await this.executor.placeOptionOrder({
-                securityId: strikeRes.securityId,
-                transactionType: "BUY",
-                price: entryLtp,
-                targetPrice: tr4,
-                stopLossPrice: initialSl,
-                lotSize: qty,
-                lots: 1
-            });
+            orderRes = await retryAsync(
+                () => this.executor.placeOptionOrder({
+                    securityId: strikeRes.securityId,
+                    transactionType: "BUY",
+                    price: entryLtp,
+                    targetPrice: tr4,
+                    stopLossPrice: initialSl,
+                    lotSize: qty,
+                    lots: 1
+                }),
+                5,
+                1000,
+                "Place Real Option Order"
+            );
         }
 
         const now = new Date();
@@ -170,6 +207,8 @@ class TrailingSLEngine {
             trailLogs: [
                 { time: now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }), stage: "INITIAL", sl: initialSl, ltp: entryLtp, note: "Order placed with Initial SL & TR4 Target" }
             ],
+            strategyId: params.strategyId || (params.signal ? params.signal.strategyId : null),
+            strategyName: params.strategyName || (params.signal ? params.signal.strategyName : null),
             status: "OPEN",
             pnl: 0.00,
             pnlPercent: "0.00%",
@@ -318,12 +357,17 @@ class TrailingSLEngine {
                     note: logNote
                 });
 
-                // Update SL on broker / live order
+                // Update SL on broker / live order with 5 retries & delay
                 try {
-                    await this.executor.updateStopLoss({
-                        securityId: pos.securityId,
-                        newStopLossPrice: newSl
-                    });
+                    await retryAsync(
+                        () => this.executor.updateStopLoss({
+                            securityId: pos.securityId,
+                            newStopLossPrice: newSl
+                        }),
+                        5,
+                        1000,
+                        "Update Broker Stop Loss Order"
+                    );
                 } catch (e) {}
 
                 this.saveRecords();
@@ -371,7 +415,12 @@ class TrailingSLEngine {
         }
 
         try {
-            await this.executor.closePosition({ securityId: pos.securityId });
+            await retryAsync(
+                () => this.executor.closePosition({ securityId: pos.securityId }),
+                5,
+                1000,
+                "Close Broker Option Position"
+            );
         } catch (e) {}
 
         const now = new Date();
@@ -410,10 +459,21 @@ class TrailingSLEngine {
      */
     getStatus() {
         const cfg = trailingConfig.getConfig();
+        const totalTrades = this.tradeHistory.length;
+        const winningTrades = this.tradeHistory.filter(t => (t.pnl || 0) > 0).length;
+        const losingTrades = this.tradeHistory.filter(t => (t.pnl || 0) < 0).length;
+        const totalPnl = Number(this.tradeHistory.reduce((acc, t) => acc + (t.pnl || 0), 0).toFixed(2));
+        const winrate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) + "%" : "0%";
+
         return {
             enabled: cfg.trailingEnabled,
             breathingRoomPoints: cfg.breathingRoomPoints,
             selectedStock: cfg.selectedStock,
+            totalPnl,
+            totalTrades,
+            winningTrades,
+            losingTrades,
+            winrate,
             activePosition: this.activePosition,
             history: this.tradeHistory
         };

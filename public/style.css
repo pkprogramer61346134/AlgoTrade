@@ -337,8 +337,18 @@ input:checked + .slider:before { transform: translateX(20px); }
     font-weight: 700;
 }
 
+.badge-warning {
+    padding: 3px 8px;
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border-radius: 4px;
+    font-weight: 700;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
 .text-success { color: var(--success) !important; }
 .text-danger { color: var(--danger) !important; }
+.text-warning { color: var(--warning) !important; }
 .text-muted { color: var(--text-muted) !important; }
 
 /* SECTIONS */

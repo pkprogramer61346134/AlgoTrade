@@ -1,1 +1,43 @@
-[]
+{
+  "activePosition": {
+    "tradeId": "PAPER_TRAIL_1790321511893",
+    "securityId": "73905",
+    "symbol": "NIFTY_23050_PE",
+    "optionType": "PE",
+    "entryLtp": 86.75,
+    "currentLtp": 86.75,
+    "qty": 65,
+    "totalMargin": 5638.75,
+    "initialSl": 70.11,
+    "currentSl": 70.11,
+    "targetTr4": 153.31,
+    "levels": {
+      "initialSl": 70.11,
+      "tr1": 103.39,
+      "tr1Midway": 111.71,
+      "tr2": 120.03,
+      "tr2Midway": 128.35,
+      "tr3": 136.67,
+      "tr4": 153.31
+    },
+    "breathingRoom": 0.5,
+    "trailingStage": "INITIAL",
+    "trailLogs": [
+      {
+        "time": "1:01:51 pm",
+        "stage": "INITIAL",
+        "sl": 70.11,
+        "ltp": 86.75,
+        "note": "Paper Order placed with Initial SL & TR4 Target"
+      }
+    ],
+    "strategyId": "STRAT_6_TRIPLE_EMA_ALIGNMENT",
+    "strategyName": "Triple EMA (10/20/50) Stacked Trend",
+    "status": "OPEN",
+    "pnl": 0,
+    "pnlPercent": "+0%",
+    "entryTime": "1:01:51 pm",
+    "entryDate": "2026-09-25"
+  },
+  "history": []
+}
