@@ -85,6 +85,17 @@ class PaperConfigManager {
         return this.config.currentBalance;
     }
 
+    resetStats(initialBalance = 10000) {
+        this.config.initialBalance = Number(initialBalance) || 10000;
+        this.config.currentBalance = Number(initialBalance) || 10000;
+        this.config.totalPnl = 0.00;
+        this.config.totalTrades = 0;
+        this.config.winningTrades = 0;
+        this.config.losingTrades = 0;
+        this.saveConfig();
+        return this.config;
+    }
+
     getConfig() {
         return this.config;
     }

@@ -25,6 +25,7 @@ const trailingConfig = require('./config');
 const { selectBestOptionStrike } = require('../../utility/usedfull/select-best-strike');
 const { calculateOptionSLAndTargets } = require('../../utility/usedfull/option-sl-target');
 const { SmartOrderExecutor } = require('../../utility/usedfull/smart-order-executor');
+const { DhanOptionLivePrice } = require('../../utility/dhan-option-live-price');
 /**
  * Helper: Retry async function up to maxRetries times with configurable delay in ms
  */

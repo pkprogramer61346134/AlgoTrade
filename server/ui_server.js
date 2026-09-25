@@ -10,6 +10,7 @@ const http = require('http');
 const mainConfig = require('./config_manager');
 const paperTradeEngine = require('./pepertread/pepertread');
 const paperConfig = require('./pepertread/config');
+const paperTrailingSLEngine = require('./pepertread/paper_trailingsl');
 const realTradeEngine = require('./realtread/realtread');
 const realConfig = require('./realtread/config');
 const backtestEngine = require('./backtesting/backtesting');
@@ -116,6 +117,46 @@ function createUIServer(port = 3000) {
         try {
             const report = backtestEngine.getReport();
             res.json({ status: "success", data: report });
+        } catch (e) {
+            res.status(500).json({ status: "error", message: e.message });
+        }
+    });
+
+    // 8. Restart Server Endpoint (Password Protected: pavan61346134)
+    app.post('/api/restart-server', (req, res) => {
+        try {
+            const { password } = req.body || {};
+            if (password !== "pavan61346134") {
+                return res.status(401).json({ status: "error", message: "Incorrect Password! Access Denied." });
+            }
+
+            res.json({ status: "success", message: "Password verified! Restarting server in 1 second..." });
+
+            setTimeout(() => {
+                console.log("\n==========================================================================");
+                console.log(`🔄 [SERVER RESTART REQUESTED] Password Verified! Exiting process for PM2 auto-restart...`);
+                console.log("==========================================================================\n");
+                process.exit(0);
+            }, 1000);
+        } catch (e) {
+            res.status(500).json({ status: "error", message: e.message });
+        }
+    });
+
+    // 9. Clean Paper Trade Endpoint (Password Protected: pavan61346134)
+    app.post('/api/clean-paper-trade', (req, res) => {
+        try {
+            const { password, initialBalance } = req.body || {};
+            if (password !== "pavan61346134") {
+                return res.status(401).json({ status: "error", message: "Incorrect Password! Access Denied." });
+            }
+
+            paperTrailingSLEngine.resetPaperTrade(initialBalance || 10000);
+            console.log("\n==========================================================================");
+            console.log(`🧹 [CLEAN PAPER TRADE] Password Verified! Reset paper trade history & balance to ₹${initialBalance || 10000}.`);
+            console.log("==========================================================================\n");
+
+            res.json({ status: "success", message: "Paper trade history & balance cleared successfully!" });
         } catch (e) {
             res.status(500).json({ status: "error", message: e.message });
         }

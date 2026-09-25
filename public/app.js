@@ -551,3 +551,136 @@ function renderBacktestResults(data) {
         }).join("");
     }
 }
+
+// ==========================================
+// RESTART SERVER MODAL & API HANDLERS
+// ==========================================
+function openRestartModal() {
+    const modal = document.getElementById("restart-modal");
+    const input = document.getElementById("restart-password-input");
+    const err = document.getElementById("modal-error-msg");
+    if (err) err.style.display = "none";
+    if (input) input.value = "";
+    if (modal) modal.style.display = "flex";
+    if (input) setTimeout(() => input.focus(), 100);
+}
+
+function closeRestartModal() {
+    const modal = document.getElementById("restart-modal");
+    if (modal) modal.style.display = "none";
+}
+
+async function executeServerRestart() {
+    const input = document.getElementById("restart-password-input");
+    const err = document.getElementById("modal-error-msg");
+    const password = input ? input.value.trim() : "";
+
+    if (!password) {
+        if (err) {
+            err.style.color = "#ef4444";
+            err.innerText = "⚠️ Password enter karein!";
+            err.style.display = "block";
+        }
+        return;
+    }
+
+    try {
+        const response = await fetch("/api/restart-server", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password })
+        });
+        const result = await response.json();
+
+        if (response.ok && result.status === "success") {
+            if (err) {
+                err.style.color = "#10b981";
+                err.innerText = "✅ Password Verified! Restarting Server...";
+                err.style.display = "block";
+            }
+            setTimeout(() => {
+                closeRestartModal();
+                alert("🔄 Server is restarting... Page will reload in 3 seconds.");
+                setTimeout(() => location.reload(), 3000);
+            }, 1000);
+        } else {
+            if (err) {
+                err.style.color = "#ef4444";
+                err.innerText = `❌ ${result.message || "Incorrect Password!"}`;
+                err.style.display = "block";
+            }
+        }
+    } catch (e) {
+        if (err) {
+            err.style.color = "#ef4444";
+            err.innerText = `❌ Error restarting server: ${e.message}`;
+            err.style.display = "block";
+        }
+    }
+}
+
+// ==========================================
+// CLEAN PAPER TRADE MODAL & API HANDLERS
+// ==========================================
+function openCleanPaperModal() {
+    const modal = document.getElementById("clean-paper-modal");
+    const input = document.getElementById("clean-paper-password-input");
+    const err = document.getElementById("clean-modal-error-msg");
+    if (err) err.style.display = "none";
+    if (input) input.value = "";
+    if (modal) modal.style.display = "flex";
+    if (input) setTimeout(() => input.focus(), 100);
+}
+
+function closeCleanPaperModal() {
+    const modal = document.getElementById("clean-paper-modal");
+    if (modal) modal.style.display = "none";
+}
+
+async function executeCleanPaperTrade() {
+    const input = document.getElementById("clean-paper-password-input");
+    const err = document.getElementById("clean-modal-error-msg");
+    const password = input ? input.value.trim() : "";
+
+    if (!password) {
+        if (err) {
+            err.style.color = "#ef4444";
+            err.innerText = "⚠️ Password enter karein!";
+            err.style.display = "block";
+        }
+        return;
+    }
+
+    try {
+        const response = await fetch("/api/clean-paper-trade", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password, initialBalance: 10000 })
+        });
+        const result = await response.json();
+
+        if (response.ok && result.status === "success") {
+            if (err) {
+                err.style.color = "#10b981";
+                err.innerText = "✅ Paper Trade cleared successfully!";
+                err.style.display = "block";
+            }
+            setTimeout(() => {
+                closeCleanPaperModal();
+                fetchDashboardData();
+            }, 800);
+        } else {
+            if (err) {
+                err.style.color = "#ef4444";
+                err.innerText = `❌ ${result.message || "Incorrect Password!"}`;
+                err.style.display = "block";
+            }
+        }
+    } catch (e) {
+        if (err) {
+            err.style.color = "#ef4444";
+            err.innerText = `❌ Error clearing paper trade: ${e.message}`;
+            err.style.display = "block";
+        }
+    }
+}

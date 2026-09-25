@@ -94,6 +94,21 @@ class PaperTrailingSLEngine {
     }
 
     /**
+     * Reset Paper Trade Active Position, History, and Config Stats
+     */
+    resetPaperTrade(initialBalance = 10000) {
+        if (this.optionTracker) {
+            try { this.optionTracker.close(); } catch (e) {}
+            this.optionTracker = null;
+        }
+        this.activePosition = null;
+        this.tradeHistory = [];
+        this.saveRecords();
+        paperConfig.resetStats(initialBalance);
+        console.log(`🧹 [PAPER ENGINE RESET] Cleared active position, history & reset balance to ₹${initialBalance}`);
+    }
+
+    /**
      * Execute Paper Trailing Trade
      */
     async executePaperTrailingTrade(signal, selectedStock) {

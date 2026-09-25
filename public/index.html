@@ -53,6 +53,10 @@
                 <a href="backtest.html" class="nav-link-btn">
                     <span class="btn-icon">🧪</span> Backtest Engine
                 </a>
+
+                <button class="nav-link-btn restart-btn" onclick="openRestartModal()">
+                    <span class="btn-icon">🔄</span> Restart Server
+                </button>
             </div>
         </header>
 
@@ -131,7 +135,12 @@
                 <section class="terminal-column">
                     <div class="terminal-header">
                         <h2 class="terminal-title">📄 Paper Trading Terminal</h2>
-                        <span class="status-pill badge-success" id="paper-terminal-badge">ACTIVE</span>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <button class="nav-link-btn clean-btn" onclick="openCleanPaperModal()">
+                                <span class="btn-icon">🧹</span> Reset History
+                            </button>
+                            <span class="status-pill badge-success" id="paper-terminal-badge">ACTIVE</span>
+                        </div>
                     </div>
 
                     <!-- PAPER KPI GRID -->
@@ -265,6 +274,48 @@
 
             </div>
         </main>
+    </div>
+
+    <!-- RESTART SERVER MODAL -->
+    <div id="restart-modal" class="modal-overlay" style="display: none;">
+        <div class="glass-card modal-card">
+            <div class="modal-header">
+                <h3>🔄 Restart Server</h3>
+                <button class="close-btn" onclick="closeRestartModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Server restart karne ke liye Password enter karein:</p>
+                <div class="input-group">
+                    <input type="password" id="restart-password-input" placeholder="Enter Password..." autocomplete="current-password" onkeyup="if(event.key==='Enter') executeServerRestart()">
+                </div>
+                <div id="modal-error-msg" class="modal-error-text" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRestartModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="executeServerRestart()">Confirm Restart</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CLEAN PAPER TRADE MODAL -->
+    <div id="clean-paper-modal" class="modal-overlay" style="display: none;">
+        <div class="glass-card modal-card">
+            <div class="modal-header">
+                <h3>🧹 Reset Paper Trade History</h3>
+                <button class="close-btn" onclick="closeCleanPaperModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Paper Trade history & balance reset karne ke liye Password enter karein:</p>
+                <div class="input-group">
+                    <input type="password" id="clean-paper-password-input" placeholder="Enter Password..." autocomplete="current-password" onkeyup="if(event.key==='Enter') executeCleanPaperTrade()">
+                </div>
+                <div id="clean-modal-error-msg" class="modal-error-text" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCleanPaperModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="executeCleanPaperTrade()">Confirm Reset</button>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
