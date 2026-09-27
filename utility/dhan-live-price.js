@@ -229,31 +229,37 @@ class DhanLivePrice {
 
             const responseCode = data.readUInt8(0);
 
-            // Quote Packet
-            if (responseCode !== 4) {
+            let price = 0;
+            let quantity = 0;
+            let averagePrice = 0;
+            let volume = 0;
+            let sellQuantity = 0;
+            let buyQuantity = 0;
+            let dayOpen = 0;
+            let dayClose = 0;
+            let dayHigh = 0;
+            let dayLow = 0;
+
+            if (responseCode === 4 && data.length >= 50) {
+                price = data.readFloatLE(8);
+                quantity = data.readInt16LE(12);
+                averagePrice = data.readFloatLE(18);
+                volume = data.readInt32LE(22);
+                sellQuantity = data.readInt32LE(26);
+                buyQuantity = data.readInt32LE(30);
+                dayOpen = data.readFloatLE(34);
+                dayClose = data.readFloatLE(38);
+                dayHigh = data.readFloatLE(42);
+                dayLow = data.readFloatLE(46);
+            } else if (responseCode === 2 && data.length >= 16) {
+                price = data.readFloatLE(8);
+            } else {
                 return;
             }
 
+            if (!price || price <= 0) return;
+
             try {
-                /*
-                 * =========================
-                 * LIVE QUOTE FIELDS
-                 * =========================
-                 */
-
-                const price = data.readFloatLE(8);
-                const quantity = data.readInt16LE(12);
-
-                const averagePrice = data.readFloatLE(18);
-                const volume = data.readInt32LE(22);
-                const sellQuantity = data.readInt32LE(26);
-                const buyQuantity = data.readInt32LE(30);
-
-                const dayOpen = data.readFloatLE(34);
-                const dayClose = data.readFloatLE(38);
-                const dayHigh = data.readFloatLE(42);
-                const dayLow = data.readFloatLE(46);
-
                 /*
                  * =========================
                  * FINAL DATA

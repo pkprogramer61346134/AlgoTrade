@@ -6,7 +6,7 @@
 function calculateEMA(data = [], period = 20) {
     if (!data || data.length < period) return [];
 
-    const prices = data.map(d => typeof d === 'object' ? d.close : d);
+    const prices = data.map(d => typeof d === 'object' ? Number(d.close ?? d.candleClose ?? d.price ?? 0) : Number(d || 0));
     const k = 2 / (period + 1);
     const emaValues = new Array(prices.length).fill(null);
 

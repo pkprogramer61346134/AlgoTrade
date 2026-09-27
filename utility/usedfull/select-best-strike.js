@@ -141,14 +141,15 @@ class StrikeSelector {
             }
 
             const ocRes = await this.getOptionChainWithRetry(securityId, exchangeSegment, currentExpiry);
-            if (ocRes.status !== "success" || !ocRes.data?.data) {
+            const ocDataObj = ocRes.data?.data || ocRes.data || {};
+            if (ocRes.status !== "success" || (!ocRes.data?.data && !ocRes.data)) {
                 throw new Error(`[STRIKE SELECTOR ERROR] Failed to fetch Option Chain: ${ocRes.message || "Unknown error"}`);
             }
 
             ocData = {
                 currentExpiry,
-                spotPrice: Number(ocRes.data.data.last_price || 0),
-                ocMap: ocRes.data.data.oc || {}
+                spotPrice: Number(ocDataObj.last_price || ocDataObj.lastPrice || 0),
+                ocMap: ocDataObj.oc || ocDataObj.optionChain || {}
             };
             moduleOcCache[cacheKey] = ocData;
             moduleOcCacheTime = Date.now();
@@ -239,6 +240,9 @@ class StrikeSelector {
         const secId = String(selectedSide.security_id);
         const strikePrice = selectedItem.strike;
         const isAtm = strikePrice === atmItem.strike;
+        const realContractLotSize = Number(selectedSide.lot_size || selectedSide.lotSize || lotSize || 65);
+        const realTotalQty = lots * realContractLotSize;
+        const finalReqMargin = selectedLtp * realTotalQty;
 
         return {
             status: "success",
@@ -248,14 +252,14 @@ class StrikeSelector {
             expiry: currentExpiry,
             optionType,
             lots,
-            lotSize,
-            totalQty,
+            lotSize: realContractLotSize,
+            totalQty: realTotalQty,
             selectedStrike: strikePrice,
             isAtm,
             securityId: secId,
             symbol: `NIFTY_${strikePrice}_${optionType}`,
             liveLtp: selectedLtp,
-            requiredMargin: Number(selectedReqMargin.toFixed(2)),
+            requiredMargin: Number(finalReqMargin.toFixed(2)),
             availableBudget: availableBudget !== null ? Number(availableBudget.toFixed(2)) : null,
             usedPercent: usedPercent !== null ? `${usedPercent}%` : null,
             liveAccountBalance: liveAccountBalance !== null ? Number(liveAccountBalance.toFixed(2)) : null,

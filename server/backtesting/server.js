@@ -122,12 +122,8 @@ app.get('/api/stream', async (req, res) => {
         fromDate: req.query.fromDate,
         toDate: req.query.toDate,
         interval: req.query.interval,
-        initialBalance: Number(req.query.initialBalance || 10000),
-        lots: Number(req.query.lots || 1),
-        lotSize: Number(req.query.lotSize || 65),
         maxTradesPerDay: Number(req.query.maxTradesPerDay || 3),
-        targetMode: req.query.targetMode || "TRAILING",
-        maxLossPerTrade: Number(req.query.maxLossPerTrade || 300)
+        targetMode: req.query.targetMode || "TRAILING"
     };
 
     sendEvent('start', { message: 'Backtest started', params });

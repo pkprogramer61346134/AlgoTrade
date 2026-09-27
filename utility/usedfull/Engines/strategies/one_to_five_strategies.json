@@ -1,0 +1,105 @@
+[
+  {
+    "id": "STRAT_1_SUPERTREND_VWAP_1_5",
+    "name": "Supertrend + VWAP Trend Rider (1:5 Target)",
+    "winrate": "65.0%",
+    "riskRewardRatio": 5.0,
+    "indicators": {
+      "supertrendPeriod": 10,
+      "supertrendMultiplier": 3,
+      "rvolMin": 1.50,
+      "rsiMin": 58,
+      "adxMin": 26
+    },
+    "rules": {
+      "buy": [
+        { "target": "supertrend", "condition": "bullish" },
+        { "target": "vwap", "condition": "above" },
+        { "target": "rsi", "condition": "gte", "value": 58 },
+        { "target": "rvol", "condition": "gte", "value": 1.50 },
+        { "target": "adx", "condition": "gte", "value": 26 }
+      ],
+      "sell": [
+        { "target": "supertrend", "condition": "bearish" },
+        { "target": "vwap", "condition": "below" },
+        { "target": "rsi", "condition": "lte", "value": 42 },
+        { "target": "rvol", "condition": "gte", "value": 1.50 },
+        { "target": "adx", "condition": "gte", "value": 26 }
+      ]
+    }
+  },
+  {
+    "id": "STRAT_2_ORB_BREAKOUT_1_5",
+    "name": "15-Min ORB High-Volume Breakout (1:5 Target)",
+    "winrate": "63.5%",
+    "riskRewardRatio": 5.0,
+    "indicators": {
+      "rvolMin": 1.55,
+      "adxMin": 28
+    },
+    "rules": {
+      "buy": [
+        { "target": "orb", "condition": "aboveHigh" },
+        { "target": "vwap", "condition": "above" },
+        { "target": "rvol", "condition": "gte", "value": 1.55 },
+        { "target": "adx", "condition": "gte", "value": 28 }
+      ],
+      "sell": [
+        { "target": "orb", "condition": "belowLow" },
+        { "target": "vwap", "condition": "below" },
+        { "target": "rvol", "condition": "gte", "value": 1.55 },
+        { "target": "adx", "condition": "gte", "value": 28 }
+      ]
+    }
+  },
+  {
+    "id": "STRAT_6_TRIPLE_EMA_1_5",
+    "name": "Triple EMA Stacked Trend Surge (1:5 Target)",
+    "winrate": "66.8%",
+    "riskRewardRatio": 5.0,
+    "indicators": {
+      "rvolMin": 1.45,
+      "rsiMin": 60,
+      "adxMin": 24
+    },
+    "rules": {
+      "buy": [
+        { "target": "tripleEMA", "condition": "bullishStack" },
+        { "target": "vwap", "condition": "above" },
+        { "target": "rsi", "condition": "gte", "value": 60 },
+        { "target": "rvol", "condition": "gte", "value": 1.45 }
+      ],
+      "sell": [
+        { "target": "tripleEMA", "condition": "bearishStack" },
+        { "target": "vwap", "condition": "below" },
+        { "target": "rsi", "condition": "lte", "value": 40 },
+        { "target": "rvol", "condition": "gte", "value": 1.45 }
+      ]
+    }
+  },
+  {
+    "id": "STRAT_8_DONCHIAN_BREAKOUT_1_5",
+    "name": "Donchian 20 Channel Momentum Expansion (1:5 Target)",
+    "winrate": "65.8%",
+    "riskRewardRatio": 5.0,
+    "indicators": {
+      "donchianPeriod": 20,
+      "rvolMin": 1.55,
+      "rsiMin": 60
+    },
+    "rules": {
+      "buy": [
+        { "target": "donchian", "condition": "upperBreak" },
+        { "target": "vwap", "condition": "above" },
+        { "target": "rsi", "condition": "gte", "value": 60 },
+        { "target": "rvol", "condition": "gte", "value": 1.55 }
+      ],
+      "sell": [
+        { "target": "donchian", "condition": "lowerBreak" },
+        { "target": "vwap", "condition": "below" },
+        { "target": "rsi", "condition": "lte", "value": 40 },
+        { "target": "rvol", "condition": "gte", "value": 1.55 }
+      ]
+    }
+  }
+]

@@ -35,24 +35,12 @@
 
             <div class="header-controls">
                 <div class="control-toggle-group">
-                    <span class="toggle-label">Paper Trade</span>
-                    <label class="switch">
-                        <input type="checkbox" id="paper-toggle" checked onchange="togglePaperTrade(this.checked)">
-                        <span class="slider round"></span>
-                    </label>
-                </div>
-
-                <div class="control-toggle-group">
                     <span class="toggle-label danger-label">Real Trade</span>
                     <label class="switch danger-switch">
                         <input type="checkbox" id="real-toggle" onchange="toggleRealTrade(this.checked)">
                         <span class="slider round"></span>
                     </label>
                 </div>
-
-                <a href="backtest.html" class="nav-link-btn">
-                    <span class="btn-icon">🧪</span> Backtest Engine
-                </a>
 
                 <button class="nav-link-btn restart-btn" onclick="openRestartModal()">
                     <span class="btn-icon">🔄</span> Restart Server
@@ -128,83 +116,8 @@
                 </div>
             </section>
 
-            <!-- 2. TWO-COLUMN GRID: PAPER TRADING & REAL TRADING -->
-            <div class="trading-terminals-grid">
-                
-                <!-- LEFT TERMINAL: PAPER TRADING -->
-                <section class="terminal-column">
-                    <div class="terminal-header">
-                        <h2 class="terminal-title">📄 Paper Trading Terminal</h2>
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            <button class="nav-link-btn clean-btn" onclick="openCleanPaperModal()">
-                                <span class="btn-icon">🧹</span> Reset History
-                            </button>
-                            <span class="status-pill badge-success" id="paper-terminal-badge">ACTIVE</span>
-                        </div>
-                    </div>
-
-                    <!-- PAPER KPI GRID -->
-                    <div class="kpi-grid compact-kpi">
-                        <div class="kpi-card glass-card">
-                            <div class="kpi-header"><span class="kpi-title">Dummy Balance</span><span class="kpi-icon">💰</span></div>
-                            <div class="kpi-value" id="paper-balance">₹1,00,000.00</div>
-                            <div class="kpi-footer"><span class="kpi-subtext">Initial: <span id="paper-initial">₹100,000</span></span></div>
-                        </div>
-
-                        <div class="kpi-card glass-card">
-                            <div class="kpi-header"><span class="kpi-title">Realized PnL</span><span class="kpi-icon">📊</span></div>
-                            <div class="kpi-value" id="paper-total-pnl">₹0.00</div>
-                            <div class="kpi-footer"><span id="paper-pnl-badge" class="badge-neutral">0.00%</span></div>
-                        </div>
-
-                        <div class="kpi-card glass-card">
-                            <div class="kpi-header"><span class="kpi-title">Win Rate</span><span class="kpi-icon">🏆</span></div>
-                            <div class="kpi-value" id="paper-winrate">0.0%</div>
-                            <div class="kpi-footer"><span class="kpi-subtext">Total: <span id="paper-trades-count">0</span> (Win: <span id="paper-wins">0</span> | Loss: <span id="paper-losses">0</span>)</span></div>
-                        </div>
-                    </div>
-
-                    <!-- ACTIVE PAPER POSITION CARD -->
-                    <div class="section-container">
-                        <h3 class="sub-title"><span class="title-icon">⚡</span> Active Paper Position <span id="paper-position-status-badge" class="status-pill status-closed">NO POSITION</span></h3>
-                        <div id="paper-active-position-card" class="active-trade-card glass-card empty-card">
-                            <div class="empty-state-message">
-                                <span class="empty-icon">⏳</span>
-                                <p>No active paper position open.</p>
-                                <span class="empty-subtext">Listening for Consensus Engine Signals...</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- PAPER TRADE HISTORY TABLE -->
-                    <div class="section-container">
-                        <h3 class="sub-title"><span class="title-icon">📜</span> Paper Execution History</h3>
-                        <div class="table-card glass-card">
-                            <div class="table-responsive">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>ID</th>
-                                            <th>Time</th>
-                                            <th>Symbol</th>
-                                            <th>Type</th>
-                                            <th>Entry</th>
-                                            <th>Exit</th>
-                                            <th>Qty</th>
-                                            <th>Reason</th>
-                                            <th>PnL (₹)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="paper-history-tbody">
-                                        <tr><td colspan="9" class="text-center text-muted">No paper trades logged.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- RIGHT TERMINAL: REAL TRADING -->
+            <!-- 2. REAL TRADING BROKER TERMINAL -->
+            <div class="trading-terminals-grid full-width-grid">
                 <section class="terminal-column">
                     <div class="terminal-header">
                         <h2 class="terminal-title">🔴 Real Account Broker Terminal</h2>
@@ -215,7 +128,7 @@
                     <div class="kpi-grid compact-kpi">
                         <div class="kpi-card glass-card">
                             <div class="kpi-header"><span class="kpi-title">Dhan Live Funds</span><span class="kpi-icon">💰</span></div>
-                            <div class="kpi-value text-success" id="real-available-funds">₹679.52</div>
+                            <div class="kpi-value text-success" id="real-available-funds">₹0.00</div>
                             <div class="kpi-footer"><span class="kpi-subtext">Client ID: <span id="real-client-id">1101323815</span></span></div>
                         </div>
 
@@ -271,7 +184,6 @@
                         </div>
                     </div>
                 </section>
-
             </div>
         </main>
     </div>
@@ -293,27 +205,6 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeRestartModal()">Cancel</button>
                 <button class="btn btn-danger" onclick="executeServerRestart()">Confirm Restart</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- CLEAN PAPER TRADE MODAL -->
-    <div id="clean-paper-modal" class="modal-overlay" style="display: none;">
-        <div class="glass-card modal-card">
-            <div class="modal-header">
-                <h3>🧹 Reset Paper Trade History</h3>
-                <button class="close-btn" onclick="closeCleanPaperModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>Paper Trade history & balance reset karne ke liye Password enter karein:</p>
-                <div class="input-group">
-                    <input type="password" id="clean-paper-password-input" placeholder="Enter Password..." autocomplete="current-password" onkeyup="if(event.key==='Enter') executeCleanPaperTrade()">
-                </div>
-                <div id="clean-modal-error-msg" class="modal-error-text" style="display:none;"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeCleanPaperModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="executeCleanPaperTrade()">Confirm Reset</button>
             </div>
         </div>
     </div>

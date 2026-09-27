@@ -92,8 +92,9 @@ class DhanMarketData {
      */
     async getCurrentExpiry(underlyingSecurityId = 13, underlyingExchangeSegment = "IDX_I") {
         const expRes = await this.getOptionChainExpiries(underlyingSecurityId, underlyingExchangeSegment);
-        if (expRes.status === "success" && Array.isArray(expRes.data?.data) && expRes.data.data.length > 0) {
-            return expRes.data.data[0];
+        const expList = Array.isArray(expRes.data) ? expRes.data : (Array.isArray(expRes.data?.data) ? expRes.data.data : []);
+        if (expList.length > 0) {
+            return expList[0];
         }
         return null;
     }
@@ -136,12 +137,13 @@ class DhanMarketData {
         }
 
         const ocRes = await this.getOptionChain(underlyingSecurityId, underlyingExchangeSegment, currentExpiry);
-        if (ocRes.status !== "success" || !ocRes.data?.data) {
+        const ocDataObj = ocRes.data?.data || ocRes.data || {};
+        if (ocRes.status !== "success" || (!ocRes.data?.data && !ocRes.data)) {
             return { status: "error", message: ocRes.message || "Failed to fetch option chain" };
         }
 
-        const spotPrice = Number(ocRes.data.data.last_price || 0);
-        const ocMap = ocRes.data.data.oc || {};
+        const spotPrice = Number(ocDataObj.last_price || ocDataObj.lastPrice || 0);
+        const ocMap = ocDataObj.oc || ocDataObj.optionChain || {};
         
         const sortedStrikes = Object.keys(ocMap)
             .map(k => ({ key: k, strike: parseFloat(k) }))

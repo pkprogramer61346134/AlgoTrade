@@ -1,0 +1,106 @@
+{
+  "title": "NIFTY 1:4 Target Strategy Multi-Year Backtest Report (2018 - 2025)",
+  "targetMode": "1:4 (Risk:Reward = 1:4)",
+  "period": "2018-01-01 to 2025-12-31",
+  "overallStats": {
+    "totalTrades": 6258,
+    "winningTrades": 4472,
+    "losingTrades": 1782,
+    "winrate": "71.5%",
+    "grossWinPoints": 82568.64,
+    "grossLossPoints": 8232.84,
+    "netPoints": 74335.8,
+    "avgPointsPerTrade": 11.88,
+    "profitFactor": "10.03"
+  },
+  "yearlyBreakdown": [
+    {
+      "year": 2018,
+      "totalTrades": 783,
+      "winningTrades": 437,
+      "losingTrades": 345,
+      "winrate": "55.8%",
+      "grossWinPts": 8029.56,
+      "grossLossPts": 1593.9,
+      "netPoints": 6435.66,
+      "profitFactor": "5.04"
+    },
+    {
+      "year": 2019,
+      "totalTrades": 783,
+      "winningTrades": 483,
+      "losingTrades": 298,
+      "winrate": "61.7%",
+      "grossWinPts": 8925.84,
+      "grossLossPts": 1376.76,
+      "netPoints": 7549.08,
+      "profitFactor": "6.48"
+    },
+    {
+      "year": 2020,
+      "totalTrades": 783,
+      "winningTrades": 492,
+      "losingTrades": 291,
+      "winrate": "62.8%",
+      "grossWinPts": 9082.92,
+      "grossLossPts": 1344.42,
+      "netPoints": 7738.5,
+      "profitFactor": "6.76"
+    },
+    {
+      "year": 2021,
+      "totalTrades": 783,
+      "winningTrades": 575,
+      "losingTrades": 207,
+      "winrate": "73.4%",
+      "grossWinPts": 10626,
+      "grossLossPts": 956.34,
+      "netPoints": 9669.66,
+      "profitFactor": "11.11"
+    },
+    {
+      "year": 2022,
+      "totalTrades": 780,
+      "winningTrades": 583,
+      "losingTrades": 197,
+      "winrate": "74.7%",
+      "grossWinPts": 10755.36,
+      "grossLossPts": 910.14,
+      "netPoints": 9845.22,
+      "profitFactor": "11.82"
+    },
+    {
+      "year": 2023,
+      "totalTrades": 780,
+      "winningTrades": 618,
+      "losingTrades": 162,
+      "winrate": "79.2%",
+      "grossWinPts": 11420.64,
+      "grossLossPts": 748.44,
+      "netPoints": 10672.2,
+      "profitFactor": "15.26"
+    },
+    {
+      "year": 2024,
+      "totalTrades": 783,
+      "winningTrades": 628,
+      "losingTrades": 155,
+      "winrate": "80.2%",
+      "grossWinPts": 11605.44,
+      "grossLossPts": 716.1,
+      "netPoints": 10889.34,
+      "profitFactor": "16.21"
+    },
+    {
+      "year": 2025,
+      "totalTrades": 783,
+      "winningTrades": 656,
+      "losingTrades": 127,
+      "winrate": "83.8%",
+      "grossWinPts": 12122.88,
+      "grossLossPts": 586.74,
+      "netPoints": 11536.14,
+      "profitFactor": "20.66"
+    }
+  ]
+}

@@ -8,14 +8,13 @@ const path = require('path');
 const http = require('http');
 
 const mainConfig = require('./config_manager');
-const paperTradeEngine = require('./pepertread/pepertread');
-const paperConfig = require('./pepertread/config');
-const paperTrailingSLEngine = require('./pepertread/paper_trailingsl');
+const masterSL = require('./masterSL/masterSL');
 const realTradeEngine = require('./realtread/realtread');
 const realConfig = require('./realtread/config');
 const backtestEngine = require('./backtesting/backtesting');
 
 function createUIServer(port = 3000) {
+    let server = null;
     const app = express();
     app.use(express.json());
 
@@ -43,7 +42,6 @@ function createUIServer(port = 3000) {
                 livePrice: 0,
                 consensus: { consensus: "NO_SIGNAL", strategyStates: [] },
                 config: mainConfig.getConfig(),
-                paperStatus: paperTradeEngine.getStatus(),
                 realStatus: realTradeEngine.getStatus()
             };
             res.json({ status: "success", data });
@@ -61,13 +59,13 @@ function createUIServer(port = 3000) {
         }
     });
 
-    // 3. Update Central Config (Paper & Real Trading Toggles - Password Protected: pavan61346134)
+    // 3. Update Central Config (Real Trading Toggle - Password Protected: pavan61346134)
     app.post('/api/config', (req, res) => {
         try {
-            const { paperTradeEnabled, realTradeEnabled, password } = req.body || {};
+            const { realTradeEnabled, password } = req.body || {};
 
             // Password verification for toggles
-            if (paperTradeEnabled !== undefined || realTradeEnabled !== undefined) {
+            if (realTradeEnabled !== undefined) {
                 if (password !== "pavan61346134") {
                     return res.status(401).json({ status: "error", message: "Incorrect Password! Access Denied." });
                 }
@@ -75,11 +73,7 @@ function createUIServer(port = 3000) {
 
             const updated = mainConfig.updateConfig(req.body);
             
-            // Sync engines
-            if (paperTradeEnabled !== undefined) {
-                if (paperTradeEnabled) paperTradeEngine.startPaperTrading();
-                else paperTradeEngine.stopPaperTrading();
-            }
+            // Sync engine
             if (realTradeEnabled !== undefined) {
                 if (realTradeEnabled) realTradeEngine.startRealTrading();
                 else realTradeEngine.stopRealTrading();
@@ -91,17 +85,7 @@ function createUIServer(port = 3000) {
         }
     });
 
-    // 4. Get Paper Trading Status
-    app.get('/api/status/paper', (req, res) => {
-        try {
-            const status = paperTradeEngine.getStatus();
-            res.json({ status: "success", data: status });
-        } catch (e) {
-            res.status(500).json({ status: "error", message: e.message });
-        }
-    });
-
-    // 5. Get Real Trading Status
+    // 4. Get Real Trading Status
     app.get('/api/status/real', (req, res) => {
         try {
             const status = realTradeEngine.getStatus();
@@ -111,7 +95,7 @@ function createUIServer(port = 3000) {
         }
     });
 
-    // 6. Run Backtest Engine
+    // 5. Run Backtest Engine
     app.post('/api/backtest/run', async (req, res) => {
         try {
             const report = await backtestEngine.runBacktest(req.body);
@@ -121,7 +105,7 @@ function createUIServer(port = 3000) {
         }
     });
 
-    // 7. Get Last Backtest Report
+    // 6. Get Last Backtest Report
     app.get('/api/backtest/report', (req, res) => {
         try {
             const report = backtestEngine.getReport();
@@ -131,7 +115,7 @@ function createUIServer(port = 3000) {
         }
     });
 
-    // 8. Restart Server Endpoint (Password Protected: pavan61346134)
+    // 7. Restart Server Endpoint (Password Protected: pavan61346134)
     app.post('/api/restart-server', (req, res) => {
         try {
             const { password } = req.body || {};
@@ -143,29 +127,32 @@ function createUIServer(port = 3000) {
 
             setTimeout(() => {
                 console.log("\n==========================================================================");
-                console.log(`🔄 [SERVER RESTART REQUESTED] Password Verified! Exiting process for PM2 auto-restart...`);
+                console.log(`🔄 [SERVER RESTART REQUESTED] Password Verified! Spawning new server process...`);
                 console.log("==========================================================================\n");
-                process.exit(0);
+
+                try {
+                    if (server) {
+                        server.close();
+                    }
+                } catch (e) {}
+
+                try {
+                    const { spawn } = require('child_process');
+                    const scriptPath = process.argv[1] || path.join(__dirname, '../main.js');
+                    const child = spawn(process.execPath, [scriptPath], {
+                        cwd: process.cwd(),
+                        detached: true,
+                        stdio: 'ignore'
+                    });
+                    child.unref();
+                } catch (err) {
+                    console.error("❌ Error spawning restart process:", err.message);
+                }
+
+                setTimeout(() => {
+                    process.exit(0);
+                }, 500);
             }, 1000);
-        } catch (e) {
-            res.status(500).json({ status: "error", message: e.message });
-        }
-    });
-
-    // 9. Clean Paper Trade Endpoint (Password Protected: pavan61346134)
-    app.post('/api/clean-paper-trade', (req, res) => {
-        try {
-            const { password, initialBalance } = req.body || {};
-            if (password !== "pavan61346134") {
-                return res.status(401).json({ status: "error", message: "Incorrect Password! Access Denied." });
-            }
-
-            paperTrailingSLEngine.resetPaperTrade(initialBalance || 10000);
-            console.log("\n==========================================================================");
-            console.log(`🧹 [CLEAN PAPER TRADE] Password Verified! Reset paper trade history & balance to ₹${initialBalance || 10000}.`);
-            console.log("==========================================================================\n");
-
-            res.json({ status: "success", message: "Paper trade history & balance cleared successfully!" });
         } catch (e) {
             res.status(500).json({ status: "error", message: e.message });
         }
@@ -176,7 +163,7 @@ function createUIServer(port = 3000) {
         res.sendFile(path.join(publicPath, 'index.html'));
     });
 
-    const server = http.createServer(app);
+    server = http.createServer(app);
     server.listen(port, () => {
         console.log("\n==========================================================================");
         console.log(`🌐 [UI SERVER READY] Realtime Chrome Dashboard active!`);

@@ -54,7 +54,12 @@ class DhanOrders {
         };
 
         if (options.body) {
-            const bodyObj = typeof options.body === "object" ? { dhanClientId: auth.clientId, ...options.body } : options.body;
+            let bodyObj = typeof options.body === "object" ? { ...options.body } : options.body;
+            if (typeof bodyObj === "object" && bodyObj !== null) {
+                if (!bodyObj.dhanClientId || bodyObj.dhanClientId === "undefined") {
+                    bodyObj.dhanClientId = auth.clientId;
+                }
+            }
             fetchOptions.body = typeof bodyObj === "string" ? bodyObj : JSON.stringify(bodyObj);
         }
 
@@ -78,10 +83,11 @@ class DhanOrders {
 
     // --- Regular Orders ---
     async placeOrder(params = {}) {
+        const auth = this.getAuth();
         return await this.request("/orders", {
             method: "POST",
             body: {
-                dhanClientId: this.clientId,
+                dhanClientId: auth.clientId,
                 correlationId: params.correlationId || `ORD_${Date.now()}`,
                 transactionType: params.transactionType,
                 exchangeSegment: params.exchangeSegment,
@@ -103,10 +109,11 @@ class DhanOrders {
     }
 
     async modifyOrder(orderId, params = {}) {
+        const auth = this.getAuth();
         return await this.request(`/orders/${orderId}`, {
             method: "PUT",
             body: {
-                dhanClientId: this.clientId,
+                dhanClientId: auth.clientId,
                 orderId: orderId,
                 orderType: params.orderType,
                 quantity: params.quantity,
@@ -141,10 +148,11 @@ class DhanOrders {
 
     // --- Slice Orders ---
     async placeSliceOrder(params = {}) {
+        const auth = this.getAuth();
         return await this.request("/orders/slicing", {
             method: "POST",
             body: {
-                dhanClientId: this.clientId,
+                dhanClientId: auth.clientId,
                 transactionType: params.transactionType,
                 exchangeSegment: params.exchangeSegment,
                 productType: params.productType,
@@ -160,10 +168,11 @@ class DhanOrders {
 
     // --- Super / Bracket Orders ---
     async placeSuperOrder(params = {}) {
+        const auth = this.getAuth();
         return await this.request("/super/orders", {
             method: "POST",
             body: {
-                dhanClientId: this.clientId,
+                dhanClientId: auth.clientId,
                 correlationId: params.correlationId || `SUPER_${Date.now()}`,
                 transactionType: params.transactionType,
                 exchangeSegment: params.exchangeSegment,
@@ -180,18 +189,33 @@ class DhanOrders {
     }
 
     async modifySuperOrder(superOrderId, params = {}) {
+        const auth = this.getAuth();
+        const legName = params.legName || "STOP_LOSS_LEG";
+        const bodyObj = {
+            dhanClientId: auth.clientId,
+            orderId: String(superOrderId),
+            orderType: params.orderType || "LIMIT",
+            legName: legName,
+            quantity: Number(params.quantity),
+            price: Number(params.price || 0)
+        };
+
+        if (legName === "STOP_LOSS_LEG" || params.stopLossPrice) {
+            bodyObj.stopLossPrice = Number(params.stopLossPrice || params.price || 0);
+            if (!bodyObj.price || bodyObj.price <= 0) {
+                bodyObj.price = bodyObj.stopLossPrice;
+            }
+        }
+        if (legName === "TARGET_LEG" || params.targetPrice) {
+            bodyObj.targetPrice = Number(params.targetPrice || params.price || 0);
+            if (!bodyObj.price || bodyObj.price <= 0) {
+                bodyObj.price = bodyObj.targetPrice;
+            }
+        }
+
         return await this.request(`/super/orders/${superOrderId}`, {
             method: "PUT",
-            body: {
-                dhanClientId: this.clientId,
-                orderId: superOrderId,
-                orderType: params.orderType || "LIMIT",
-                legName: params.legName || "TARGET_LEG",
-                quantity: params.quantity,
-                price: params.price || 0,
-                targetPrice: params.targetPrice || params.price || 0,
-                stopLossPrice: params.stopLossPrice || params.stopLoss || 0
-            }
+            body: bodyObj
         });
     }
 
@@ -205,10 +229,11 @@ class DhanOrders {
 
     // --- Forever / GTT Orders ---
     async placeForeverOrder(params = {}) {
+        const auth = this.getAuth();
         return await this.request("/forever/orders", {
             method: "POST",
             body: {
-                dhanClientId: this.clientId,
+                dhanClientId: auth.clientId,
                 orderFlag: params.orderFlag || "SINGLE",
                 transactionType: params.transactionType,
                 exchangeSegment: params.exchangeSegment,

@@ -24,7 +24,7 @@
                 </div>
                 <div class="brand-text">
                     <h1>AlgoTrade <span>Backtesting Studio</span></h1>
-                    <p class="subtitle">NIFTY Consensus Head & 4-Stage Trailing SL Engine Simulator</p>
+                    <p class="subtitle">NIFTY Strategy Engine & MasterSL Trade Performance Evaluator</p>
                 </div>
             </div>
 
@@ -70,21 +70,6 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="initialBalance"><i class="fa-solid fa-indian-rupee-sign"></i> Initial Capital (₹)</label>
-                        <input type="number" id="initialBalance" name="initialBalance" value="10000" step="1000">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="maxLossPerTrade"><i class="fa-solid fa-shield-halved"></i> Max Loss / Trade (₹)</label>
-                        <input type="number" id="maxLossPerTrade" name="maxLossPerTrade" value="300" min="50" max="50000" step="50" placeholder="e.g. 300">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="lots"><i class="fa-solid fa-layer-group"></i> Lots (65 Qty/Lot)</label>
-                        <input type="number" id="lots" name="lots" value="1" min="1" max="50">
-                    </div>
-
-                    <div class="form-group">
                         <label for="maxTradesPerDay"><i class="fa-solid fa-hand"></i> Max Trades / Day</label>
                         <input type="number" id="maxTradesPerDay" name="maxTradesPerDay" value="3" min="1" max="20">
                     </div>
@@ -125,16 +110,42 @@
             <!-- KPI METRICS SUMMARY GRID -->
             <section class="kpi-grid">
                 
-                <!-- NET PNL CARD -->
-                <div class="kpi-card pnl-card" id="kpiNetPnlCard">
+                <!-- TOTAL TRADES CARD -->
+                <div class="kpi-card">
                     <div class="kpi-header">
-                        <span class="kpi-title">Net Realized PnL</span>
-                        <div class="kpi-icon pnl-icon"><i class="fa-solid fa-wallet"></i></div>
+                        <span class="kpi-title">Total Trades</span>
+                        <div class="kpi-icon trade-icon"><i class="fa-solid fa-list-check"></i></div>
                     </div>
-                    <div class="kpi-value" id="kpiNetPnl">₹0.00</div>
+                    <div class="kpi-value" id="kpiTotalTrades">0</div>
                     <div class="kpi-subtext">
-                        <span id="kpiNetPnlPercent" class="badge badge-neutral">+0.00%</span>
-                        <span class="sub-label">Return on Capital</span>
+                        <span class="sub-label">Avg Points/Trade: </span>
+                        <strong id="kpiAvgTradePoints">0.00 pts</strong>
+                    </div>
+                </div>
+
+                <!-- PASS TRADES CARD -->
+                <div class="kpi-card pnl-card" id="kpiPassCard">
+                    <div class="kpi-header">
+                        <span class="kpi-title">PASS Trades (Win)</span>
+                        <div class="kpi-icon win-icon"><i class="fa-solid fa-circle-check"></i></div>
+                    </div>
+                    <div class="kpi-value" id="kpiPassCount" style="color: var(--success);">0 PASS</div>
+                    <div class="kpi-subtext">
+                        <span id="kpiPassRatePercent" class="badge badge-success">0.0% Win</span>
+                        <span class="sub-label">Successful Trades 🟢</span>
+                    </div>
+                </div>
+
+                <!-- LOSS TRADES CARD -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">LOSS Trades (Fail)</span>
+                        <div class="kpi-icon dd-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+                    </div>
+                    <div class="kpi-value danger-text" id="kpiLossCount">0 LOSS</div>
+                    <div class="kpi-subtext">
+                        <span id="kpiLossRatePercent" class="badge badge-danger">0.0% Loss</span>
+                        <span class="sub-label">Failed Trades 🔴</span>
                     </div>
                 </div>
 
@@ -146,48 +157,22 @@
                     </div>
                     <div class="kpi-value" id="kpiWinrate">0.0%</div>
                     <div class="kpi-subtext">
-                        <span class="win-count" id="kpiWinCount">0 Wins</span>
+                        <span class="win-count" id="kpiSubWinCount">0 PASS</span>
                         <span class="divider">/</span>
-                        <span class="loss-count" id="kpiLossCount">0 Losses</span>
+                        <span class="loss-count" id="kpiSubLossCount">0 LOSS</span>
                     </div>
                 </div>
 
-                <!-- TOTAL TRADES CARD -->
+                <!-- NET POINTS CARD -->
                 <div class="kpi-card">
                     <div class="kpi-header">
-                        <span class="kpi-title">Total Trades</span>
-                        <div class="kpi-icon trade-icon"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+                        <span class="kpi-title">Net Points Gain</span>
+                        <div class="kpi-icon pf-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
                     </div>
-                    <div class="kpi-value" id="kpiTotalTrades">0</div>
+                    <div class="kpi-value" id="kpiNetPoints">+0.00 pts</div>
                     <div class="kpi-subtext">
-                        <span class="sub-label">Avg Trade PnL: </span>
-                        <strong id="kpiAvgTradePnl">₹0.00</strong>
-                    </div>
-                </div>
-
-                <!-- MAX DRAWDOWN CARD -->
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-title">Max Drawdown</span>
-                        <div class="kpi-icon dd-icon"><i class="fa-solid fa-chart-line-down"></i></div>
-                    </div>
-                    <div class="kpi-value danger-text" id="kpiMaxDrawdown">₹0.00</div>
-                    <div class="kpi-subtext">
-                        <span id="kpiMaxDrawdownPercent" class="badge badge-danger">0.00%</span>
-                        <span class="sub-label">Peak to Trough</span>
-                    </div>
-                </div>
-
-                <!-- PROFIT FACTOR CARD -->
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <span class="kpi-title">Profit Factor</span>
-                        <div class="kpi-icon pf-icon"><i class="fa-solid fa-scale-balanced"></i></div>
-                    </div>
-                    <div class="kpi-value" id="kpiProfitFactor">0.00</div>
-                    <div class="kpi-subtext">
-                        <span class="sub-label">Target R:R </span>
-                        <strong class="highlight-text" id="kpiTargetRr">4-Stage Trailing</strong>
+                        <span class="sub-label">Profit Factor: </span>
+                        <strong class="highlight-text" id="kpiProfitFactor">0.00</strong>
                     </div>
                 </div>
 
@@ -200,7 +185,7 @@
                         <i class="fa-solid fa-list-check"></i> Executed Trades Audit Log (<span id="tabTradesCount">0</span>)
                     </button>
                     <button class="tab-btn" data-tab="dailyTab">
-                        <i class="fa-solid fa-calendar-days"></i> Daily PnL Breakdown
+                        <i class="fa-solid fa-calendar-days"></i> Daily Trades Breakdown
                     </button>
                     <button class="tab-btn" data-tab="rulesTab">
                         <i class="fa-solid fa-book-bookmark"></i> Strategy & Rules Guide
@@ -216,8 +201,8 @@
                         </div>
                         <div class="filter-btn-group">
                             <button class="filter-btn active" data-filter="ALL">All</button>
-                            <button class="filter-btn" data-filter="WIN">Wins Only 🟢</button>
-                            <button class="filter-btn" data-filter="LOSS">Losses Only 🔴</button>
+                            <button class="filter-btn" data-filter="WIN">PASS Only 🟢</button>
+                            <button class="filter-btn" data-filter="LOSS">LOSS Only 🔴</button>
                             <button class="filter-btn" data-filter="CE">CE (BUY)</button>
                             <button class="filter-btn" data-filter="PE">PE (SELL)</button>
                         </div>
@@ -230,13 +215,13 @@
                                     <th>Trade ID</th>
                                     <th>Entry Date & Time</th>
                                     <th>Type</th>
-                                    <th>Entry Spot (₹)</th>
-                                    <th>Initial SL (₹)</th>
-                                    <th>Target TR4 (₹)</th>
+                                    <th>Entry Spot</th>
+                                    <th>Initial SL</th>
+                                    <th>Target TR4</th>
                                     <th>Exit Date & Time</th>
-                                    <th>Exit Spot (₹)</th>
+                                    <th>Exit Spot</th>
                                     <th>Exit Reason</th>
-                                    <th class="text-right">Realized PnL (₹)</th>
+                                    <th class="text-right">Result & Points</th>
                                 </tr>
                             </thead>
                             <tbody id="tradesTableBody">
@@ -256,10 +241,10 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>Total Trades</th>
-                                    <th>Winning Trades</th>
-                                    <th>Losing Trades</th>
+                                    <th>PASS Trades 🟢</th>
+                                    <th>LOSS Trades 🔴</th>
                                     <th>Win Rate</th>
-                                    <th class="text-right">Day Realized PnL (₹)</th>
+                                    <th class="text-right">Net Day Points</th>
                                 </tr>
                             </thead>
                             <tbody id="dailyTableBody">
@@ -285,7 +270,7 @@
                         </div>
 
                         <div class="rule-box">
-                            <h3><i class="fa-solid fa-strikethrough"></i> 4-Stage Trailing Stop Loss Rules</h3>
+                            <h3><i class="fa-solid fa-strikethrough"></i> MasterSL Trailing SL Rules</h3>
                             <ul>
                                 <li><strong>Initial Risk</strong>: Entry Spot \(\pm\) Risk Points (SL).</li>
                                 <li><strong>TR1 (1:1 Hit)</strong>: Trailed to <em>Cost-to-Cost (Entry Spot)</em>. Zero risk!</li>
@@ -303,7 +288,7 @@
 
         <!-- FOOTER -->
         <footer class="footer">
-            <p>AlgoTrade © 2026 | Dedicated Backtest Engine v2.0 | NIFTY Index Simulation</p>
+            <p>AlgoTrade © 2026 | Dedicated Backtest Engine | Trade PASS/LOSS Evaluator</p>
         </footer>
 
     </div>

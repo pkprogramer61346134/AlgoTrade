@@ -6,7 +6,7 @@
 function calculateRSI(data = [], period = 14) {
     if (!data || data.length < period + 1) return [];
 
-    const prices = data.map(d => typeof d === 'object' ? d.close : d);
+    const prices = data.map(d => typeof d === 'object' ? Number(d.close ?? d.candleClose ?? d.price ?? 0) : Number(d || 0));
     const rsiValues = new Array(prices.length).fill(null);
 
     let gains = 0;

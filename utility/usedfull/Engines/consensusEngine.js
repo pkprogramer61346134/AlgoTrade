@@ -51,6 +51,77 @@ function loadStrategyConfig(configName = "consensus_master_head.json") {
     return {};
 }
 
+const STRATEGIES_DIR = path.join(__dirname, 'strategies');
+
+/**
+ * Resolves and loads all active strategies from strategy group JSON files
+ * listed in config.strategies (or config.strategyFiles) with `true` toggle flags.
+ */
+function resolveAllStrategies(config = {}) {
+    const loadedStrategies = [];
+
+    // 1. Check if config.strategies or config.strategyFiles is an object mapping strategy files -> boolean OR { enabled, minVotes }
+    const fileMap = config.strategyFiles || (config.strategies && typeof config.strategies === 'object' && !Array.isArray(config.strategies) ? config.strategies : null);
+
+    if (fileMap && typeof fileMap === 'object') {
+        for (const [fileName, val] of Object.entries(fileMap)) {
+            const isEnabled = val === true || (typeof val === 'object' && val !== null && val.enabled === true);
+            if (!isEnabled) continue;
+
+            const groupMinVotes = (typeof val === 'object' && val !== null && val.minVotes !== undefined) ? Number(val.minVotes) : undefined;
+            const cleanFileName = fileName.replace(/^(\.\/|strategies[/\\])+/i, '');
+            const filePath = path.isAbsolute(fileName) ? fileName : path.join(STRATEGIES_DIR, cleanFileName);
+
+            if (fs.existsSync(filePath)) {
+                try {
+                    const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    const list = Array.isArray(content) ? content : (content.strategies || (content.id ? [content] : []));
+
+                    for (const s of list) {
+                        if (s && s.enabled !== false) {
+                            if (groupMinVotes !== undefined && s.minVotes === undefined) {
+                                s.groupMinVotes = groupMinVotes;
+                            }
+                            loadedStrategies.push(s);
+                        }
+                    }
+                } catch (err) {
+                    console.error(`❌ [CONSENSUS ENGINE] Failed to parse strategy file ${fileName}: ${err.message}`);
+                }
+            } else {
+                console.warn(`⚠️ [CONSENSUS ENGINE] Strategy group file not found: ${filePath}`);
+            }
+        }
+    }
+
+    // 2. Fallback / Array support if config.strategies is an array
+    if (Array.isArray(config.strategies)) {
+        for (const item of config.strategies) {
+            if (typeof item === 'string' && item.endsWith('.json')) {
+                const cleanFileName = item.replace(/^(\.\/|strategies[/\\])+/i, '');
+                const filePath = path.isAbsolute(item) ? item : path.join(STRATEGIES_DIR, cleanFileName);
+                if (fs.existsSync(filePath)) {
+                    try {
+                        const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                        const list = Array.isArray(content) ? content : (content.strategies || []);
+                        for (const s of list) {
+                            if (s && s.enabled !== false) loadedStrategies.push(s);
+                        }
+                    } catch (e) {
+                        console.error(`❌ [CONSENSUS ENGINE] Error loading strategy file ${item}: ${e.message}`);
+                    }
+                }
+            } else if (item && typeof item === 'object') {
+                if (item.enabled !== false) {
+                    loadedStrategies.push(item);
+                }
+            }
+        }
+    }
+
+    return loadedStrategies;
+}
+
 /**
  * Compute technical indicators across candle dataset
  */
@@ -90,10 +161,11 @@ function computeIndicators(candles, cfg = {}) {
             if (!candlesByDate[d]) candlesByDate[d] = [];
             candlesByDate[d].push(c);
         }
+        const fnORB = indicators.getOpeningRange || (indicators.marketContext && indicators.marketContext.getOpeningRange);
         for (const [d, dateCandles] of Object.entries(candlesByDate)) {
-            if (indicators.marketContext && indicators.marketContext.getOpeningRange) {
-                const res = indicators.marketContext.getOpeningRange(dateCandles, 15);
-                orbMap[d] = { high: res.orbHigh, low: res.orbLow };
+            if (fnORB) {
+                const res = fnORB(dateCandles, 15);
+                orbMap[d] = { high: res ? res.orbHigh : null, low: res ? res.orbLow : null };
             }
         }
         const dates = Object.keys(candlesByDate);
@@ -109,7 +181,8 @@ function computeIndicators(candles, cfg = {}) {
         }
     }
 
-    const wicks = (candles && Array.isArray(candles)) ? candles.map(c => (indicators.priceAction && indicators.priceAction.analyzeWicks) ? indicators.priceAction.analyzeWicks(c) : null) : [];
+    const fnWicks = indicators.analyzeWicks || (indicators.priceAction && indicators.priceAction.analyzeWicks);
+    const wicks = (candles && Array.isArray(candles)) ? candles.map(c => fnWicks ? fnWicks(c) : null) : [];
 
     return { vwap, supertrend, rvol, rsi, adx, atr, ema10, emaFast, emaSlow, macd, bollinger, donchian, orb: orbMap, prevDay: prevDayMap, wicks };
 }
@@ -118,16 +191,22 @@ function computeIndicators(candles, cfg = {}) {
  * Evaluate a single strategy against a candle
  */
 function evaluateSingleStrategy(c, i, candles, strat, computed) {
-    const spotPrice = c.close || c.candleClose || c.price;
+    if (!c) return null;
+    const spotPrice = Number(c.close || c.candleClose || c.price || c.ltp || c.liveLtp || 0);
+    if (!spotPrice || isNaN(spotPrice) || spotPrice <= 0) return null;
     const vwapVal = computed.vwap ? computed.vwap[i] : null;
     const stObj = computed.supertrend ? computed.supertrend[i] : null;
-    const rvolVal = computed.rvol ? computed.rvol[i] : 1.0;
-    const rsiVal = computed.rsi ? computed.rsi[i] : 50.0;
+    const rvolVal = computed.rvol ? computed.rvol[i] : null;
+    const rsiVal = computed.rsi ? computed.rsi[i] : null;
     const adxObj = computed.adx ? computed.adx[i] : null;
-    const adxVal = adxObj && adxObj.adx !== undefined ? adxObj.adx : 25.0;
+    const adxVal = (adxObj && adxObj.adx !== undefined) ? adxObj.adx : null;
     const rawAtr = computed.atr ? computed.atr[i] : null;
-    const atrVal = (rawAtr && typeof rawAtr === 'object' && rawAtr.atr !== undefined) ? Number(rawAtr.atr) : (typeof rawAtr === 'number' && !isNaN(rawAtr) ? rawAtr : 15.0);
-    const safeAtr = (isNaN(atrVal) || atrVal <= 0) ? 15.0 : atrVal;
+    const atrVal = (rawAtr && typeof rawAtr === 'object' && rawAtr.atr !== undefined) ? Number(rawAtr.atr) : (typeof rawAtr === 'number' && !isNaN(rawAtr) ? rawAtr : null);
+
+    const candleHigh = c.high || c.candleHigh || spotPrice;
+    const candleLow = c.low || c.candleLow || spotPrice;
+    const candleRange = Math.abs(candleHigh - candleLow);
+    const safeAtr = (atrVal !== null && atrVal > 0) ? atrVal : Math.max(0.1, candleRange);
 
     const e10 = computed.ema10 ? computed.ema10[i] : null;
     const eFast = computed.emaFast ? computed.emaFast[i] : null;
@@ -145,16 +224,12 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
     const isLowerWickRej = wickObj && (wickObj.rejection === "BUYING_REJECTION" || wickObj.lowerWickRatio >= 40);
     const isUpperWickRej = wickObj && (wickObj.rejection === "SELLING_REJECTION" || wickObj.upperWickRatio >= 40);
 
-    const candleHigh = c.high || c.candleHigh || spotPrice;
-    const candleLow = c.low || c.candleLow || spotPrice;
-    const candleRange = Math.abs(candleHigh - candleLow);
-
     const cfgInds = strat.indicators || {};
     const minRvol = cfgInds.rvolMin || 1.20;
     const minAdx = cfgInds.adxMin || 18;
     const atrMult = cfgInds.atrMultiplier || 1.8;
 
-    const effectiveRvol = (rvolVal !== null && rvolVal <= 1.15 && (adxVal >= 18 || Math.abs(rsiVal - 50) >= 3)) ? 1.50 : (rvolVal || 1.0);
+    const effectiveRvol = (rvolVal !== null && rvolVal <= 1.15 && ((adxVal !== null && adxVal >= 18) || (rsiVal !== null && Math.abs(rsiVal - 50) >= 3))) ? 1.50 : rvolVal;
 
     let signalType = "NONE";
 
@@ -166,9 +241,9 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
             for (const r of strat.rules.buy) {
                 if (r.target === "supertrend" && r.condition === "bullish" && !isStBull) buyMatch = false;
                 if (r.target === "vwap" && r.condition === "above" && (vwapVal === null || spotPrice <= vwapVal)) buyMatch = false;
-                if (r.target === "rvol" && r.condition === "gte" && effectiveRvol < (r.value || minRvol)) buyMatch = false;
-                if (r.target === "rsi" && r.condition === "gte" && rsiVal < (r.value || 50)) buyMatch = false;
-                if (r.target === "adx" && r.condition === "gte" && adxVal < (r.value || minAdx)) buyMatch = false;
+                if (r.target === "rvol" && r.condition === "gte" && (effectiveRvol === null || effectiveRvol < (r.value || minRvol))) buyMatch = false;
+                if (r.target === "rsi" && r.condition === "gte" && (rsiVal === null || rsiVal < (r.value || 50))) buyMatch = false;
+                if (r.target === "adx" && r.condition === "gte" && (adxVal === null || adxVal < (r.value || minAdx))) buyMatch = false;
                 if (r.target === "orb" && r.condition === "aboveHigh" && (!orbObj || orbObj.high === null || spotPrice <= orbObj.high)) buyMatch = false;
                 if (r.target === "ema" && r.condition === "goldenCross" && (eFast === null || eSlow === null || eFast <= eSlow)) buyMatch = false;
                 if (r.target === "tripleEMA" && r.condition === "bullishStack" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) buyMatch = false;
@@ -185,16 +260,16 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
             for (const r of strat.rules.sell) {
                 if (r.target === "supertrend" && r.condition === "bearish" && !isStBear) sellMatch = false;
                 if (r.target === "vwap" && r.condition === "below" && (vwapVal === null || spotPrice >= vwapVal)) sellMatch = false;
-                if (r.target === "rvol" && r.condition === "gte" && effectiveRvol < (r.value || minRvol)) sellMatch = false;
-                if (r.target === "rsi" && r.condition === "lte" && rsiVal > (r.value || 50)) sellMatch = false;
-                if (r.target === "adx" && r.condition === "gte" && adxVal < (r.value || minAdx)) sellMatch = false;
+                if (r.target === "rvol" && r.condition === "gte" && (effectiveRvol === null || effectiveRvol < (r.value || minRvol))) sellMatch = false;
+                if (r.target === "rsi" && r.condition === "lte" && (rsiVal === null || rsiVal > (r.value || 50))) sellMatch = false;
+                if (r.target === "adx" && r.condition === "gte" && (adxVal === null || adxVal < (r.value || minAdx))) sellMatch = false;
                 if (r.target === "orb" && r.condition === "belowLow" && (!orbObj || orbObj.low === null || spotPrice >= orbObj.low)) sellMatch = false;
                 if (r.target === "ema" && r.condition === "deathCross" && (eFast === null || eSlow === null || eFast >= eSlow)) sellMatch = false;
-                if (r.target === "tripleEMA" && r.condition === "bearishStack" && (e10 === null || eFast === null || eSlow === null || e10 >= eSlow || eFast >= eSlow)) sellMatch = false;
+                if (r.target === "tripleEMA" && r.condition === "bearishStack" && (e10 === null || eFast === null || eSlow === null || e10 >= eFast || eFast >= eSlow)) sellMatch = false;
                 if (r.target === "priceAction" && r.condition === "upperWickRejection" && !isUpperWickRej) sellMatch = false;
                 if (r.target === "macd" && r.condition === "bearishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd >= macdObj.signal)) sellMatch = false;
                 if (r.target === "donchian" && r.condition === "lowerBreak" && (!donchianObj || donchianObj.lower === null || spotPrice >= donchianObj.lower)) sellMatch = false;
-                if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) buyMatch = false;
+                if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) sellMatch = false;
                 if (r.target === "prevDay" && r.condition === "belowPDL" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellMatch = false;
                 if (r.target === "bollinger" && r.condition === "lowerBandBreak" && (!bbObj || !bbObj.lower || spotPrice >= bbObj.lower)) sellMatch = false;
             }
@@ -254,26 +329,46 @@ function getStrategyFailureReason(c, i, candles, strat, computed) {
     const minRvol = cfgInds.rvolMin || 1.20;
     const minAdx = cfgInds.adxMin || 18;
 
-    const reasons = [];
+    const buyReasons = [];
+    const sellReasons = [];
 
     if (strat.rules && Array.isArray(strat.rules.buy)) {
         for (const r of strat.rules.buy) {
-            if (r.target === "supertrend" && !isStBull) reasons.push("Supertrend Bearish/Neutral");
-            if (r.target === "vwap" && (vwapVal === null || spotPrice <= vwapVal)) reasons.push(`Price Below VWAP (₹${spotPrice.toFixed(1)} <= ₹${vwapVal ? vwapVal.toFixed(1) : 'N/A'})`);
-            if (r.target === "rsi" && (rsiVal === null || rsiVal < (r.value || 50))) reasons.push(`RSI Low (${rsiVal !== null ? rsiVal.toFixed(1) : 'N/A'} < ${r.value || 50})`);
-            if (r.target === "rvol" && (rvolVal || 1.0) < (r.value || minRvol)) reasons.push(`RVOL Low (${(rvolVal || 1.0).toFixed(2)} < ${r.value || minRvol})`);
-            if (r.target === "adx" && (adxVal === null || adxVal < (r.value || minAdx))) reasons.push(`ADX Weak (${adxVal !== null ? adxVal.toFixed(1) : 'N/A'} < ${r.value || minAdx})`);
-            if (r.target === "orb" && (!orbObj || !orbObj.high || spotPrice <= orbObj.high)) reasons.push(`Below ORB High (₹${orbObj?.high ? orbObj.high.toFixed(1) : 'N/A'})`);
-            if (r.target === "tripleEMA" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) reasons.push("EMA 10/20/50 Not Bullish");
-            if (r.target === "ema" && (eFast === null || eSlow === null || eFast <= eSlow)) reasons.push("EMA Fast <= Slow");
-            if (r.target === "macd" && (!macdObj || !macdObj.macd || !macdObj.signal || macdObj.macd <= macdObj.signal)) reasons.push("MACD Below Signal");
-            if (r.target === "donchian" && (!donchianObj || !donchianObj.upper || spotPrice <= donchianObj.upper)) reasons.push("Below Donchian Upper");
-            if (r.target === "prevDay" && (!prevDayObj || !prevDayObj.pdh || spotPrice <= prevDayObj.pdh)) reasons.push("Below Previous Day High");
+            if (r.target === "supertrend" && !isStBull) buyReasons.push("Supertrend Bearish/Neutral");
+            if (r.target === "vwap" && (vwapVal === null || spotPrice <= vwapVal)) buyReasons.push(`Price Below VWAP (₹${spotPrice.toFixed(1)} <= ₹${vwapVal ? vwapVal.toFixed(1) : 'N/A'})`);
+            if (r.target === "rsi" && (rsiVal === null || rsiVal < (r.value || 50))) buyReasons.push(`RSI Low (${rsiVal !== null ? rsiVal.toFixed(1) : 'N/A'} < ${r.value || 50})`);
+            if (r.target === "rvol" && (rvolVal || 1.0) < (r.value || minRvol)) buyReasons.push(`RVOL Low (${(rvolVal || 1.0).toFixed(2)} < ${r.value || minRvol})`);
+            if (r.target === "adx" && (adxVal === null || adxVal < (r.value || minAdx))) buyReasons.push(`ADX Weak (${adxVal !== null ? adxVal.toFixed(1) : 'N/A'} < ${r.value || minAdx})`);
+            if (r.target === "orb" && (!orbObj || !orbObj.high || spotPrice <= orbObj.high)) buyReasons.push(`Below ORB High (₹${orbObj?.high ? orbObj.high.toFixed(1) : 'N/A'})`);
+            if (r.target === "tripleEMA" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) buyReasons.push("EMA 10/20/50 Not Bullish");
+            if (r.target === "ema" && (eFast === null || eSlow === null || eFast <= eSlow)) buyReasons.push("EMA Fast <= Slow");
+            if (r.target === "macd" && (!macdObj || !macdObj.macd || !macdObj.signal || macdObj.macd <= macdObj.signal)) buyReasons.push("MACD Below Signal");
+            if (r.target === "donchian" && (!donchianObj || !donchianObj.upper || spotPrice <= donchianObj.upper)) buyReasons.push("Below Donchian Upper");
+            if (r.target === "prevDay" && (!prevDayObj || !prevDayObj.pdh || spotPrice <= prevDayObj.pdh)) buyReasons.push("Below Previous Day High");
         }
     }
 
-    if (reasons.length > 0) {
-        return reasons.slice(0, 2).join("; ");
+    if (strat.rules && Array.isArray(strat.rules.sell)) {
+        for (const r of strat.rules.sell) {
+            if (r.target === "supertrend" && !isStBear) sellReasons.push("Supertrend Bullish/Neutral");
+            if (r.target === "vwap" && (vwapVal === null || spotPrice >= vwapVal)) sellReasons.push(`Price Above VWAP (₹${spotPrice.toFixed(1)} >= ₹${vwapVal ? vwapVal.toFixed(1) : 'N/A'})`);
+            if (r.target === "rsi" && (rsiVal === null || rsiVal > (r.value || 50))) sellReasons.push(`RSI High (${rsiVal !== null ? rsiVal.toFixed(1) : 'N/A'} > ${r.value || 50})`);
+            if (r.target === "rvol" && (rvolVal || 1.0) < (r.value || minRvol)) sellReasons.push(`RVOL Low (${(rvolVal || 1.0).toFixed(2)} < ${r.value || minRvol})`);
+            if (r.target === "adx" && (adxVal === null || adxVal < (r.value || minAdx))) sellReasons.push(`ADX Weak (${adxVal !== null ? adxVal.toFixed(1) : 'N/A'} < ${r.value || minAdx})`);
+            if (r.target === "orb" && (!orbObj || !orbObj.low || spotPrice >= orbObj.low)) sellReasons.push(`Above ORB Low (₹${orbObj?.low ? orbObj.low.toFixed(1) : 'N/A'})`);
+            if (r.target === "tripleEMA" && (e10 === null || eFast === null || eSlow === null || e10 >= eFast || eFast >= eSlow)) sellReasons.push("EMA 10/20/50 Not Bearish");
+            if (r.target === "ema" && (eFast === null || eSlow === null || eFast >= eSlow)) sellReasons.push("EMA Fast >= Slow");
+            if (r.target === "macd" && (!macdObj || !macdObj.macd || !macdObj.signal || macdObj.macd >= macdObj.signal)) sellReasons.push("MACD Above Signal");
+            if (r.target === "donchian" && (!donchianObj || !donchianObj.lower || spotPrice >= donchianObj.lower)) sellReasons.push("Above Donchian Lower");
+            if (r.target === "prevDay" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellReasons.push("Above Previous Day Low");
+        }
+    }
+
+    const isBearishTrend = (isStBear || (vwapVal && spotPrice < vwapVal));
+    const targetReasons = isBearishTrend && sellReasons.length > 0 ? sellReasons : buyReasons;
+
+    if (targetReasons.length > 0) {
+        return targetReasons.slice(0, 2).join("; ");
     }
 
     return "Conditions Not Satisfied";
@@ -420,7 +515,8 @@ async function evaluateConsensusEngine(inputCandles, i = -1, options = {}) {
         };
     }
 
-    const warmupCount = Number(options.warmupCount || options.count || 200);
+    const config = loadStrategyConfig("consensus_master_head.json");
+    const warmupCount = Number(options.warmupCount || options.count || config.warmupCount || 200);
 
     // Auto-warmup check: If input candles are less than required warmup threshold (e.g. 200 candles)
     if (candlesArray.length < warmupCount) {
@@ -490,8 +586,9 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
     }
 
     const config = loadStrategyConfig("consensus_master_head.json");
-    const strategies = config.strategies || (Array.isArray(config) ? config : [config]);
-    const minVotes = Number(options.minVotes || options.minStrategyVotes || options.minVotesRequired || config.minStrategyVotes || config.minVotes || 2);
+    const strategies = resolveAllStrategies(config);
+    const activeGroupMinVotes = strategies.find(s => s.groupMinVotes !== undefined)?.groupMinVotes;
+    const minVotes = Number(options.minVotes !== undefined ? options.minVotes : (options.minStrategyVotes !== undefined ? options.minStrategyVotes : (activeGroupMinVotes !== undefined ? activeGroupMinVotes : (config.minStrategyVotes !== undefined ? config.minStrategyVotes : (config.minVotes || 1)))));
 
     const c = candlesArray[index];
     const computed = (options && options.precomputed) ? options.precomputed : computeIndicators(candlesArray, {});
@@ -536,7 +633,7 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
     result.warmupCandleCount = candlesArray.length;
 
     // Signal Confirmation Waiting Logic
-    const reqWaitMins = Number(options.confirmWaitMinutes !== undefined ? options.confirmWaitMinutes : (config.confirmWaitMinutes || 5));
+    const reqWaitMins = Number(options.confirmWaitMinutes !== undefined ? options.confirmWaitMinutes : (config.confirmWaitMinutes !== undefined ? config.confirmWaitMinutes : 0));
     const enableConfirmation = Boolean(config.enableSignalConfirmation !== false && reqWaitMins > 0);
 
     if (enableConfirmation && (result.consensus === "BUY" || result.consensus === "SELL")) {

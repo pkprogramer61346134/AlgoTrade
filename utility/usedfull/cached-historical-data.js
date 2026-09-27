@@ -18,9 +18,6 @@ const fs = require("fs");
 const path = require("path");
 const { HistoricalData } = require("../historicaldata");
 
-// Global RAM Cache Map to store loaded candles in memory across ticks
-const ramCacheMap = new Map();
-
 class CachedHistoricalData {
     constructor(options = {}) {
         this.historical = new HistoricalData(options);
@@ -125,33 +122,7 @@ class CachedHistoricalData {
 
         const todayStr = this.formatDateStr(new Date());
 
-        // 1. Check RAM Cache first (0.001ms instantaneous lookup - ZERO Disk I/O)
-        if (!forceRefresh && ramCacheMap.has(fileName)) {
-            const cachedObj = ramCacheMap.get(fileName);
-            const cachedCandles = cachedObj?.candles;
-
-            if (Array.isArray(cachedCandles) && cachedCandles.length > 0) {
-                let isStaleTodayFile = false;
-
-                if (fromDate === todayStr && toDate === todayStr) {
-                    const lastCandleInFile = cachedCandles[cachedCandles.length - 1];
-                    if (lastCandleInFile && lastCandleInFile.time) {
-                        const lastCandleSecs = this.parseTimeToSeconds(lastCandleInFile.time);
-                        const nowSecs = this.parseTimeToSeconds(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
-
-                        if (nowSecs >= 33300 && nowSecs <= 55800 && (nowSecs - lastCandleSecs > 300)) {
-                            isStaleTodayFile = true;
-                        }
-                    }
-                }
-
-                if (!isStaleTodayFile) {
-                    return { source: "RAM_CACHE", fileName, filePath, candles: cachedCandles };
-                }
-            }
-        }
-
-        // 2. Check Disk Cache if not in RAM or stale today file
+        // 1. Check Disk Cache
         if (!forceRefresh && fs.existsSync(filePath)) {
             try {
                 const rawContent = fs.readFileSync(filePath, "utf-8");
@@ -176,15 +147,16 @@ class CachedHistoricalData {
 
                     if (!isStaleTodayFile) {
                         const normalized = normalizeCandles(cachedCandles);
-                        ramCacheMap.set(fileName, { candles: normalized });
-                        console.log(`💾 [DISK CACHE HIT] Loaded ${normalized.length} candles from: ${fileName} into RAM`);
+                        console.log(`💾 [DISK CACHE HIT] Loaded ${normalized.length} candles from: ${fileName}`);
                         return { source: "DISK_CACHE", fileName, filePath, candles: normalized };
                     } else {
                         console.log(`🔄 [TODAY CACHE REFRESH] Today's cache (${fileName}) is outdated. Re-fetching latest candles from Dhan API...`);
                     }
                 } else {
-                    // Remove 0-candle empty cache file so future calls re-attempt API
-                    try { fs.unlinkSync(filePath); } catch (e) {}
+                    // Only remove empty cache file if it is for TODAY (market might open later), keep past holiday empty files intact
+                    if (fromDate === todayStr) {
+                        try { fs.unlinkSync(filePath); } catch (e) {}
+                    }
                 }
             } catch (err) {
                 console.warn(`⚠️ [CACHE READ WARNING] Failed to parse ${fileName}: ${err.message}. Re-fetching...`);
@@ -226,7 +198,6 @@ class CachedHistoricalData {
                 fs.mkdirSync(this.cacheDir, { recursive: true });
             }
             fs.writeFileSync(filePath, JSON.stringify(normalized || [], null, 2), "utf-8");
-            ramCacheMap.set(fileName, { candles: normalized });
         } catch (writeErr) {
             console.error(`❌ [CACHE SAVE ERROR] Failed to save file to disk: ${writeErr.message}`);
         }

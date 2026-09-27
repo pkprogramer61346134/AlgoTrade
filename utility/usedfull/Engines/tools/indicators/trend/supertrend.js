@@ -11,12 +11,13 @@ function calculateSupertrend(candles = [], period = 10, multiplier = 3) {
     // Calculate True Range (TR)
     const tr = new Array(n).fill(0);
     for (let i = 0; i < n; i++) {
+        const h = Number(candles[i].high ?? candles[i].candleHigh ?? candles[i].close ?? candles[i].price ?? 0);
+        const l = Number(candles[i].low ?? candles[i].candleLow ?? candles[i].close ?? candles[i].price ?? 0);
+        const c = Number(candles[i].close ?? candles[i].candleClose ?? candles[i].price ?? 0);
         if (i === 0) {
-            tr[i] = candles[i].high - candles[i].low;
+            tr[i] = h - l;
         } else {
-            const h = candles[i].high;
-            const l = candles[i].low;
-            const pc = candles[i - 1].close;
+            const pc = Number(candles[i - 1].close ?? candles[i - 1].candleClose ?? candles[i - 1].price ?? 0);
             tr[i] = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
         }
     }
@@ -38,7 +39,11 @@ function calculateSupertrend(candles = [], period = 10, multiplier = 3) {
     let lowerBand = new Array(n).fill(0);
 
     for (let i = period - 1; i < n; i++) {
-        const hl2 = (candles[i].high + candles[i].low) / 2;
+        const h = Number(candles[i].high ?? candles[i].candleHigh ?? candles[i].close ?? candles[i].price ?? 0);
+        const l = Number(candles[i].low ?? candles[i].candleLow ?? candles[i].close ?? candles[i].price ?? 0);
+        const c = Number(candles[i].close ?? candles[i].candleClose ?? candles[i].price ?? 0);
+        const prevC = Number(candles[i - 1]?.close ?? candles[i - 1]?.candleClose ?? candles[i - 1]?.price ?? c);
+        const hl2 = (h + l) / 2;
         let basicUpper = hl2 + (multiplier * atr[i]);
         let basicLower = hl2 - (multiplier * atr[i]);
 
@@ -46,17 +51,17 @@ function calculateSupertrend(candles = [], period = 10, multiplier = 3) {
             upperBand[i] = basicUpper;
             lowerBand[i] = basicLower;
         } else {
-            upperBand[i] = (basicUpper < upperBand[i - 1] || candles[i - 1].close > upperBand[i - 1]) ? basicUpper : upperBand[i - 1];
-            lowerBand[i] = (basicLower > lowerBand[i - 1] || candles[i - 1].close < lowerBand[i - 1]) ? basicLower : lowerBand[i - 1];
+            upperBand[i] = (basicUpper < upperBand[i - 1] || prevC > upperBand[i - 1]) ? basicUpper : upperBand[i - 1];
+            lowerBand[i] = (basicLower > lowerBand[i - 1] || prevC < lowerBand[i - 1]) ? basicLower : lowerBand[i - 1];
         }
 
         if (i === period - 1) {
-            direction[i] = candles[i].close <= upperBand[i] ? -1 : 1;
+            direction[i] = c <= upperBand[i] ? -1 : 1;
         } else {
             if (direction[i - 1] === 1) {
-                direction[i] = candles[i].close < lowerBand[i] ? -1 : 1;
+                direction[i] = c < lowerBand[i] ? -1 : 1;
             } else {
-                direction[i] = candles[i].close > upperBand[i] ? 1 : -1;
+                direction[i] = c > upperBand[i] ? 1 : -1;
             }
         }
 

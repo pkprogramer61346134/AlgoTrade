@@ -20,8 +20,11 @@ function calculateVWAP(candles = []) {
             cumulativeVolume = 0;
         }
 
-        const typicalPrice = (c.high + c.low + c.close) / 3;
-        const vol = c.volume || 0;
+        const high = Number(c.high ?? c.candleHigh ?? c.close ?? c.candleClose ?? c.price ?? 0);
+        const low = Number(c.low ?? c.candleLow ?? c.close ?? c.candleClose ?? c.price ?? 0);
+        const close = Number(c.close ?? c.candleClose ?? c.price ?? 0);
+        const typicalPrice = (high + low + close) / 3;
+        const vol = Number(c.volume ?? c.candleVolume ?? 0);
 
         cumulativeTPV += typicalPrice * vol;
         cumulativeVolume += vol;

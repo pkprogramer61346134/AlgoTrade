@@ -64,16 +64,17 @@ class DhanFunds {
      */
     async calculateMargin(params = {}) {
         try {
-            const response = await fetch(`${this.baseUrl}/margincalculator`, {
+            const auth = this.getAuth();
+            const response = await fetch(`${auth.baseUrl}/margincalculator`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json",
-                    "access-token": this.accessToken,
-                    "client-id": this.clientId
+                    "access-token": auth.accessToken,
+                    "client-id": auth.clientId
                 },
                 body: JSON.stringify({
-                    dhanClientId: this.clientId,
+                    dhanClientId: auth.clientId,
                     exchangeSegment: params.exchangeSegment,
                     transactionType: params.transactionType,
                     quantity: params.quantity,

@@ -95,26 +95,29 @@ async function calculateOptionSLAndTargets(params = {}) {
         const buffer = atr * 0.2;
         optionSl = Math.max(0.1, Number((swingLow - buffer).toFixed(2)));
     } else {
-        // HYBRID: Max of (Swing Low buffer) and (ATR SL) to prevent overly wide or tight SL
+        // HYBRID: Use closer SL of ATR or Swing Low to prevent overly deep SL, capped at max 25% risk
         const atrSl = entryLtp - (atr * atrMultiplier);
         const swingSl = swingLow - (atr * 0.2);
-        optionSl = Math.max(0.1, Number(Math.min(atrSl, swingSl).toFixed(2)));
+        const maxSlCap = entryLtp * 0.75; // Max 25% loss cap on option LTP
+        optionSl = Math.max(0.1, maxSlCap, Number(Math.max(atrSl, swingSl).toFixed(2)));
     }
 
     // Risk Amount per Option Unit
     const riskAmount = Number(Math.max(0.1, entryLtp - optionSl).toFixed(2));
     const slPercent = Number(((riskAmount / entryLtp) * 100).toFixed(2));
 
-    // 3. Compute 4 Targets (TR1, TR2, TR3, TR4) based on Risk:Reward Ratios (1:1, 1:2, 1:3, 1:4)
+    // 3. Compute 5 Targets (TR1, TR2, TR3, TR4, TR5) based on Risk:Reward Ratios (1:1 to 1:5)
     const tr1 = Number((entryLtp + (riskAmount * 1.0)).toFixed(2));
     const tr2 = Number((entryLtp + (riskAmount * 2.0)).toFixed(2));
     const tr3 = Number((entryLtp + (riskAmount * 3.0)).toFixed(2));
     const tr4 = Number((entryLtp + (riskAmount * 4.0)).toFixed(2));
+    const tr5 = Number((entryLtp + (riskAmount * 5.0)).toFixed(2));
 
     const tr1Percent = Number((((tr1 - entryLtp) / entryLtp) * 100).toFixed(2));
     const tr2Percent = Number((((tr2 - entryLtp) / entryLtp) * 100).toFixed(2));
     const tr3Percent = Number((((tr3 - entryLtp) / entryLtp) * 100).toFixed(2));
     const tr4Percent = Number((((tr4 - entryLtp) / entryLtp) * 100).toFixed(2));
+    const tr5Percent = Number((((tr5 - entryLtp) / entryLtp) * 100).toFixed(2));
 
     return {
         status: "success",
@@ -138,7 +141,8 @@ async function calculateOptionSLAndTargets(params = {}) {
             tr1: { price: tr1, gain: Number((tr1 - entryLtp).toFixed(2)), percent: `+${tr1Percent}%`, ratio: "1:1" },
             tr2: { price: tr2, gain: Number((tr2 - entryLtp).toFixed(2)), percent: `+${tr2Percent}%`, ratio: "1:2" },
             tr3: { price: tr3, gain: Number((tr3 - entryLtp).toFixed(2)), percent: `+${tr3Percent}%`, ratio: "1:3" },
-            tr4: { price: tr4, gain: Number((tr4 - entryLtp).toFixed(2)), percent: `+${tr4Percent}%`, ratio: "1:4" }
+            tr4: { price: tr4, gain: Number((tr4 - entryLtp).toFixed(2)), percent: `+${tr4Percent}%`, ratio: "1:4" },
+            tr5: { price: tr5, gain: Number((tr5 - entryLtp).toFixed(2)), percent: `+${tr5Percent}%`, ratio: "1:5" }
         }
     };
 }

@@ -6,13 +6,11 @@
  * 1. Master System Config (`server/main_config.json` via `config_manager.js`)
  * 2. Dhan Live Price Feed (`utility/dhan-live-price.js`)
  * 3. Strategy Consensus Engine (`utility/usedfull/Engines/consensusEngine.js`)
- * 4. Paper Trading Engine (`server/pepertread/pepertread.js`)
- * 5. Real Trading Engine (`server/realtread/realtread.js`)
- * 6. UI Dashboard Server (`server/ui_server.js`)
+ * 4. Real Trading Engine (`server/realtread/realtread.js`)
+ * 5. UI Dashboard Server (`server/ui_server.js`)
  */
 
 const mainConfig = require('./server/config_manager');
-const paperTradeEngine = require('./server/pepertread/pepertread');
 const realTradeEngine = require('./server/realtread/realtread');
 const { DhanLivePrice } = require('./utility/dhan-live-price');
 const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
@@ -46,7 +44,6 @@ function getLiveMarketData() {
         tickTime: latestTickTime,
         consensus: latestConsensusResult,
         config: mainConfig.getConfig(),
-        paperStatus: paperTradeEngine.getStatus(),
         realStatus: realTradeEngine.getStatus()
     };
 }
@@ -66,17 +63,12 @@ async function startMasterSystem() {
     const cfg = mainConfig.getConfig();
     const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
 
-    // 1. Initialize Paper Trading Engine if enabled
-    if (cfg.paperTradeEnabled) {
-        await paperTradeEngine.startPaperTrading();
-    }
-
-    // 2. Initialize Real Trading Engine if enabled
+    // 1. Initialize Real Trading Engine if enabled
     if (cfg.realTradeEnabled) {
         await realTradeEngine.startRealTrading();
     }
 
-    // 3. Start UI Dashboard Server (http://localhost:3000)
+    // 2. Start UI Dashboard Server (http://localhost:3000)
     startUIServer(3000);
 
     const tracker = new DhanLivePrice();
@@ -93,27 +85,21 @@ async function startMasterSystem() {
                 latestLivePrice = Number(tick.price || 0);
                 latestTickTime = `${tick.date || ''} ${tick.time || ''}`;
 
-                // 4. Evaluate Consensus Engine on live tick with 200 warmup candles
+                // 3. Evaluate Consensus Engine on live tick (reads warmupCount, minVotes, confirmWaitMinutes from consensus_master_head.json)
                 const consensusResult = await evaluateConsensusEngine(tick, -1, {
                     securityId: String(scrip.securityId),
                     exchangeSegment: scrip.exchangeSegment,
-                    interval: String(scrip.interval || "5"),
-                    warmupCount: 200
+                    interval: String(scrip.interval || "5")
                 });
 
                 latestConsensusResult = consensusResult;
 
-                // 5. Process Signal in Paper Trading Engine
-                if (mainConfig.getConfig().paperTradeEnabled) {
-                    await paperTradeEngine.processSignal(consensusResult, scrip);
-                }
-
-                // 6. Process Signal in Real Trading Engine
+                // 4. Process Signal in Real Trading Engine
                 if (mainConfig.getConfig().realTradeEnabled) {
                     await realTradeEngine.processSignal(consensusResult, scrip);
                 }
 
-                // 7. Live Console Strategy Monitor
+                // 5. Live Console Strategy Monitor
                 let signalBadge = "⚪ NO SIGNAL / WAITING";
                 let waitTimerLine = "";
 
@@ -185,6 +171,5 @@ module.exports = {
     startMasterSystem,
     getLiveMarketData,
     mainConfig,
-    paperTradeEngine,
     realTradeEngine
 };

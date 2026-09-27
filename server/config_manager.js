@@ -5,7 +5,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const paperConfig = require('./pepertread/config');
 const realConfig = require('./realtread/config');
 
 const MAIN_CONFIG_FILE = path.join(__dirname, 'main_config.json');
@@ -25,8 +24,7 @@ class MainConfigManager {
             console.error(`❌ [MAIN CONFIG] Error reading main_config.json: ${e.message}`);
         }
         return {
-            paperTradeEnabled: true,
-            realTradeEnabled: false,
+            realTradeEnabled: true,
             selectedStock: {
                 securityId: "13",
                 exchangeSegment: "IDX_I",
@@ -51,10 +49,7 @@ class MainConfigManager {
             console.error(`❌ [MAIN CONFIG] Failed to save main_config.json: ${e.message}`);
         }
 
-        // Sync with paperConfig & realConfig
-        if (updates.paperTradeEnabled !== undefined) {
-            paperConfig.setEnabled(updates.paperTradeEnabled);
-        }
+        // Sync with realConfig
         if (updates.realTradeEnabled !== undefined) {
             realConfig.setEnabled(updates.realTradeEnabled);
         }

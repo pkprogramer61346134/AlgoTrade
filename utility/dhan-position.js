@@ -73,9 +73,9 @@ class DhanPosition {
         }
 
 
-        // Only useful fields
-        const positions = Array.isArray(result)
-            ? result.map((position) => ({
+        // Only useful fields - support Array response, result.data, or result.positions
+        const rawArray = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : (Array.isArray(result?.positions) ? result.positions : []));
+        const positions = rawArray.map((position) => ({
 
                 tradingSymbol: position.tradingSymbol,
                 securityId: position.securityId,
@@ -98,8 +98,7 @@ class DhanPosition {
                 drvOptionType: position.drvOptionType,
                 drvStrikePrice: position.drvStrikePrice
 
-            }))
-            : [];
+            }));
 
 
         return {

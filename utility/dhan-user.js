@@ -12,17 +12,37 @@ class DhanUser {
         this.baseUrl = options.baseUrl || config.BASE_URL;
     }
 
+    getAuth() {
+        try {
+            delete require.cache[require.resolve("./token/config")];
+            const freshConfig = require("./token/config");
+            return {
+                clientId: this.options.clientId || freshConfig.CLIENT_ID,
+                accessToken: this.options.accessToken || freshConfig.ACCESS_TOKEN,
+                baseUrl: this.options.baseUrl || freshConfig.BASE_URL
+            };
+        } catch (e) {
+            return {
+                clientId: this.options.clientId || config.CLIENT_ID,
+                accessToken: this.options.accessToken || config.ACCESS_TOKEN,
+                baseUrl: this.options.baseUrl || config.BASE_URL
+            };
+        }
+    }
+
     getHeaders() {
+        const auth = this.getAuth();
         return {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "access-token": this.accessToken,
-            "client-id": this.clientId
+            "access-token": auth.accessToken,
+            "client-id": auth.clientId
         };
     }
 
     async request(endpoint, options = {}) {
-        const url = `${this.baseUrl}${endpoint}`;
+        const auth = this.getAuth();
+        const url = `${auth.baseUrl}${endpoint}`;
         const fetchOptions = {
             method: options.method || "GET",
             headers: { ...this.getHeaders(), ...(options.headers || {}) }

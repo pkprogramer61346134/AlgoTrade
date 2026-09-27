@@ -10,12 +10,12 @@ function calculateATR(candles = [], period = 14) {
     const tr = new Array(n).fill(0);
 
     for (let i = 0; i < n; i++) {
+        const h = Number(candles[i].high ?? candles[i].candleHigh ?? candles[i].close ?? candles[i].price ?? 0);
+        const l = Number(candles[i].low ?? candles[i].candleLow ?? candles[i].close ?? candles[i].price ?? 0);
         if (i === 0) {
-            tr[i] = candles[i].high - candles[i].low;
+            tr[i] = h - l;
         } else {
-            const h = candles[i].high;
-            const l = candles[i].low;
-            const pc = candles[i - 1].close;
+            const pc = Number(candles[i - 1].close ?? candles[i - 1].candleClose ?? candles[i - 1].price ?? 0);
             tr[i] = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
         }
     }
