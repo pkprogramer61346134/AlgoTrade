@@ -2,13 +2,11 @@
   "maxBudgetPercent": 100,
   "maxLossPerTrade": 300,
   "breathingRoomPoints": 0.5,
-  "targetMode": "1:5",
+  "targetMode": "TRAILING",
   "maxTradesPerDay": 3,
   "autoTrailOnTR1": true,
   "autoTrailOnTR2": true,
   "autoTrailOnTR3": true,
-  "autoTrailOnTR4": true,
-  "autoTrailOnTR5": true,
   "maxRetriesPerStep": 5,
   "retryDelayMs": 1000,
   "selectedStock": {
@@ -17,5 +15,8 @@
     "symbol": "NIFTY",
     "interval": "5",
     "instrument": "INDEX"
-  }
+  },
+  "enableAutoTrailing": true,
+  "autoTrailOnTR4": true,
+  "autoTrailOnTR5": true
 }

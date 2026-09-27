@@ -120,7 +120,7 @@ class MasterTrailingEngine {
                 );
             }
 
-            const isOptionTrade = envName === "REAL_TRADE" || Boolean(signal.isOption || signal.securityId || selectedStrikeInfo?.securityId);
+            const isOptionTrade = Boolean(selectedStrikeInfo && selectedStrikeInfo.securityId && String(selectedStrikeInfo.securityId) !== "13") || Boolean(signal.isOption && String(signal.securityId) !== "13");
             const symbol = selectedStrikeInfo?.symbol || `NIFTY_${optionType}`;
             const entryPrice = Number(selectedStrikeInfo?.liveLtp || selectedStrikeInfo?.ltp || selectedStrikeInfo?.price || entrySpotPrice);
             const lotSize = Number(selectedStrikeInfo?.lotSize || 65);
@@ -243,7 +243,7 @@ class MasterTrailingEngine {
         let exitReason = "";
 
         const mode = String(pos.targetMode || cfg.targetMode || "TRAILING").toUpperCase();
-        const isTrailingEnabled = !mode.includes("FIXED") && cfg.disableTrailing !== true;
+        const isTrailingEnabled = !mode.includes("FIXED") && cfg.disableTrailing !== true && cfg.enableAutoTrailing !== false;
         const isOptionBuying = pos.isOptionTrade || pos.envName === "REAL_TRADE" || pos.optionType === "CE";
 
         if (!isTrailingEnabled) {
@@ -350,7 +350,7 @@ class MasterTrailingEngine {
             pos.exitPrice = exitPrice;
             pos.exitReason = exitReason;
 
-            const isOptionTrade = pos.isOptionTrade || pos.envName === "REAL_TRADE" || Boolean(pos.strikeInfo);
+            const isOptionTrade = Boolean(pos.isOptionTrade);
             const diff = isOptionTrade ? (exitPrice - pos.entryPrice) : (pos.optionType === "CE" ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice);
             pos.realizedPnl = Number((diff * pos.qty).toFixed(2));
 
