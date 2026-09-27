@@ -150,7 +150,15 @@ function renderRealDashboard(data, config = {}) {
 
     // Dhan Real Account Funds
     const funds = data.funds || {};
-    const availBal = Number(funds.availabelBalance !== undefined ? funds.availabelBalance : (funds.withdrawableBalance !== undefined ? funds.withdrawableBalance : (funds.sodLimit !== undefined ? funds.sodLimit : 0)));
+    const availBal = Number(
+        funds.availabelBalance !== undefined ? funds.availabelBalance :
+        funds.availMargin !== undefined ? funds.availMargin :
+        funds.availBalance !== undefined ? funds.availBalance :
+        funds.availableBalance !== undefined ? funds.availableBalance :
+        funds.sodLimit !== undefined ? funds.sodLimit :
+        funds.withdrawLimit !== undefined ? funds.withdrawLimit :
+        funds.withdrawableBalance !== undefined ? funds.withdrawableBalance : 0
+    );
     const fundsEl = document.getElementById("real-available-funds");
     if (fundsEl) {
         fundsEl.innerText = `₹${availBal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
@@ -158,7 +166,7 @@ function renderRealDashboard(data, config = {}) {
     const clientEl = document.getElementById("real-client-id");
     if (clientEl) {
         const cid = funds.dhanClientId || "1101323815";
-        clientEl.innerText = `Client ID: ${cid}`;
+        clientEl.innerText = cid;
     }
 
     const stateEl = document.getElementById("real-engine-state");

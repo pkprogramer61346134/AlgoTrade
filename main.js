@@ -52,6 +52,8 @@ console.log("===================================================================
 console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (main.js)");
 console.log("==========================================================================");
 
+const { getCachedCandles } = require('./utility/usedfull/cached-historical-data');
+
 async function startMasterSystem() {
     console.log("🔑 [DHAN AUTH] Checking & Ensuring Valid Dhan Access Token via TOTP...");
     try {
@@ -62,6 +64,24 @@ async function startMasterSystem() {
 
     const cfg = mainConfig.getConfig();
     const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
+
+    // Fetch initial market spot price and live funds on startup
+    try {
+        await realTradeEngine.fetchLiveFunds();
+        const initCandlesRes = await getCachedCandles({
+            securityId: String(scrip.securityId),
+            exchangeSegment: scrip.exchangeSegment,
+            interval: String(scrip.interval || "5"),
+            count: 1
+        });
+        if (initCandlesRes && initCandlesRes.status === "success" && Array.isArray(initCandlesRes.data) && initCandlesRes.data.length > 0) {
+            const lastCandle = initCandlesRes.data[initCandlesRes.data.length - 1];
+            latestLivePrice = Number(lastCandle.close || lastCandle.price || 0);
+            latestTickTime = `${lastCandle.date || ''} ${lastCandle.time || ''}`;
+        }
+    } catch (e) {
+        console.warn("⚠️ Initial market price fetch notice:", e.message);
+    }
 
     // 1. Initialize Real Trading Engine if enabled
     if (cfg.realTradeEnabled) {
