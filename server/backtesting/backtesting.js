@@ -121,7 +121,7 @@ class BacktestEngine {
                     interval: interval,
                     warmupCount: 200,
                     confirmWaitMinutes: 0,
-                    minVotes: 5
+                    minVotes: 4
                 });
 
                 // 2. Evaluate open trade Trailing SL & Exit conditions
