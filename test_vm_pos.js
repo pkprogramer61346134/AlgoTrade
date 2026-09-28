@@ -1,12 +1,10 @@
-const { DhanOrders } = require('./utility/dhan-orders');
-const { ensureValidDhanToken } = require('./utility/token/autoTokenRefresh');
+const realTradeEngine = require('./server/realtread/realtread');
 
 async function testVMPos() {
-    await ensureValidDhanToken();
-    const orders = new DhanOrders();
-    const res = await orders.getPositions();
-    console.log("=== RAW DHAN POSITIONS RESPONSE ===");
-    console.log(JSON.stringify(res, null, 2));
+    console.log("=== CALLING START REAL TRADING & SYNC ===");
+    await realTradeEngine.startRealTrading();
+    await realTradeEngine.syncRealPositionsFromDhan();
+    console.log("\n>>> Active position in masterSL AFTER SYNC:", realTradeEngine.activePosition);
     process.exit(0);
 }
 
