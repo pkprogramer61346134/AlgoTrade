@@ -19,6 +19,10 @@ class MasterTrailingEngine {
         this.activePosition = null;
         this.tradeHistory = [];
         this.isOrderInFlight = false;
+        this.isModifyInFlight = false;
+        this.isCloseInFlight = false;
+        this.lastOrderTimestamp = 0;
+        this.lastModifyTimestamp = 0;
         this.lastExitTimestamp = 0;
     }
 
@@ -273,12 +277,11 @@ class MasterTrailingEngine {
      * @returns {Promise<Object|null>} Closed position if exited, otherwise active position
      */
     async processTick(tick, envName = "PAPER") {
-        if (!this.activePosition || this.activePosition.status !== "OPEN" || !tick) return null;
+        if (!this.activePosition || this.activePosition.status !== "OPEN" || !tick || this.isCloseInFlight) return null;
 
         const pos = this.activePosition;
         const lvls = pos.levels;
         const cfg = masterConfig.getConfig();
-        const buffer = cfg.breathingRoomPoints || 0.50; // Breathing room buffer
 
         const tickTimeStr = tick.time || tick.date || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
 
@@ -330,7 +333,7 @@ class MasterTrailingEngine {
                 if (currentHigh >= lvls.tr1 && cfg.autoTrailOnTR1 !== false) {
                     if (pos.entryPrice > newSl) { newSl = pos.entryPrice; newStage = "TRAILED_COST_TO_COST"; }
                 }
-                // Stage 1: When price hits TR2 (1:2), trail SL to TR1 (Locks 1:1 / ₹300 Profit with 1-R Breathing Room!)
+                // Stage 1: When price hits TR2 (1:2), trail SL to TR1 (Locks 1:1 / ₹300 Profit)
                 if (currentHigh >= lvls.tr2 && cfg.autoTrailOnTR2 !== false) {
                     if (lvls.tr1 > newSl) { newSl = lvls.tr1; newStage = "TRAILED_TR1 (LOCKED)"; }
                 }
@@ -347,25 +350,34 @@ class MasterTrailingEngine {
                     if (lvls.tr4 > newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
                 }
 
-                // Update SL immediately if trailed
-                if (newSl !== pos.currentSl) {
-                    pos.currentSl = newSl;
-                    pos.trailingStage = newStage;
+                // Update SL immediately with 2-second API Cooldown & Atomic Modify Lock
+                if (newSl !== pos.currentSl && !this.isModifyInFlight && (Date.now() - (this.lastModifyTimestamp || 0) > 2000)) {
+                    this.isModifyInFlight = true;
+                    this.lastModifyTimestamp = Date.now();
+                    const targetSl = newSl;
+                    const targetStage = newStage;
 
                     if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
-                        try {
-                            this.retryStepAsync(
-                                () => pos.handlers.modifyOrder(pos.orderId, newSl, newStage),
-                                "MODIFY_ORDER_SL",
-                                envName,
-                                cfg.maxRetriesPerStep || 5,
-                                cfg.retryDelayMs || 1000
-                            ).catch(err => logger.logError(envName, "MODIFY_ORDER_FAILED", err));
-                        } catch (err) {
+                        this.retryStepAsync(
+                            () => pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage),
+                            "MODIFY_ORDER_SL",
+                            envName,
+                            3,    // 3 retries
+                            2000  // 2-second fast retry delay
+                        ).then(() => {
+                            pos.currentSl = targetSl;
+                            pos.trailingStage = targetStage;
+                            logger.logInfo(envName, "SL_TRAILED", `SL trailed successfully to ₹${targetSl} (${targetStage})`);
+                        }).catch(err => {
                             logger.logError(envName, "MODIFY_ORDER_FAILED", err);
-                        }
+                        }).finally(() => {
+                            this.isModifyInFlight = false;
+                        });
+                    } else {
+                        pos.currentSl = targetSl;
+                        pos.trailingStage = targetStage;
+                        this.isModifyInFlight = false;
                     }
-                    logger.logInfo(envName, "SL_TRAILED", `SL trailed to ₹${newSl} (${newStage})`);
                 }
 
                 // Exit conditions: Target Hit at targetPrice OR SL Hit
@@ -394,24 +406,33 @@ class MasterTrailingEngine {
                     if (lvls.tr4 < newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
                 }
 
-                if (newSl !== pos.currentSl) {
-                    pos.currentSl = newSl;
-                    pos.trailingStage = newStage;
+                if (newSl !== pos.currentSl && !this.isModifyInFlight && (Date.now() - (this.lastModifyTimestamp || 0) > 2000)) {
+                    this.isModifyInFlight = true;
+                    this.lastModifyTimestamp = Date.now();
+                    const targetSl = newSl;
+                    const targetStage = newStage;
 
                     if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
-                        try {
-                            this.retryStepAsync(
-                                () => pos.handlers.modifyOrder(pos.orderId, newSl, newStage),
-                                "MODIFY_ORDER_SL",
-                                envName,
-                                cfg.maxRetriesPerStep || 5,
-                                cfg.retryDelayMs || 1000
-                            ).catch(err => logger.logError(envName, "MODIFY_ORDER_FAILED", err));
-                        } catch (err) {
+                        this.retryStepAsync(
+                            () => pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage),
+                            "MODIFY_ORDER_SL",
+                            envName,
+                            3,
+                            2000
+                        ).then(() => {
+                            pos.currentSl = targetSl;
+                            pos.trailingStage = targetStage;
+                            logger.logInfo(envName, "SL_TRAILED", `SL trailed successfully to ₹${targetSl} (${targetStage})`);
+                        }).catch(err => {
                             logger.logError(envName, "MODIFY_ORDER_FAILED", err);
-                        }
+                        }).finally(() => {
+                            this.isModifyInFlight = false;
+                        });
+                    } else {
+                        pos.currentSl = targetSl;
+                        pos.trailingStage = targetStage;
+                        this.isModifyInFlight = false;
                     }
-                    logger.logInfo(envName, "SL_TRAILED", `SL trailed to ₹${newSl} (${newStage})`);
                 }
 
                 if (currentLow <= pos.targetPrice) {
@@ -424,7 +445,8 @@ class MasterTrailingEngine {
         }
 
         // On Trade Exit
-        if (exitTriggered) {
+        if (exitTriggered && !this.isCloseInFlight) {
+            this.isCloseInFlight = true;
             pos.status = "CLOSED";
             pos.exitPrice = exitPrice;
             pos.exitReason = exitReason;
@@ -433,27 +455,28 @@ class MasterTrailingEngine {
             const diff = isOptionTrade ? (exitPrice - pos.entryPrice) : (pos.optionType === "CE" ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice);
             pos.realizedPnl = Number((diff * pos.qty).toFixed(2));
 
-            if (pos.handlers && typeof pos.handlers.closeOrder === 'function') {
-                try {
+            try {
+                if (pos.handlers && typeof pos.handlers.closeOrder === 'function') {
                     await this.retryStepAsync(
                         () => pos.handlers.closeOrder(pos),
                         "CLOSE_ORDER",
                         envName,
-                        cfg.maxRetriesPerStep || 5,
-                        cfg.retryDelayMs || 1000
+                        5,    // 5 retries on exit
+                        2000  // 2-second fast retry delay
                     );
-                } catch (err) {
-                    logger.logError(envName, "CLOSE_ORDER_FAILED", err);
                 }
+            } catch (err) {
+                logger.logError(envName, "CLOSE_ORDER_FAILED", err);
+            } finally {
+                this.tradeHistory.push({ ...pos });
+                const closedPosition = { ...pos };
+                this.activePosition = null;
+                this.lastExitTimestamp = Date.now();
+                this.isCloseInFlight = false;
+
+                logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
+                return closedPosition;
             }
-
-            this.tradeHistory.push({ ...pos });
-            const closedPosition = { ...pos };
-            this.activePosition = null;
-            this.lastExitTimestamp = Date.now();
-
-            logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
-            return closedPosition;
         }
 
         return pos;
