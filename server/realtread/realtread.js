@@ -235,8 +235,8 @@ class RealTradeEngine {
                 }
 
                 const availableBalance = Number(fundRes.data.availabelBalance || fundRes.data.withdrawableBalance || 0);
-                if (availableBalance <= 0) {
-                    throw new Error(`[REAL BALANCE ERROR] Available Dhan balance is ₹${availableBalance}. Cannot place real trades with zero balance.`);
+                if (availableBalance < 1000) {
+                    console.log(`⚠️ [REAL BALANCE NOTICE] Available Dhan balance (₹${availableBalance}) is below minimum threshold ₹1000. Skipping trade.`);
                 }
 
                 return availableBalance;

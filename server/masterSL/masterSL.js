@@ -195,6 +195,12 @@ class MasterTrailingEngine {
                 retryDelay
             );
 
+            const minRequiredBalance = Number(cfg.minRequiredBalance || 1000);
+            if (availableBalance < minRequiredBalance) {
+                logger.logInfo(envName, "SIGNAL_IGNORED", `Available balance (₹${availableBalance}) is below minimum required balance (₹${minRequiredBalance}). Ignoring signal.`);
+                return { status: "IGNORED", reason: `INSUFFICIENT_MIN_BALANCE (₹${availableBalance} < ₹${minRequiredBalance})` };
+            }
+
             const maxBudget = availableBalance * ((cfg.maxBudgetPercent || 100) / 100);
 
             // STEP 2: Strike Price Selection (Optional / If provided by handler)

@@ -1,6 +1,7 @@
 {
   "maxBudgetPercent": 100,
-  "maxLossPerTrade": 300,
+  "minRequiredBalance": 1000,
+  "maxLossPerTrade": 500,
   "breathingRoomPoints": 0.5,
   "targetMode": "TRAILING",
   "maxTradesPerDay": 3,
