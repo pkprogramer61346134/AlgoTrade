@@ -163,13 +163,11 @@ class RealTradeEngine {
                     }
 
                 } else {
-                    // No open positions in Dhan API: Clear any ghost position
-                    if (masterSL.activePosition && masterSL.activePosition.envName === "REAL_TRADE") {
-                        console.log(`🧹 [REAL POSITIONS SYNC] Dhan API shows 0 open positions. Clearing stale ghost position (${masterSL.activePosition.symbol}).`);
-                        masterSL.activePosition = null;
-                        this.activeOptionContract = null;
-                        this.activeOptionStreamSecId = null;
-                    }
+                    // No open positions in Dhan API: Unconditionally clear any ghost position
+                    masterSL.activePosition = null;
+                    this.activeOptionContract = null;
+                    this.latestOptionTick = null;
+                    this.activeOptionStreamSecId = null;
                 }
             }
         } catch (err) {

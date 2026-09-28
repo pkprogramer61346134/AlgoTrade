@@ -99,6 +99,8 @@ function createUIServer(port = 3000) {
     app.post('/api/clear-position', (req, res) => {
         try {
             masterSL.activePosition = null;
+            realTradeEngine.activeOptionContract = null;
+            realTradeEngine.latestOptionTick = null;
             res.json({ status: "success", message: "Active position cleared successfully!" });
         } catch (e) {
             res.status(500).json({ status: "error", message: e.message });
