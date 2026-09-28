@@ -1,4 +1,4 @@
-const dhan = require('./utility/dhan-orders');
+const dhan = require('../utility/dhan-orders');
 
 async function main() {
     try {
