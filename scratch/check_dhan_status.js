@@ -3,18 +3,15 @@ const dhan = new DhanOrders();
 
 async function main() {
     try {
-        console.log('=== ALL DHAN ORDERS TODAY ===');
+        console.log('=== DHAN ORDERS FOR NIFTY-Sep2026-22100-PE ===');
         const orders = await dhan.getOrderList();
         const list = orders?.data?.data || orders?.data || [];
-        if (Array.isArray(list)) {
-            console.log(JSON.stringify(list, null, 2));
-        } else {
-            console.log(JSON.stringify(orders, null, 2));
-        }
+        const filtered = list.filter(o => o.securityId === "73870" || o.tradingSymbol?.includes("22100"));
+        console.log(JSON.stringify(filtered, null, 2));
 
-        console.log('=== CURRENT DHAN POSITIONS ===');
-        const pos = await dhan.getPositions();
-        console.log(JSON.stringify(pos?.data, null, 2));
+        console.log('=== DHAN PENDING / OPEN ORDERS (ANY SYMBOL) ===');
+        const pending = list.filter(o => o.orderStatus === "PENDING" || o.orderStatus === "TRIGGER_PENDING" || o.orderStatus === "OPEN");
+        console.log(JSON.stringify(pending, null, 2));
     } catch (e) {
         console.error('Error:', e.message);
     }
