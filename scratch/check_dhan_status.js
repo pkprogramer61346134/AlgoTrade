@@ -3,11 +3,11 @@ const dhan = new DhanOrders();
 
 async function main() {
     try {
-        console.log('=== LATEST DHAN ORDERS ===');
+        console.log('=== ALL DHAN ORDERS TODAY ===');
         const orders = await dhan.getOrderList();
         const list = orders?.data?.data || orders?.data || [];
         if (Array.isArray(list)) {
-            console.log(JSON.stringify(list.slice(-5), null, 2));
+            console.log(JSON.stringify(list, null, 2));
         } else {
             console.log(JSON.stringify(orders, null, 2));
         }
