@@ -314,7 +314,7 @@ class RealTradeEngine {
                     lots: lots,
                     lotSize: lotSize,
                     price: 0, // MARKET Order
-                    targetPrice: orderDetails.levels?.tr4 || orderDetails.targetPrice || strikeInfo.optionTR4,
+                    targetPrice: orderDetails.levels?.tr5 || orderDetails.levels?.tr4 || orderDetails.targetPrice || strikeInfo.optionTR5,
                     stopLossPrice: orderDetails.initialSl || strikeInfo.optionSL
                 });
 
