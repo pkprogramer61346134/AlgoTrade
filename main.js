@@ -137,10 +137,17 @@ async function startMasterSystem() {
 
                 if (consensusResult.consensus === "BUY") signalBadge = "🟢 BUY SIGNAL CONFIRMED & TRIGGERED";
                 if (consensusResult.consensus === "SELL") signalBadge = "🔴 SELL SIGNAL CONFIRMED & TRIGGERED";
+                if (consensusResult.consensus === "SYSTEM_STABILIZING") {
+                    const remSecs = consensusResult.stabilization?.remainingSecs || 0;
+                    const totalSecs = consensusResult.stabilization?.gracePeriodSecs || 45;
+                    const rawDir = consensusResult.rawType === "BUY" ? "🟢 BUY" : "🔴 SELL";
+                    signalBadge = `⏳ SYSTEM STABILIZING [${rawDir}] (${remSecs}s / ${totalSecs}s Grace Period)`;
+                    waitTimerLine = `⏳ Grace Period : ${remSecs}s Remaining (Live Feed & Indicator Synchronization)`;
+                }
                 if (consensusResult.consensus === "BUILDING_CONFIDENCE") {
                     const rawDir = consensusResult.rawType === "BUY" ? "🟢 BUY" : "🔴 SELL";
                     const currConf = consensusResult.confidence || '0%';
-                    const reqThreshold = consensusResult.alignment?.threshold || '80%';
+                    const reqThreshold = consensusResult.alignment?.threshold || '75%';
                     signalBadge = `📈 BUILDING CONFIDENCE [${rawDir}] (${currConf} / ${reqThreshold} Peak Required)`;
                 }
                 if (consensusResult.consensus === "WAITING_CONFIRMATION") {

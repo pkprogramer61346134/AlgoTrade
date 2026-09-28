@@ -14,6 +14,8 @@
 const masterConfig = require('./config');
 const logger = require('./logger');
 
+const SERVER_STARTUP_TIME_MS = Date.now();
+
 class MasterTrailingEngine {
     constructor() {
         this.activePosition = null;
@@ -140,6 +142,14 @@ class MasterTrailingEngine {
         if (!this.isWithinTradingHours(timeStr)) {
             logger.logInfo(envName, "SIGNAL_IGNORED", `Signal outside trading hours (09:40 - 15:10). Signal time: ${timeStr}`);
             return { status: "IGNORED", reason: "OUTSIDE_TRADING_HOURS (09:40 - 15:10)" };
+        }
+
+        // 3. Guard Check: Startup Grace Period Guard (Signals ignored during initial 45s server startup)
+        const elapsedStartupSecs = Math.round((Date.now() - SERVER_STARTUP_TIME_MS) / 1000);
+        const startupGraceSecs = Number(cfg.startupGracePeriodSeconds || 45);
+        if (elapsedStartupSecs < startupGraceSecs && envName !== "BACKTEST" && envName !== "TEST_SIM") {
+            logger.logInfo(envName, "SIGNAL_IGNORED", `System in startup stabilization period (${elapsedStartupSecs}s / ${startupGraceSecs}s). Ignoring signal.`);
+            return { status: "IGNORED", reason: `SYSTEM_STABILIZING (${startupGraceSecs - elapsedStartupSecs}s remaining)` };
         }
 
         // Synchronously acquire atomic lock BEFORE any async operations

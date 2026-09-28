@@ -32,6 +32,7 @@ function getMasterSL() {
 const INDICATORS_PATH = path.join(__dirname, 'tools/indicators');
 const CONFIG_PATH = path.join(__dirname, 'consensus_master_head.json');
 
+const SERVER_STARTUP_TIME_MS = Date.now();
 let pendingSignalTracker = null;
 let confidenceTimeTracker = {
     lastSignalType: "NO_SIGNAL",
@@ -811,6 +812,25 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
             result.consensus = "BUILDING_CONFIDENCE";
             result.reason = `⏳ Confidence building (${finalConfNum.toFixed(1)}% / ${targetThreshold}% peak required). Sustained signal: ${sustainedSeconds}s (${intervalSecs}s time steps).`;
         }
+
+        // Server Startup Grace Period Protection (Prevents instant order placement right after server start/restart)
+        const startupGraceSecs = Number(config.startupGracePeriodSeconds || 45);
+        const elapsedStartupSecs = Math.round((nowMs - SERVER_STARTUP_TIME_MS) / 1000);
+        const isSystemStabilizing = elapsedStartupSecs < startupGraceSecs;
+
+        if (isSystemStabilizing && (result.consensus === "BUY" || result.consensus === "SELL")) {
+            const remGraceSecs = Math.max(0, startupGraceSecs - elapsedStartupSecs);
+            result.rawType = result.consensus;
+            result.consensus = "SYSTEM_STABILIZING";
+            result.reason = `⏳ System Stabilizing (${remGraceSecs}s remaining). Synchronizing live feed & indicators...`;
+        }
+
+        result.stabilization = {
+            gracePeriodSecs: startupGraceSecs,
+            elapsedSecs: elapsedStartupSecs,
+            remainingSecs: Math.max(0, startupGraceSecs - elapsedStartupSecs),
+            isStabilized: !isSystemStabilizing
+        };
 
     } catch (alignErr) {
         console.warn(`⚠️ [CONSENSUS ENGINE] Alignment confidence check notice: ${alignErr.message}`);
