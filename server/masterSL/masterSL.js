@@ -309,6 +309,7 @@ class MasterTrailingEngine {
 
         } catch (err) {
             logger.logError(envName, "SIGNAL_EXECUTION_FAILED", err);
+            this.activePosition = null;
             return null;
         } finally {
             this.isOrderInFlight = false;

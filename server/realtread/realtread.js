@@ -455,6 +455,9 @@ class RealTradeEngine {
      * Get Complete State Payload for UI Rendering
      */
     getStatus() {
+        // Trigger background position sync check on every UI status request
+        try { this.syncRealPositionsFromDhan(); } catch (e) {}
+
         const masterStatus = masterSL.getStatus();
         return {
             ...masterStatus,
