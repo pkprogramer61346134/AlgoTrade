@@ -195,13 +195,16 @@ class StrikeSelector {
         const atmLtp = Number(atmSide?.last_price || atmSide?.top_bid_price || 0);
         const atmReqMargin = atmLtp * totalQty;
 
+        // Apply 15% Fee & STT Buffer to safe available budget to guarantee Dhan RMS acceptance
+        const safeBudget = (availableBudget !== null && availableBudget > 0) ? Number((availableBudget * 0.85).toFixed(2)) : null;
+
         let selectedItem = null;
         let selectedSide = null;
         let selectedLtp = 0;
         let selectedReqMargin = 0;
 
-        // If ATM strike fits within availableBudget (or budget limit disabled / 0)
-        if (atmLtp > 0 && (availableBudget === null || availableBudget <= 0 || atmReqMargin <= availableBudget)) {
+        // If ATM strike fits within safeBudget (or budget limit null)
+        if (atmLtp > 0 && (safeBudget === null || atmReqMargin <= safeBudget)) {
             selectedItem = atmItem;
             selectedSide = atmSide;
             selectedLtp = atmLtp;
@@ -220,7 +223,7 @@ class StrikeSelector {
                 if (ltp <= 0) continue;
 
                 const reqMargin = ltp * totalQty;
-                if (availableBudget && availableBudget > 0 && reqMargin <= availableBudget) {
+                if (safeBudget && safeBudget > 0 && reqMargin <= safeBudget) {
                     selectedItem = item;
                     selectedSide = side;
                     selectedLtp = ltp;
@@ -230,11 +233,11 @@ class StrikeSelector {
             }
         }
 
-        // If no budget-friendly strike found at all (e.g. balance is 0), throw error
+        // If no budget-friendly strike found at all (e.g. balance is insufficient for 1 lot + STT/brokerage fees), throw error
         if (!selectedItem || !selectedSide || !selectedSide.security_id) {
             const reqMarginMsg = atmReqMargin > 0 ? `Required: ~₹${atmReqMargin.toFixed(2)} for ATM strike (${atmItem.strike} ${optionType} @ ₹${atmLtp})` : '';
-            const availMsg = availableBudget ? `Available Budget: ₹${availableBudget.toFixed(2)}` : 'No budget available';
-            throw new Error(`[STRIKE SELECTOR ERROR] Insufficient balance for ${lots} lot(s) (${totalQty} Qty) of ${optionType}! ${availMsg}. ${reqMarginMsg}`);
+            const availMsg = availableBudget ? `Available Balance: ₹${availableBudget.toFixed(2)} (Safe Trade Limit with STT/Fees Buffer: ₹${safeBudget || 0})` : 'No balance available';
+            throw new Error(`[STRIKE SELECTOR ERROR] Insufficient balance for ${lots} lot(s) (${totalQty} Qty) of ${optionType}! ${availMsg}. ${reqMarginMsg}. Please add funds to your Dhan account.`);
         }
 
         const secId = String(selectedSide.security_id);

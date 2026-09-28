@@ -500,6 +500,12 @@ class MasterTrailingEngine {
      * Get Engine Status
      */
     getStatus() {
+        // Ghost position auto-cleanup guard: If activePosition has invalid entryPrice, auto-reset it
+        if (this.activePosition && (!this.activePosition.entryPrice || isNaN(this.activePosition.entryPrice) || Number(this.activePosition.entryPrice) <= 0)) {
+            console.warn(`⚠️ [MASTER SL GUARD] Cleaning up invalid ghost position (${this.activePosition.symbol || 'UNKNOWN'}). Invalid entryPrice: ${this.activePosition.entryPrice}`);
+            this.activePosition = null;
+        }
+
         return {
             activePosition: this.activePosition,
             history: this.tradeHistory,

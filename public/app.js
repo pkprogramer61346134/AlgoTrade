@@ -191,40 +191,53 @@ function renderRealDashboard(data, config = {}) {
     if (posCard) {
         if (data.activePosition && data.activePosition.status === "OPEN") {
             const pos = data.activePosition;
-            const pnlVal = Number(pos.pnl || 0);
+            const pnlVal = Number(pos.pnl || pos.realizedPnl || 0);
             const pnlColor = pnlVal > 0 ? "text-success" : pnlVal < 0 ? "text-danger" : "";
 
+            const entryLtpVal = Number(pos.entryPrice || pos.entryLtp || 0);
+            const currentLtpVal = Number(pos.liveLtp || pos.currentLtp || entryLtpVal);
+            const displayEntry = entryLtpVal > 0 ? entryLtpVal.toFixed(2) : '--';
+            const displayCurrent = currentLtpVal > 0 ? currentLtpVal.toFixed(2) : '--';
+
             const lvls = pos.levels || {};
-            const tr1 = lvls.tr1 || (pos.entryLtp + 1);
-            const tr4 = lvls.tr4 || pos.targetTr4 || (pos.entryLtp + 4);
-            const range = Math.max(0.1, tr4 - pos.entryLtp);
-            const progressPct = Math.min(100, Math.max(0, (((pos.currentLtp - pos.entryLtp) / range) * 100))).toFixed(1);
+            const tr1 = lvls.tr1 ? Number(lvls.tr1).toFixed(2) : '--';
+            const tr2 = lvls.tr2 ? Number(lvls.tr2).toFixed(2) : '--';
+            const tr3 = lvls.tr3 ? Number(lvls.tr3).toFixed(2) : '--';
+            const tr4 = lvls.tr4 ? Number(lvls.tr4).toFixed(2) : (pos.targetPrice ? Number(pos.targetPrice).toFixed(2) : '--');
+
+            let progressPct = "0.0";
+            if (entryLtpVal > 0 && tr4 !== '--' && Number(tr4) > entryLtpVal) {
+                const range = Math.max(0.1, Number(tr4) - entryLtpVal);
+                const rawPct = (((currentLtpVal - entryLtpVal) / range) * 100);
+                progressPct = Math.min(100, Math.max(0, rawPct)).toFixed(1);
+                if (isNaN(progressPct)) progressPct = "0.0";
+            }
 
             posCard.className = "active-trade-card glass-card";
             posCard.innerHTML = `
                 <div class="trade-details-grid">
                     <div class="trade-item-box">
                         <div class="item-label">Contract Symbol</div>
-                        <div class="item-val">${pos.symbol}</div>
+                        <div class="item-val">${pos.symbol || 'NIFTY_OPTION'}</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Entry Option LTP</div>
-                        <div class="item-val">₹${pos.entryLtp}</div>
+                        <div class="item-val">₹${displayEntry}</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Live Option LTP</div>
-                        <div class="item-val">₹${pos.currentLtp}</div>
+                        <div class="item-val">₹${displayCurrent}</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Unrealized PnL</div>
-                        <div class="item-val ${pnlColor}">${pos.pnl >= 0 ? '+' : ''}₹${pos.pnl || 0} (${pos.pnlPercent || '0%'})</div>
+                        <div class="item-val ${pnlColor}">${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)} (${pos.pnlPercent || '0%'})</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Trailed Stop Loss</div>
-                        <div class="item-val text-danger">₹${pos.currentSl}</div>
+                        <div class="item-val text-danger">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</div>
                     </div>
                     <div class="trade-item-box">
-                        <div class="item-label">Target TR4 (1:4)</div>
+                        <div class="item-label">Target TR4</div>
                         <div class="item-val text-success">₹${tr4}</div>
                     </div>
                 </div>
@@ -232,16 +245,16 @@ function renderRealDashboard(data, config = {}) {
                 <div class="progress-container">
                     <div class="progress-header">
                         <span>Target Progress (Stage: ${pos.trailingStage || 'INITIAL'})</span>
-                        <span>${progressPct}% to TR4 Target</span>
+                        <span>${progressPct}% to Target</span>
                     </div>
                     <div class="progress-bar-bg">
                         <div class="progress-bar-fill" style="width: ${progressPct}%"></div>
                     </div>
                     <div class="targets-milestones-row">
-                        <span>Entry: ₹${pos.entryLtp}</span>
-                        <span>TR1: ₹${lvls.tr1 || '-'}</span>
-                        <span>TR2: ₹${lvls.tr2 || '-'}</span>
-                        <span>TR3: ₹${lvls.tr3 || '-'}</span>
+                        <span>Entry: ₹${displayEntry}</span>
+                        <span>TR1: ₹${tr1}</span>
+                        <span>TR2: ₹${tr2}</span>
+                        <span>TR3: ₹${tr3}</span>
                         <span>TR4: ₹${tr4}</span>
                     </div>
                 </div>

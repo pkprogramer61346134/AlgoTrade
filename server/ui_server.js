@@ -95,6 +95,16 @@ function createUIServer(port = 3000) {
         }
     });
 
+    // 4b. Clear / Reset Active Position Endpoint
+    app.post('/api/clear-position', (req, res) => {
+        try {
+            masterSL.activePosition = null;
+            res.json({ status: "success", message: "Active position cleared successfully!" });
+        } catch (e) {
+            res.status(500).json({ status: "error", message: e.message });
+        }
+    });
+
     // 5. Run Backtest Engine
     app.post('/api/backtest/run', async (req, res) => {
         try {
