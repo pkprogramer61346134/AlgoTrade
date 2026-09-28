@@ -2,7 +2,7 @@
   "maxBudgetPercent": 100,
   "maxLossPerTrade": 300,
   "breathingRoomPoints": 0.5,
-  "targetMode": "1:2",
+  "targetMode": "TRAILING",
   "maxTradesPerDay": 3,
   "tradingStartTime": "09:40:00",
   "tradingEndTime": "15:10:00",
