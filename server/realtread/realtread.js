@@ -79,8 +79,11 @@ class RealTradeEngine {
             const orders = new DhanOrders();
             const posRes = await orders.getPositions();
 
-            if (posRes && posRes.status === "success" && Array.isArray(posRes.data)) {
-                const openDhanPositions = posRes.data.filter(p => (p.positionType === "LONG" || Number(p.netQty) > 0) && Number(p.netQty) !== 0);
+            const rawData = posRes?.data?.data || posRes?.data;
+            const positionsList = Array.isArray(rawData) ? rawData : [];
+
+            if (positionsList.length >= 0) {
+                const openDhanPositions = positionsList.filter(p => (p.positionType === "LONG" || Number(p.netQty) > 0) && Number(p.netQty) !== 0);
 
                 if (openDhanPositions.length > 0) {
                     const activeDhanPos = openDhanPositions[0];
