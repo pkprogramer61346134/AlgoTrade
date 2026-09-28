@@ -71,7 +71,15 @@ class DhanOrders {
                 return {
                     status: "error",
                     statusCode: response.status,
-                    message: data.remarks?.error_message || data.message || "API call failed",
+                    message: data.remarks?.error_message || data.remarks || data.message || "API call failed",
+                    errorData: data
+                };
+            }
+            if (data && (data.orderStatus === "REJECTED" || data.orderStatus === "CANCELLED" || data.status === "FAILURE")) {
+                return {
+                    status: "error",
+                    statusCode: response.status,
+                    message: data.remarks?.error_message || data.remarks || data.message || `Order ${data.orderStatus || 'Failed'}`,
                     errorData: data
                 };
             }

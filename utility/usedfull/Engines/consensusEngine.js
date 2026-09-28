@@ -13,11 +13,33 @@ const fs = require('fs');
 const path = require('path');
 const { getCachedCandles } = require('../cached-historical-data');
 
+// Lazy-require masterSL engine for active trade alignment checking
+let masterSLInstance = null;
+function getMasterSL() {
+    if (!masterSLInstance) {
+        try {
+            masterSLInstance = require('../../../server/masterSL/masterSL');
+        } catch (e) {
+            try {
+                masterSLInstance = require('../../server/masterSL/masterSL');
+            } catch (e2) {}
+        }
+    }
+    return masterSLInstance;
+}
+
 // Fixed paths inside C:\AlgoTrade\utility\usedfull\Engines
 const INDICATORS_PATH = path.join(__dirname, 'tools/indicators');
 const CONFIG_PATH = path.join(__dirname, 'consensus_master_head.json');
 
 let pendingSignalTracker = null;
+let confidenceTimeTracker = {
+    lastSignalType: "NO_SIGNAL",
+    firstSeenMs: 0,
+    lastIntervalStep: 0,
+    rampBonus: 0,
+    decayPenalty: 0
+};
 let indicators;
 try {
     indicators = require(INDICATORS_PATH);
@@ -684,6 +706,106 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
             pendingSignalTracker = null;
         }
         result.confirmation = null;
+    }
+
+    // Active Trade Alignment & Dynamic Confidence Ramping / Decay System
+    try {
+        const masterSL = getMasterSL();
+        const activePos = masterSL ? masterSL.activePosition : null;
+        let baseConf = parseFloat(String(result.confidence || "70%").replace('%', '')) || 70;
+        let adjustedConf = baseConf;
+        let alignStatus = "NO_ACTIVE_TRADE";
+        let alignNote = "⚪ No active trade currently open in market.";
+
+        const rawSignalType = (result.consensus === "WAITING_CONFIRMATION" || result.consensus === "BUILDING_CONFIRMATION" || result.consensus === "BUILDING_CONFIDENCE") ? result.rawType : result.consensus;
+
+        if (activePos && activePos.status === "OPEN" && (rawSignalType === "BUY" || rawSignalType === "SELL")) {
+            const activeDir = (activePos.optionType === "CE" || activePos.consensus === "BUY") ? "BUY" : "SELL";
+
+            if (rawSignalType === activeDir) {
+                // Same direction: Boost confidence (+15%)
+                adjustedConf = Math.min(100, Number((baseConf + 15).toFixed(1)));
+                alignStatus = "ALIGNED";
+                alignNote = `🟢 ALIGNED with active trade (${activePos.symbol || activeDir}). Confidence boosted (+15%).`;
+            } else {
+                // Opposite direction: Penalize confidence (-25%)
+                adjustedConf = Math.max(0, Number((baseConf - 25).toFixed(1)));
+                alignStatus = "OPPOSED";
+                alignNote = `🔴 OPPOSED to active trade (${activePos.symbol || activeDir}). Confidence penalized (-25%).`;
+            }
+        }
+
+        // Dynamic Time-Based Confidence Ramping & Decay System (15-second Time Steps)
+        const nowMs = Date.now();
+        const intervalSecs = Number(config.confidenceTimeIntervalSeconds || 15);
+        const intervalMs = intervalSecs * 1000;
+
+        if (rawSignalType === "BUY" || rawSignalType === "SELL") {
+            if (confidenceTimeTracker.lastSignalType === rawSignalType) {
+                const elapsedMs = nowMs - confidenceTimeTracker.firstSeenMs;
+                const currentStep = Math.floor(elapsedMs / intervalMs);
+
+                if (currentStep > confidenceTimeTracker.lastIntervalStep) {
+                    const stepDiff = currentStep - confidenceTimeTracker.lastIntervalStep;
+                    confidenceTimeTracker.rampBonus = Math.min(25, confidenceTimeTracker.rampBonus + (stepDiff * 5));
+                    confidenceTimeTracker.decayPenalty = Math.max(0, confidenceTimeTracker.decayPenalty - (stepDiff * 5));
+                    confidenceTimeTracker.lastIntervalStep = currentStep;
+                }
+            } else {
+                confidenceTimeTracker.lastSignalType = rawSignalType;
+                confidenceTimeTracker.firstSeenMs = nowMs;
+                confidenceTimeTracker.lastIntervalStep = 0;
+                confidenceTimeTracker.rampBonus = 0;
+                confidenceTimeTracker.decayPenalty = 0;
+            }
+        } else {
+            // Neutral / NO_SIGNAL state -> Decay penalty over 15s intervals
+            if (confidenceTimeTracker.lastSignalType === "NO_SIGNAL") {
+                const elapsedMs = nowMs - confidenceTimeTracker.firstSeenMs;
+                const currentStep = Math.floor(elapsedMs / intervalMs);
+
+                if (currentStep > confidenceTimeTracker.lastIntervalStep) {
+                    const stepDiff = currentStep - confidenceTimeTracker.lastIntervalStep;
+                    confidenceTimeTracker.decayPenalty = Math.min(40, confidenceTimeTracker.decayPenalty + (stepDiff * 5));
+                    confidenceTimeTracker.rampBonus = Math.max(0, confidenceTimeTracker.rampBonus - (stepDiff * 5));
+                    confidenceTimeTracker.lastIntervalStep = currentStep;
+                }
+            } else {
+                confidenceTimeTracker.lastSignalType = "NO_SIGNAL";
+                confidenceTimeTracker.firstSeenMs = nowMs;
+                confidenceTimeTracker.lastIntervalStep = 0;
+            }
+        }
+
+        const sustainedSeconds = confidenceTimeTracker.firstSeenMs > 0 ? Math.round((nowMs - confidenceTimeTracker.firstSeenMs) / 1000) : 0;
+        const finalConfNum = Math.max(0, Math.min(100, Number((adjustedConf + confidenceTimeTracker.rampBonus - confidenceTimeTracker.decayPenalty).toFixed(1))));
+        const targetThreshold = Number(config.confidenceThreshold || 80);
+        const isPeakConfidence = finalConfNum >= targetThreshold;
+
+        result.alignment = {
+            status: alignStatus,
+            baseConfidence: baseConf + "%",
+            adjustedConfidence: adjustedConf + "%",
+            rampBonus: "+" + confidenceTimeTracker.rampBonus + "%",
+            decayPenalty: "-" + confidenceTimeTracker.decayPenalty + "%",
+            finalConfidence: finalConfNum + "%",
+            threshold: targetThreshold + "%",
+            thresholdMet: isPeakConfidence,
+            sustainedSeconds: sustainedSeconds,
+            timeInterval: intervalSecs + "s",
+            note: alignNote
+        };
+        result.confidence = finalConfNum.toFixed(1) + "%";
+
+        // Gating Trade Execution: Only trigger BUY/SELL if finalConfidence reaches targetThreshold (Peak Level)
+        if ((result.consensus === "BUY" || result.consensus === "SELL") && !isPeakConfidence) {
+            result.rawType = result.consensus;
+            result.consensus = "BUILDING_CONFIDENCE";
+            result.reason = `⏳ Confidence building (${finalConfNum.toFixed(1)}% / ${targetThreshold}% peak required). Sustained signal: ${sustainedSeconds}s (${intervalSecs}s time steps).`;
+        }
+
+    } catch (alignErr) {
+        console.warn(`⚠️ [CONSENSUS ENGINE] Alignment confidence check notice: ${alignErr.message}`);
     }
 
     return result;

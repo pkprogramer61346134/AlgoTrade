@@ -245,26 +245,21 @@ class SmartOrderExecutor {
         const quantity = Number(params.quantity);
         const exchangeSegment = params.exchangeSegment || "NSE_FNO";
 
-        if (orderId) {
+        // Step 1: If orderId is provided, attempt to cancel any pending legs (e.g. STOP_LOSS_LEG, TARGET_LEG)
+        if (orderId && !String(orderId).startsWith("MASTER_SL")) {
             try {
-                const cancelRes = await this.orders.cancelSuperOrder(orderId, "ENTRY_LEG");
-                if (cancelRes && cancelRes.status === "success") {
-                    return {
-                        status: "success",
-                        action: "CLOSE_SUPER_ORDER",
-                        orderId,
-                        rawResponse: cancelRes
-                    };
-                }
-            } catch (err) {
-                console.warn(`⚠️ [ORDER EXECUTOR WARN] Super order ${orderId} entry cancel notice: ${err.message}. Attempting market exit...`);
-            }
+                await this.orders.cancelSuperOrder(orderId, "STOP_LOSS_LEG");
+            } catch (err) {}
+            try {
+                await this.orders.cancelSuperOrder(orderId, "TARGET_LEG");
+            } catch (err) {}
+            try {
+                await this.orders.cancelOrder(orderId);
+            } catch (err) {}
         }
 
-        if (securityId) {
-            if (!quantity || quantity <= 0) {
-                throw new Error("[ORDER EXECUTOR ERROR] Valid quantity is required to square off position");
-            }
+        // Step 2: Market Exit SELL Order for Security ID
+        if (securityId && quantity > 0) {
             const exitRes = await this.orders.placeOrder({
                 transactionType: "SELL",
                 exchangeSegment,
@@ -289,7 +284,15 @@ class SmartOrderExecutor {
             };
         }
 
-        throw new Error("[ORDER EXECUTOR ERROR] Either valid orderId or securityId with quantity is required to close position");
+        if (orderId && !String(orderId).startsWith("MASTER_SL")) {
+            return {
+                status: "success",
+                action: "CLOSE_ORDER_CANCELLED",
+                orderId
+            };
+        }
+
+        throw new Error("[ORDER EXECUTOR ERROR] Valid securityId and quantity required to close position");
     }
 
     /**

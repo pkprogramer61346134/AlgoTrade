@@ -23,6 +23,7 @@ const { DhanFunds } = require('../../utility/dhan-funds');
 class RealTradeEngine {
     constructor() {
         this.isProcessingTick = false;
+        this.isOrderPlacing = false;
         this.smartExecutor = new SmartOrderExecutor();
         this.livePriceTracker = new DhanOptionLivePrice();
         this.activeOptionContract = null;
@@ -179,7 +180,9 @@ class RealTradeEngine {
                     throw new Error(`[REAL ORDER ERROR] Order quantity (${qty}) is smaller than contract lot size (${lotSize})`);
                 }
 
-                console.log(`🚀 [REAL ORDER PLACED] ${strikeInfo.symbol || secId} | Security ID: ${secId} | Qty: ${qty} (${lots} lot(s) @ ${lotSize}/lot)`);
+                const actualExecutedQty = lots * lotSize;
+
+                console.log(`🚀 [REAL ORDER PLACED] ${strikeInfo.symbol || secId} | Security ID: ${secId} | Qty: ${actualExecutedQty} (${lots} lot(s) @ ${lotSize}/lot)`);
 
                 // 3. Module 3: smart-order-executor.js
                 const execRes = await this.smartExecutor.placeOptionOrder({
@@ -205,13 +208,13 @@ class RealTradeEngine {
                     securityId: secId,
                     exchangeSegment: strikeInfo.exchangeSegment || "NSE_FNO",
                     buyPrice: execRes.entryPrice || orderDetails.entryPrice || strikeInfo.liveLtp,
-                    qty: qty
+                    qty: actualExecutedQty
                 }, (liveTick) => {
                     this.latestOptionTick = liveTick;
                     this.processTick(liveTick);
                 });
 
-                return { status: "SUCCESS", orderId: execRes.orderId, quantity: qty, lotSize: lotSize, securityId: secId };
+                return { status: "SUCCESS", orderId: execRes.orderId, quantity: actualExecutedQty, lotSize: lotSize, securityId: secId };
             },
             modifyOrder: async (orderId, newSl, stage) => {
                 if (!orderId || String(orderId).startsWith("MASTER_SL")) {
@@ -285,12 +288,20 @@ class RealTradeEngine {
      */
     async processSignal(signal, stockInfo = null) {
         if (!realConfig.getConfig().realTradeEnabled || !signal) return null;
+        if (this.isOrderPlacing || this.activePosition) {
+            return { status: "IGNORED", reason: "ORDER_IN_FLIGHT_OR_POSITION_ACTIVE" };
+        }
 
         if (signal.consensus === "BUY" || signal.consensus === "SELL") {
-            console.log(`\n🎯 [REAL SIGNAL DETECTED] Signal: ${signal.consensus} | Entry Spot: ₹${signal.entry}`);
-            const handlers = this.getRealHandlers();
-            const res = await masterSL.processSignal(signal, handlers, "REAL_TRADE");
-            return res;
+            this.isOrderPlacing = true;
+            try {
+                console.log(`\n🎯 [REAL SIGNAL DETECTED] Signal: ${signal.consensus} | Entry Spot: ₹${signal.entry}`);
+                const handlers = this.getRealHandlers();
+                const res = await masterSL.processSignal(signal, handlers, "REAL_TRADE");
+                return res;
+            } finally {
+                this.isOrderPlacing = false;
+            }
         }
 
         return { status: "NO_SIGNAL", signal };

@@ -215,7 +215,9 @@ async function run2018to2025Backtest() {
     };
 
     // Save JSON report
-    const reportPath = path.join(__dirname, 'server/backtesting/backtest_report_2018_2025.json');
+    const reportDir = path.join(__dirname, '../../server/backtesting');
+    if (!fs.existsSync(reportDir)) fs.mkdirSync(reportDir, { recursive: true });
+    const reportPath = path.join(reportDir, 'backtest_report_2018_2025.json');
     fs.writeFileSync(reportPath, JSON.stringify(summaryReport, null, 2), 'utf8');
 
     // Create Markdown Artifact
@@ -255,7 +257,7 @@ ${yearlyResults.map(y => `| **${y.year}** | ${y.totalTrades} | ${y.winningTrades
 > **Key Insight**: 1:2 Target strategies (one_to_two_strategies.json) demonstrate robust positive expectancy (+EV) across all market regimes from 2018 to 2025, capturing optimal risk-reward swings while maintaining locked-in profits via MasterSL trailing.
 `;
 
-    const artifactPath = 'C:/Users/Ridhima/.gemini/antigravity-ide/brain/347c121f-870c-49ec-93c9-1f6f97e25445/backtest_report_2018_2025.md';
+    const artifactPath = path.join(__dirname, 'backtest_report_2018_2025.md');
     fs.writeFileSync(artifactPath, markdownContent, 'utf8');
 
     console.log("\n==========================================================================");

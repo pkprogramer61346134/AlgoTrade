@@ -18,6 +18,7 @@ class MasterTrailingEngine {
     constructor() {
         this.activePosition = null;
         this.tradeHistory = [];
+        this.isOrderInFlight = false;
     }
 
     /**
@@ -53,6 +54,62 @@ class MasterTrailingEngine {
     }
 
     /**
+     * Check if a given time string (or current time) is within trading hours (09:40 to 15:10)
+     */
+    isWithinTradingHours(timeStr = null) {
+        const cfg = masterConfig.getConfig();
+        const startStr = cfg.tradingStartTime || "09:40:00";
+        const endStr = cfg.tradingEndTime || "15:10:00";
+
+        let timeToParse = timeStr;
+        if (!timeToParse) {
+            timeToParse = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+        }
+
+        const parseMinutes = (tStr) => {
+            if (!tStr) return 0;
+            const parts = String(tStr).trim().split(":");
+            if (parts.length < 2) return 0;
+            const hrs = parseInt(parts[0], 10) || 0;
+            const mins = parseInt(parts[1], 10) || 0;
+            return (hrs * 60) + mins;
+        };
+
+        const currentMins = parseMinutes(timeToParse);
+        const startMins = parseMinutes(startStr); // 9*60+40 = 580
+        const endMins = parseMinutes(endStr);     // 15*60+10 = 910
+
+        return currentMins >= startMins && currentMins < endMins;
+    }
+
+    /**
+     * Check if current time is past trading end time (3:10 PM / 15:10) for Auto Square-Off
+     */
+    isAfterTradingHours(timeStr = null) {
+        const cfg = masterConfig.getConfig();
+        const endStr = cfg.autoSquareOffTime || cfg.tradingEndTime || "15:10:00";
+
+        let timeToParse = timeStr;
+        if (!timeToParse) {
+            timeToParse = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+        }
+
+        const parseMinutes = (tStr) => {
+            if (!tStr) return 0;
+            const parts = String(tStr).trim().split(":");
+            if (parts.length < 2) return 0;
+            const hrs = parseInt(parts[0], 10) || 0;
+            const mins = parseInt(parts[1], 10) || 0;
+            return (hrs * 60) + mins;
+        };
+
+        const currentMins = parseMinutes(timeToParse);
+        const endMins = parseMinutes(endStr);
+
+        return currentMins >= endMins;
+    }
+
+    /**
      * Process Trade Signal & Execute Order Flow via Environment Handlers
      * 
      * @param {Object} signal - Consensus Head signal { consensus: "BUY"|"SELL", entry: number, sl: number }
@@ -72,26 +129,36 @@ class MasterTrailingEngine {
         const maxRetries = cfg.maxRetriesPerStep || 5;
         const retryDelay = cfg.retryDelayMs || 1000;
 
-        // 1. Guard Check: Single Open Position Guard
-        if (this.activePosition && this.activePosition.status === "OPEN") {
-            logger.logInfo(envName, "SIGNAL_IGNORED", `Position already open (${this.activePosition.symbol}). Ignoring signal.`);
-            return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN" };
+        // 1. Guard Check: Single Open Position Guard & Atomic In-Flight Order Guard
+        if ((this.activePosition && this.activePosition.status === "OPEN") || this.isOrderInFlight) {
+            logger.logInfo(envName, "SIGNAL_IGNORED", `Position already open or order in flight (${this.activePosition?.symbol || 'ORDER_IN_FLIGHT'}). Ignoring signal.`);
+            return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_ORDER_IN_FLIGHT" };
         }
 
-        // 2. Guard Check: Max Trades Per Day Check
-        const todayDate = signal.date || new Date().toLocaleDateString("en-CA");
-        const todayTradesCount = this.tradeHistory.filter(t => (t.entryDate === todayDate)).length;
-        if (todayTradesCount >= cfg.maxTradesPerDay) {
-            logger.logInfo(envName, "SIGNAL_IGNORED", `Max trades per day reached (${cfg.maxTradesPerDay}). Ignoring signal.`);
-            return { status: "IGNORED", reason: `MAX_DAILY_TRADES_REACHED (${cfg.maxTradesPerDay})` };
+        // 2. Guard Check: Trading Hours Guard (Signals accepted from 09:40 AM to 03:10 PM only)
+        const timeStr = signal.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+        if (!this.isWithinTradingHours(timeStr)) {
+            logger.logInfo(envName, "SIGNAL_IGNORED", `Signal outside trading hours (09:40 - 15:10). Signal time: ${timeStr}`);
+            return { status: "IGNORED", reason: "OUTSIDE_TRADING_HOURS (09:40 - 15:10)" };
         }
 
-        if (signal.consensus !== "BUY" && signal.consensus !== "SELL") return null;
-
-        const optionType = signal.consensus === "BUY" ? "CE" : "PE";
-        const entrySpotPrice = Number(signal.entry || 0);
+        // Synchronously acquire atomic lock BEFORE any async operations
+        this.isOrderInFlight = true;
 
         try {
+            // 2. Guard Check: Max Trades Per Day Check
+            const todayDate = signal.date || new Date().toLocaleDateString("en-CA");
+            const todayTradesCount = this.tradeHistory.filter(t => (t.entryDate === todayDate)).length;
+            if (todayTradesCount >= cfg.maxTradesPerDay) {
+                logger.logInfo(envName, "SIGNAL_IGNORED", `Max trades per day reached (${cfg.maxTradesPerDay}). Ignoring signal.`);
+                return { status: "IGNORED", reason: `MAX_DAILY_TRADES_REACHED (${cfg.maxTradesPerDay})` };
+            }
+
+            if (signal.consensus !== "BUY" && signal.consensus !== "SELL") return null;
+
+            const optionType = signal.consensus === "BUY" ? "CE" : "PE";
+            const entrySpotPrice = Number(signal.entry || 0);
+
             // STEP 1: Balance Check (With 5 Retries)
             const availableBalance = await this.retryStepAsync(
                 async () => {
@@ -123,7 +190,7 @@ class MasterTrailingEngine {
             const isOptionTrade = Boolean(selectedStrikeInfo && selectedStrikeInfo.securityId && String(selectedStrikeInfo.securityId) !== "13") || Boolean(signal.isOption && String(signal.securityId) !== "13");
             const symbol = selectedStrikeInfo?.symbol || `NIFTY_${optionType}`;
             const entryPrice = Number(selectedStrikeInfo?.liveLtp || selectedStrikeInfo?.ltp || selectedStrikeInfo?.price || entrySpotPrice);
-            const lotSize = Number(selectedStrikeInfo?.lotSize || 65);
+            const lotSize = Math.max(1, Number(selectedStrikeInfo?.lotSize || 65));
             const totalQty = Number(selectedStrikeInfo?.totalQty || selectedStrikeInfo?.qty || lotSize);
 
             // STEP 3: Risk & Targets Calculation (Option Price Action SL or Max Loss Capping)
@@ -139,6 +206,11 @@ class MasterTrailingEngine {
                 initialSl = isOptionTrade ? Number((entryPrice - riskPoints).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - riskPoints).toFixed(2)) : Number((entryPrice + riskPoints).toFixed(2)));
             } else {
                 initialSl = Number(signal.sl || (isOptionTrade ? entryPrice - 25 : (optionType === "CE" ? entryPrice - 25 : entryPrice + 25)));
+                riskPoints = Math.abs(entryPrice - initialSl);
+            }
+
+            if (isNaN(initialSl) || initialSl <= 0) {
+                initialSl = isOptionTrade ? Number((entryPrice - 25).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - 25).toFixed(2)) : Number((entryPrice + 25).toFixed(2)));
                 riskPoints = Math.abs(entryPrice - initialSl);
             }
 
@@ -204,17 +276,20 @@ class MasterTrailingEngine {
 
             this.activePosition = {
                 ...orderPayload,
+                qty: Number(placedOrderResult?.quantity || orderPayload.qty),
                 orderId: placedOrderResult?.orderId || orderPayload.tradeId,
                 handlers: environmentHandlers,
                 envName: envName
             };
 
-            logger.logInfo(envName, "ORDER_EXECUTED", `Position Opened: ${symbol} | Entry: ₹${entryPrice} | SL: ₹${initialSl} | Target (${targetLabel}): ₹${targetPrice}`);
+            logger.logInfo(envName, "ORDER_EXECUTED", `Position Opened: ${symbol} | Entry: ₹${entryPrice} | Qty: ${this.activePosition.qty} | SL: ₹${initialSl} | Target (${targetLabel}): ₹${targetPrice}`);
             return { status: "EXECUTED", position: this.activePosition };
 
         } catch (err) {
             logger.logError(envName, "SIGNAL_EXECUTION_FAILED", err);
             return null;
+        } finally {
+            this.isOrderInFlight = false;
         }
     }
 
@@ -233,14 +308,26 @@ class MasterTrailingEngine {
         const cfg = masterConfig.getConfig();
         const buffer = cfg.breathingRoomPoints || 0.50; // Breathing room buffer
 
-        const currentHigh = Number(tick.candleHigh || tick.high || tick.close || tick.price || tick.ltp || tick.liveLtp);
-        const currentLow = Number(tick.candleLow || tick.low || tick.close || tick.price || tick.ltp || tick.liveLtp);
+        const tickTimeStr = tick.time || tick.date || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+
+        const isLiveTick = tick.status === "live" || Boolean(tick.liveLtp) || pos.envName === "REAL_TRADE";
+        const livePrice = Number(tick.liveLtp || tick.ltp || tick.price || tick.close);
+
+        const currentHigh = isLiveTick ? livePrice : Number(tick.candleHigh || tick.high || livePrice);
+        const currentLow = isLiveTick ? livePrice : Number(tick.candleLow || tick.low || livePrice);
 
         if (isNaN(currentHigh) || isNaN(currentLow)) return null;
 
         let exitTriggered = false;
         let exitPrice = 0;
         let exitReason = "";
+
+        // 3:10 PM Auto Square-Off Guard
+        if (this.isAfterTradingHours(tickTimeStr)) {
+            exitTriggered = true;
+            exitPrice = Number(tick.close || tick.price || tick.ltp || pos.entryPrice);
+            exitReason = "AUTO_TIME_EXIT_3_10_PM";
+        }
 
         const mode = String(pos.targetMode || cfg.targetMode || "TRAILING").toUpperCase();
         const isTrailingEnabled = !mode.includes("FIXED") && cfg.disableTrailing !== true && cfg.enableAutoTrailing !== false;
@@ -288,6 +375,27 @@ class MasterTrailingEngine {
                     if (lvls.tr4 > newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
                 }
 
+                // Update SL immediately if trailed
+                if (newSl !== pos.currentSl) {
+                    pos.currentSl = newSl;
+                    pos.trailingStage = newStage;
+
+                    if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
+                        try {
+                            this.retryStepAsync(
+                                () => pos.handlers.modifyOrder(pos.orderId, newSl, newStage),
+                                "MODIFY_ORDER_SL",
+                                envName,
+                                cfg.maxRetriesPerStep || 5,
+                                cfg.retryDelayMs || 1000
+                            ).catch(err => logger.logError(envName, "MODIFY_ORDER_FAILED", err));
+                        } catch (err) {
+                            logger.logError(envName, "MODIFY_ORDER_FAILED", err);
+                        }
+                    }
+                    logger.logInfo(envName, "SL_TRAILED", `SL trailed to ₹${newSl} (${newStage})`);
+                }
+
                 // Exit conditions: Target Hit at targetPrice OR SL Hit
                 if (currentHigh >= pos.targetPrice) {
                     exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
@@ -314,33 +422,32 @@ class MasterTrailingEngine {
                     if (lvls.tr4 < newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
                 }
 
+                if (newSl !== pos.currentSl) {
+                    pos.currentSl = newSl;
+                    pos.trailingStage = newStage;
+
+                    if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
+                        try {
+                            this.retryStepAsync(
+                                () => pos.handlers.modifyOrder(pos.orderId, newSl, newStage),
+                                "MODIFY_ORDER_SL",
+                                envName,
+                                cfg.maxRetriesPerStep || 5,
+                                cfg.retryDelayMs || 1000
+                            ).catch(err => logger.logError(envName, "MODIFY_ORDER_FAILED", err));
+                        } catch (err) {
+                            logger.logError(envName, "MODIFY_ORDER_FAILED", err);
+                        }
+                    }
+                    logger.logInfo(envName, "SL_TRAILED", `SL trailed to ₹${newSl} (${newStage})`);
+                }
+
                 if (currentLow <= pos.targetPrice) {
                     exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
                 } else if (currentHigh >= pos.currentSl) {
                     exitTriggered = true; exitPrice = pos.currentSl;
                     exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
                 }
-            }
-
-            // If SL updated, invoke modifyOrder handler
-            if (newSl !== pos.currentSl && !exitTriggered) {
-                pos.currentSl = newSl;
-                pos.trailingStage = newStage;
-
-                if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
-                    try {
-                        await this.retryStepAsync(
-                            () => pos.handlers.modifyOrder(pos.orderId, newSl, newStage),
-                            "MODIFY_ORDER_SL",
-                            envName,
-                            cfg.maxRetriesPerStep || 5,
-                            cfg.retryDelayMs || 1000
-                        );
-                    } catch (err) {
-                        logger.logError(envName, "MODIFY_ORDER_FAILED", err);
-                    }
-                }
-                logger.logInfo(envName, "SL_TRAILED", `SL trailed to ₹${newSl} (${newStage})`);
             }
         }
 

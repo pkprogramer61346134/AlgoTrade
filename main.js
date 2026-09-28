@@ -19,6 +19,7 @@ const { ensureValidDhanToken } = require('./utility/token/autoTokenRefresh');
 
 let latestLivePrice = 0;
 let latestTickTime = null;
+let isProcessingLiveTick = false;
 let latestConsensusResult = {
     consensus: "NO_SIGNAL",
     type: "NO_SIGNAL",
@@ -47,6 +48,15 @@ function getLiveMarketData() {
         realStatus: realTradeEngine.getStatus()
     };
 }
+
+// Process-Level Global Crash Protection Handlers (Prevents system crash on unexpected network/API errors)
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ [PROCESS GUARD] Intercepted Unhandled Promise Rejection:', reason?.message || reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('💥 [PROCESS GUARD] Intercepted Uncaught Exception:', err?.message || err);
+});
 
 console.log("==========================================================================");
 console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (main.js)");
@@ -100,6 +110,8 @@ async function startMasterSystem() {
         scrip.exchangeSegment,
         Number(scrip.interval || 5),
         async (tick) => {
+            if (isProcessingLiveTick) return;
+            isProcessingLiveTick = true;
             try {
                 // Update live market payload for UI Server
                 latestLivePrice = Number(tick.price || 0);
@@ -125,6 +137,12 @@ async function startMasterSystem() {
 
                 if (consensusResult.consensus === "BUY") signalBadge = "🟢 BUY SIGNAL CONFIRMED & TRIGGERED";
                 if (consensusResult.consensus === "SELL") signalBadge = "🔴 SELL SIGNAL CONFIRMED & TRIGGERED";
+                if (consensusResult.consensus === "BUILDING_CONFIDENCE") {
+                    const rawDir = consensusResult.rawType === "BUY" ? "🟢 BUY" : "🔴 SELL";
+                    const currConf = consensusResult.confidence || '0%';
+                    const reqThreshold = consensusResult.alignment?.threshold || '80%';
+                    signalBadge = `📈 BUILDING CONFIDENCE [${rawDir}] (${currConf} / ${reqThreshold} Peak Required)`;
+                }
                 if (consensusResult.consensus === "WAITING_CONFIRMATION") {
                     const elapsedMins = consensusResult.confirmation?.elapsedMins || 0;
                     const reqMins = consensusResult.confirmation?.requiredWaitMins || 0.5;
@@ -147,7 +165,10 @@ async function startMasterSystem() {
                     console.log(waitTimerLine);
                 }
                 console.log(`📊 Votes Summary  : 🟢 ${consensusResult.buyVotes || 0} BUY | 🔴 ${consensusResult.sellVotes || 0} SELL (Min Required: ${consensusResult.minVotesRequired || 2})`);
-                console.log(`💪 Confidence    : ${consensusResult.confidence || '0%'}`);
+                console.log(`💪 Confidence    : ${consensusResult.confidence || '0%'} (Min Threshold: ${consensusResult.alignment?.threshold || '75%'})`);
+                if (consensusResult.alignment && consensusResult.alignment.status !== "NO_ACTIVE_TRADE") {
+                    console.log(`🧭 Trade Alignment: ${consensusResult.alignment.note}`);
+                }
                 console.log(`💵 Entry Price   : ${consensusResult.entry ? '₹' + consensusResult.entry : '--'}`);
                 console.log(`🎯 Target (TR)   : ${consensusResult.tr ? '₹' + consensusResult.tr : '--'}`);
                 console.log(`🛑 Stop Loss (SL): ${consensusResult.sl ? '₹' + consensusResult.sl : '--'}`);
@@ -178,6 +199,8 @@ async function startMasterSystem() {
 
             } catch (err) {
                 console.error("❌ Consensus Engine Error:", err.message);
+            } finally {
+                isProcessingLiveTick = false;
             }
         },
         scrip.instrument || "INDEX"
