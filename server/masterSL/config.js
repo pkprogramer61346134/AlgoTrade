@@ -20,7 +20,7 @@ const DEFAULT_CONFIG = {
     tradingStartTime: "09:40:00", // Trading start time: Signals accepted from 09:40 AM onwards
     tradingEndTime: "15:10:00",   // Trading end time: Signals ignored after 03:10 PM
     autoSquareOffTime: "15:10:00",// Auto square-off active positions at 03:10 PM
-    confidenceThreshold: 80,      // Minimum peak confidence threshold percentage (80%)
+    confidenceThreshold: 75,      // Minimum peak confidence threshold percentage (75%)
     confidenceTimeIntervalSeconds: 15, // Time interval in seconds to ramp/decay confidence (15s)
     autoTrailOnTR1: true,         // Trail to Cost-to-Cost when TR1 (1:1) hit
     autoTrailOnTR2: true,         // Trail to TR1 when TR2 (1:2) hit

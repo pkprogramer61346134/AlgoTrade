@@ -710,14 +710,22 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
 
     // Active Trade Alignment & Dynamic Confidence Ramping / Decay System
     try {
-        const masterSL = getMasterSL();
-        const activePos = masterSL ? masterSL.activePosition : null;
-        let baseConf = parseFloat(String(result.confidence || "70%").replace('%', '')) || 70;
+        let rawBaseConf = parseFloat(String(result.confidence || "70%").replace('%', '')) || 70;
+        const rawSignalType = (result.consensus === "WAITING_CONFIRMATION" || result.consensus === "BUILDING_CONFIRMATION" || result.consensus === "BUILDING_CONFIDENCE") ? result.rawType : result.consensus;
+
+        // Multi-Strategy Consensus Vote Boost (+6% for 2 matching votes, +10% for 3+ matching votes)
+        const matchingVotes = rawSignalType === "BUY" ? (result.buyVotes || 0) : (rawSignalType === "SELL" ? (result.sellVotes || 0) : 0);
+        let voteBoost = 0;
+        if (matchingVotes >= 3) voteBoost = 10;
+        else if (matchingVotes === 2) voteBoost = 6;
+
+        let baseConf = Math.min(100, Number((rawBaseConf + voteBoost).toFixed(1)));
         let adjustedConf = baseConf;
         let alignStatus = "NO_ACTIVE_TRADE";
         let alignNote = "⚪ No active trade currently open in market.";
 
-        const rawSignalType = (result.consensus === "WAITING_CONFIRMATION" || result.consensus === "BUILDING_CONFIRMATION" || result.consensus === "BUILDING_CONFIDENCE") ? result.rawType : result.consensus;
+        const masterSL = getMasterSL();
+        const activePos = masterSL ? masterSL.activePosition : null;
 
         if (activePos && activePos.status === "OPEN" && (rawSignalType === "BUY" || rawSignalType === "SELL")) {
             const activeDir = (activePos.optionType === "CE" || activePos.consensus === "BUY") ? "BUY" : "SELL";

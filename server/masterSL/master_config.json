@@ -7,7 +7,7 @@
   "tradingStartTime": "09:40:00",
   "tradingEndTime": "15:10:00",
   "autoSquareOffTime": "15:10:00",
-  "confidenceThreshold": 80,
+  "confidenceThreshold": 75,
   "autoTrailOnTR1": true,
   "autoTrailOnTR2": true,
   "autoTrailOnTR3": true,
