@@ -1,34 +1,62 @@
 [
   {
     "id": "STRAT_MASTER_QUANTUM_CONSENSUS",
-    "name": "👑 Master Quantum Consensus Strategy (1:3 Target)",
-    "winrate": "88.5%",
-    "riskRewardRatio": 3.0,
+    "name": "👑 Master Quantum Multi-Indicator Strategy",
+    "winrate": "66.8%",
+    "riskRewardRatio": 2,
     "indicators": {
       "supertrendPeriod": 10,
       "supertrendMultiplier": 3,
-      "rvolMin": 1.35,
-      "rsiMin": 52,
-      "adxMin": 22
+      "rvolMin": 1,
+      "rsiMin": 50,
+      "adxMin": 16
     },
     "rules": {
       "buy": [
-        { "target": "supertrend", "condition": "bullish" },
-        { "target": "vwap", "condition": "above" },
-        { "target": "tripleEMA", "condition": "bullishStack" },
-        { "target": "marketStructure", "condition": "swingHighBreak" },
-        { "target": "rsi", "condition": "gte", "value": 52 },
-        { "target": "rvol", "condition": "gte", "value": 1.35 },
-        { "target": "adx", "condition": "gte", "value": 22 }
+        {
+          "target": "supertrend",
+          "condition": "bullish"
+        },
+        {
+          "target": "vwap",
+          "condition": "above"
+        },
+        {
+          "target": "tripleEMA",
+          "condition": "bullishStack"
+        },
+        {
+          "target": "macd",
+          "condition": "bullishCross"
+        },
+        {
+          "target": "rsi",
+          "condition": "gte",
+          "value": 50
+        }
       ],
       "sell": [
-        { "target": "supertrend", "condition": "bearish" },
-        { "target": "vwap", "condition": "below" },
-        { "target": "tripleEMA", "condition": "bearishStack" },
-        { "target": "marketStructure", "condition": "swingLowBreak" },
-        { "target": "rsi", "condition": "lte", "value": 48 },
-        { "target": "rvol", "condition": "gte", "value": 1.35 },
-        { "target": "adx", "condition": "gte", "value": 22 }
+        {
+          "target": "supertrend",
+          "condition": "bearish"
+        },
+        {
+          "target": "vwap",
+          "condition": "below"
+        },
+        {
+          "target": "tripleEMA",
+          "condition": "bearishStack"
+        },
+        {
+          "target": "macd",
+          "condition": "bearishCross"
+        },
+        {
+          "target": "rsi",
+          "condition": "lte",
+          "value": 50
+        }
       ]
     }
   }

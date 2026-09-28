@@ -17,18 +17,12 @@ const DEFAULT_CONFIG = {
     breathingRoomPoints: 0.50,    // Breathing room buffer points (0.50)
     targetMode: "TRAILING",       // Target Mode: "1:1", "1:2", "1:3", "1:4", "TRAILING"
     maxTradesPerDay: 3,           // Max trades per day limit
-    tradingStartTime: "09:40:00", // Trading start time: Signals accepted from 09:40 AM onwards
-    tradingEndTime: "15:10:00",   // Trading end time: Signals ignored after 03:10 PM
     autoSquareOffTime: "15:10:00",// Auto square-off active positions at 03:10 PM
-    confidenceThreshold: 75,      // Minimum peak confidence threshold percentage (75%)
-    confidenceTimeIntervalSeconds: 15, // Time interval in seconds to ramp/decay confidence (15s)
-    startupGracePeriodSeconds: 45, // Startup grace period seconds to stabilize live feed (45s default)
-    postExitCooldownSeconds: 90,   // Post-exit cooldown delay in seconds (90s default) to prevent immediate re-entry
     autoTrailOnTR1: true,         // Trail to Cost-to-Cost when TR1 (1:1) hit
     autoTrailOnTR2: true,         // Trail to TR1 when TR2 (1:2) hit
     autoTrailOnTR3: true,         // Trail to TR2 when TR3 (1:3) hit
     maxRetriesPerStep: 5,         // Max 5 automatic retries per step on error
-    retryDelayMs: 1000,           // Retry delay in ms (1000ms)
+    retryDelayMs: 30000,          // Retry delay in ms (30 seconds)
     selectedStock: {
         securityId: "13",
         exchangeSegment: "IDX_I",
@@ -47,7 +41,8 @@ class MasterConfigManager {
         try {
             if (fs.existsSync(CONFIG_FILE)) {
                 const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-                const parsed = JSON.parse(raw);
+                const cleanRaw = raw.replace(/\/\/.*/g, '');
+                const parsed = JSON.parse(cleanRaw);
                 return { ...DEFAULT_CONFIG, ...parsed };
             }
         } catch (e) {

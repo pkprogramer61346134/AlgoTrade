@@ -1,21 +1,15 @@
 {
   "maxBudgetPercent": 100,
-  "minRequiredBalance": 1000,
   "maxLossPerTrade": 500,
   "breathingRoomPoints": 0.5,
   "targetMode": "TRAILING",
   "maxTradesPerDay": 3,
-  "tradingStartTime": "09:40:00",
-  "tradingEndTime": "15:10:00",
   "autoSquareOffTime": "15:10:00",
-  "confidenceThreshold": 80,
-  "startupGracePeriodSeconds": 60,
-  "postExitCooldownSeconds": 900,
   "autoTrailOnTR1": true,
   "autoTrailOnTR2": true,
   "autoTrailOnTR3": true,
-  "maxRetriesPerStep": 2,
-  "retryDelayMs": 1000,
+  "maxRetriesPerStep": 5,
+  "retryDelayMs": 30000,
   "selectedStock": {
     "securityId": "13",
     "exchangeSegment": "IDX_I",
@@ -23,6 +17,7 @@
     "interval": "5",
     "instrument": "INDEX"
   },
+  "minRequiredBalance": 1000,
   "enableAutoTrailing": true,
   "autoTrailOnTR4": true,
   "autoTrailOnTR5": true

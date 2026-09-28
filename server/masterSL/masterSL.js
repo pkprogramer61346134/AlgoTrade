@@ -14,8 +14,6 @@
 const masterConfig = require('./config');
 const logger = require('./logger');
 
-const SERVER_STARTUP_TIME_MS = Date.now();
-
 class MasterTrailingEngine {
     constructor() {
         this.activePosition = null;
@@ -25,14 +23,7 @@ class MasterTrailingEngine {
     }
 
     /**
-     * Helper: Execute an async step with up to 5 automatic retries and logger tracking
-     * 
-     * @param {Function} fn - Async step function to execute
-     * @param {string} stepName - Human-readable step name
-     * @param {string} envName - Environment identifier ("PAPER", "REAL", "BACKTEST")
-     * @param {number} [maxRetries=5] - Maximum retries
-     * @param {number} [delayMs=1000] - Delay between retries in ms
-     * @returns {Promise<any>} Output of fn or throws Error if exhausted
+     * Helper: Execute an async step with automatic retries and logger tracking
      */
     async retryStepAsync(fn, stepName, envName = "GENERAL", maxRetries = 5, delayMs = 1000) {
         let lastError = null;
@@ -57,40 +48,11 @@ class MasterTrailingEngine {
     }
 
     /**
-     * Check if a given time string (or current time) is within trading hours (09:40 to 15:10)
-     */
-    isWithinTradingHours(timeStr = null) {
-        const cfg = masterConfig.getConfig();
-        const startStr = cfg.tradingStartTime || "09:40:00";
-        const endStr = cfg.tradingEndTime || "15:10:00";
-
-        let timeToParse = timeStr;
-        if (!timeToParse) {
-            timeToParse = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
-        }
-
-        const parseMinutes = (tStr) => {
-            if (!tStr) return 0;
-            const parts = String(tStr).trim().split(":");
-            if (parts.length < 2) return 0;
-            const hrs = parseInt(parts[0], 10) || 0;
-            const mins = parseInt(parts[1], 10) || 0;
-            return (hrs * 60) + mins;
-        };
-
-        const currentMins = parseMinutes(timeToParse);
-        const startMins = parseMinutes(startStr); // 9*60+40 = 580
-        const endMins = parseMinutes(endStr);     // 15*60+10 = 910
-
-        return currentMins >= startMins && currentMins < endMins;
-    }
-
-    /**
-     * Check if current time is past trading end time (3:10 PM / 15:10) for Auto Square-Off
+     * Check if current time is past auto square-off time (3:10 PM / 15:10)
      */
     isAfterTradingHours(timeStr = null) {
         const cfg = masterConfig.getConfig();
-        const endStr = cfg.autoSquareOffTime || cfg.tradingEndTime || "15:10:00";
+        const endStr = cfg.autoSquareOffTime || "15:10:00";
 
         let timeToParse = timeStr;
         if (!timeToParse) {
@@ -99,10 +61,15 @@ class MasterTrailingEngine {
 
         const parseMinutes = (tStr) => {
             if (!tStr) return 0;
-            const parts = String(tStr).trim().split(":");
+            const isPm = /pm/i.test(tStr);
+            const isAm = /am/i.test(tStr);
+            const cleanStr = String(tStr).replace(/(am|pm)/i, "").trim();
+            const parts = cleanStr.split(":");
             if (parts.length < 2) return 0;
-            const hrs = parseInt(parts[0], 10) || 0;
+            let hrs = parseInt(parts[0], 10) || 0;
             const mins = parseInt(parts[1], 10) || 0;
+            if (isPm && hrs < 12) hrs += 12;
+            if (isAm && hrs === 12) hrs = 0;
             return (hrs * 60) + mins;
         };
 
@@ -114,16 +81,6 @@ class MasterTrailingEngine {
 
     /**
      * Process Trade Signal & Execute Order Flow via Environment Handlers
-     * 
-     * @param {Object} signal - Consensus Head signal { consensus: "BUY"|"SELL", entry: number, sl: number }
-     * @param {Object} environmentHandlers - Environment specific interface handlers
-     * @param {Function} environmentHandlers.checkBalance - () => Promise<number>
-     * @param {Function} [environmentHandlers.selectStrike] - (spotPrice, optionType, maxBudget) => Promise<Object>
-     * @param {Function} environmentHandlers.placeOrder - (orderDetails) => Promise<Object>
-     * @param {Function} [environmentHandlers.modifyOrder] - (orderId, newSl) => Promise<boolean>
-     * @param {Function} [environmentHandlers.closeOrder] - (position) => Promise<boolean>
-     * @param {string} [envName="PAPER"] - Environment Name ("PAPER", "REAL", "BACKTEST")
-     * @returns {Promise<Object|null>} Active Position or null if ignored/failed
      */
     async processSignal(signal, environmentHandlers, envName = "PAPER") {
         if (!signal || !environmentHandlers) return null;
@@ -136,32 +93,6 @@ class MasterTrailingEngine {
         if ((this.activePosition && this.activePosition.status === "OPEN") || this.isOrderInFlight) {
             logger.logInfo(envName, "SIGNAL_IGNORED", `Position already open or order in flight (${this.activePosition?.symbol || 'ORDER_IN_FLIGHT'}). Ignoring signal.`);
             return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_ORDER_IN_FLIGHT" };
-        }
-
-        // 2. Guard Check: Trading Hours Guard (Signals accepted from 09:40 AM to 03:10 PM only)
-        const timeStr = signal.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
-        if (!this.isWithinTradingHours(timeStr)) {
-            logger.logInfo(envName, "SIGNAL_IGNORED", `Signal outside trading hours (09:40 - 15:10). Signal time: ${timeStr}`);
-            return { status: "IGNORED", reason: "OUTSIDE_TRADING_HOURS (09:40 - 15:10)" };
-        }
-
-        // 3. Guard Check: Startup Grace Period Guard (Signals ignored during initial 45s server startup)
-        const elapsedStartupSecs = Math.round((Date.now() - SERVER_STARTUP_TIME_MS) / 1000);
-        const startupGraceSecs = Number(cfg.startupGracePeriodSeconds || 45);
-        if (elapsedStartupSecs < startupGraceSecs && envName !== "BACKTEST" && envName !== "TEST_SIM") {
-            logger.logInfo(envName, "SIGNAL_IGNORED", `System in startup stabilization period (${elapsedStartupSecs}s / ${startupGraceSecs}s). Ignoring signal.`);
-            return { status: "IGNORED", reason: `SYSTEM_STABILIZING (${startupGraceSecs - elapsedStartupSecs}s remaining)` };
-        }
-
-        // 4. Guard Check: Post-Exit Cooldown Guard (Prevents immediate re-entry right after trade exit)
-        if (this.lastExitTimestamp > 0 && envName !== "BACKTEST") {
-            const elapsedExitSecs = Math.round((Date.now() - this.lastExitTimestamp) / 1000);
-            const cooldownSecs = Number(cfg.postExitCooldownSeconds || 90);
-            if (elapsedExitSecs < cooldownSecs) {
-                const remCooldownSecs = cooldownSecs - elapsedExitSecs;
-                logger.logInfo(envName, "SIGNAL_IGNORED", `Post-exit cooldown active (${elapsedExitSecs}s / ${cooldownSecs}s). Ignoring signal.`);
-                return { status: "IGNORED", reason: `POST_EXIT_COOLDOWN (${remCooldownSecs}s remaining)` };
-            }
         }
 
         // Synchronously acquire atomic lock BEFORE any async operations
@@ -526,23 +457,12 @@ class MasterTrailingEngine {
             this.activePosition = null;
         }
 
-        const cfg = masterConfig.getConfig();
-        const cooldownSecs = Number(cfg.postExitCooldownSeconds || 90);
-        const elapsedExitSecs = this.lastExitTimestamp > 0 ? Math.round((Date.now() - this.lastExitTimestamp) / 1000) : 9999;
-        const isCooldownActive = elapsedExitSecs < cooldownSecs;
-
         return {
             activePosition: this.activePosition,
             history: this.tradeHistory,
             totalTrades: this.tradeHistory.length,
             totalPnl: Number(this.tradeHistory.reduce((acc, t) => acc + (t.realizedPnl || 0), 0).toFixed(2)),
-            lastExitTimestamp: this.lastExitTimestamp,
-            cooldownInfo: {
-                cooldownSecs,
-                elapsedExitSecs,
-                remainingSecs: Math.max(0, cooldownSecs - elapsedExitSecs),
-                isCooldownActive
-            }
+            lastExitTimestamp: this.lastExitTimestamp
         };
     }
 }
