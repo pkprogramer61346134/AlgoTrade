@@ -73,6 +73,8 @@ class RealTradeEngine {
         if (!isEnabled) return;
 
         try {
+            const { ensureValidDhanToken } = require('../../utility/token/autoTokenRefresh');
+            await ensureValidDhanToken();
             const { DhanOrders } = require('../../utility/dhan-orders');
             const orders = new DhanOrders();
             const posRes = await orders.getPositions();
