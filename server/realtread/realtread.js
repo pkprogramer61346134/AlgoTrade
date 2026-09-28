@@ -83,38 +83,17 @@ class RealTradeEngine {
                 if (openDhanPositions.length > 0) {
                     const activeDhanPos = openDhanPositions[0];
                     const secId = String(activeDhanPos.securityId);
-
-                    // If masterSL activePosition already matches this securityId, ensure streaming is active
-                    if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
-                        return masterSL.activePosition;
-                    }
-
-                    console.log(`🔄 [REAL POSITIONS SYNC] Syncing real Dhan open position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${activeDhanPos.netQty} @ ₹${activeDhanPos.buyAvg}`);
-
-                    const optionType = activeDhanPos.drvOptionType === "PUT" ? "PE" : "CE";
                     const entryPrice = Number(activeDhanPos.buyAvg || activeDhanPos.costPrice || 0);
                     const qty = Math.abs(Number(activeDhanPos.netQty || 65));
-                    const lotSize = 65;
+                    const optionType = activeDhanPos.drvOptionType === "PUT" ? "PE" : "CE";
+                    const initialSl = Number((entryPrice * 0.85).toFixed(2));
+                    const tr1 = Number((entryPrice * 1.15).toFixed(2));
+                    const tr2 = Number((entryPrice * 1.30).toFixed(2));
+                    const tr3 = Number((entryPrice * 1.45).toFixed(2));
+                    const tr4 = Number((entryPrice * 1.60).toFixed(2));
+                    const tr5 = Number((entryPrice * 1.75).toFixed(2));
 
-                    // Calculate Option SL & Targets via Stack Module
-                    let slTargetData = null;
-                    try {
-                        slTargetData = await calculateOptionSLAndTargets({
-                            securityId: secId,
-                            entryPrice: entryPrice,
-                            interval: "5",
-                            method: "HYBRID"
-                        });
-                    } catch (e) {}
-
-                    const initialSl = Number(slTargetData?.stopLoss?.sl || (entryPrice * 0.85).toFixed(2));
-                    const tr1 = Number(slTargetData?.targets?.tr1?.price || (entryPrice + Math.abs(entryPrice - initialSl)).toFixed(2));
-                    const tr2 = Number(slTargetData?.targets?.tr2?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 2).toFixed(2));
-                    const tr3 = Number(slTargetData?.targets?.tr3?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 3).toFixed(2));
-                    const tr4 = Number(slTargetData?.targets?.tr4?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 4).toFixed(2));
-                    const tr5 = Number(slTargetData?.targets?.tr5?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 5).toFixed(2));
-
-                    const orderId = activeDhanPos.orderId || "DHAN_REAL_POS_" + secId;
+                    console.log(`🔄 [REAL POSITIONS SYNC] Synced real Dhan broker open position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${qty} @ ₹${entryPrice}`);
 
                     masterSL.activePosition = {
                         tradeId: "MASTER_SL_REAL_" + secId,
@@ -134,11 +113,11 @@ class RealTradeEngine {
                         targetLabel: "TR2 (1:2)",
                         targetMode: "1:2",
                         qty: qty,
-                        lotSize: lotSize,
+                        lotSize: 65,
                         levels: { initialSl, tr1, tr2, tr3, tr4, tr5 },
                         trailingStage: "INITIAL",
                         status: "OPEN",
-                        orderId: orderId,
+                        orderId: activeDhanPos.orderId || "DHAN_REAL_POS_" + secId,
                         handlers: this.getRealHandlers(),
                         envName: "REAL_TRADE"
                     };
@@ -148,7 +127,7 @@ class RealTradeEngine {
                         securityId: secId,
                         exchangeSegment: activeDhanPos.exchangeSegment || "NSE_FNO",
                         symbol: activeDhanPos.tradingSymbol,
-                        lotSize: lotSize,
+                        lotSize: 65,
                         totalQty: qty,
                         liveLtp: entryPrice,
                         optionSL: initialSl,
@@ -160,27 +139,31 @@ class RealTradeEngine {
                     };
 
                     // Start Live Option WebSocket Streaming
-                    this.livePriceTracker.streamOptionLtp({
-                        securityId: secId,
-                        exchangeSegment: activeDhanPos.exchangeSegment || "NSE_FNO",
-                        buyPrice: entryPrice,
-                        qty: qty
-                    }, (liveTick) => {
-                        this.latestOptionTick = liveTick;
-                        if (masterSL.activePosition) {
-                            masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || entryPrice);
-                            masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
-                            masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
-                        }
-                        this.processTick(liveTick);
-                    });
+                    if (!this.activeOptionStreamSecId || this.activeOptionStreamSecId !== secId) {
+                        this.activeOptionStreamSecId = secId;
+                        this.livePriceTracker.streamOptionLtp({
+                            securityId: secId,
+                            exchangeSegment: activeDhanPos.exchangeSegment || "NSE_FNO",
+                            buyPrice: entryPrice,
+                            qty: qty
+                        }, (liveTick) => {
+                            this.latestOptionTick = liveTick;
+                            if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
+                                masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || entryPrice);
+                                masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
+                                masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
+                            }
+                            this.processTick(liveTick);
+                        });
+                    }
 
                 } else {
-                    // No open positions in Dhan API: Auto-cleanup any real ghost position in masterSL
+                    // No open positions in Dhan API: Clear any ghost position
                     if (masterSL.activePosition && masterSL.activePosition.envName === "REAL_TRADE") {
                         console.log(`🧹 [REAL POSITIONS SYNC] Dhan API shows 0 open positions. Clearing stale ghost position (${masterSL.activePosition.symbol}).`);
                         masterSL.activePosition = null;
                         this.activeOptionContract = null;
+                        this.activeOptionStreamSecId = null;
                     }
                 }
             }
@@ -196,6 +179,9 @@ class RealTradeEngine {
         realConfig.setEnabled(true);
         const cfg = realConfig.getConfig();
         const selectedStock = cfg.selectedStock;
+
+        // Reset any stale ghost position on startup before syncing real positions
+        masterSL.activePosition = null;
 
         await this.fetchLiveFunds();
         await this.syncRealPositionsFromDhan();
