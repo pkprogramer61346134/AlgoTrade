@@ -241,6 +241,15 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
     const bbObj = computed.bollinger ? computed.bollinger[i] : null;
     const donchianObj = computed.donchian ? computed.donchian[i] : null;
 
+    const lookbackM = Math.min(i, 12);
+    let swingHigh = null;
+    let swingLow = null;
+    if (lookbackM >= 3 && candles && Array.isArray(candles)) {
+        const priorSlice = candles.slice(i - lookbackM, i);
+        swingHigh = Math.max(...priorSlice.map(x => Number(x.high || x.candleHigh || x.close || 0)));
+        swingLow = Math.min(...priorSlice.map(x => Number(x.low || x.candleLow || x.close || 999999)));
+    }
+
     const isStBull = stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY");
     const isStBear = stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL");
 
@@ -276,6 +285,7 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
                 if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) buyMatch = false;
                 if (r.target === "prevDay" && r.condition === "abovePDH" && (!prevDayObj || !prevDayObj.pdh || spotPrice <= prevDayObj.pdh)) buyMatch = false;
                 if (r.target === "bollinger" && r.condition === "upperBandBreak" && (!bbObj || !bbObj.upper || spotPrice <= bbObj.upper)) buyMatch = false;
+                if (r.target === "marketStructure" && r.condition === "swingHighBreak" && (!swingHigh || spotPrice <= swingHigh)) buyMatch = false;
             }
         }
 
@@ -295,6 +305,7 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
                 if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) sellMatch = false;
                 if (r.target === "prevDay" && r.condition === "belowPDL" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellMatch = false;
                 if (r.target === "bollinger" && r.condition === "lowerBandBreak" && (!bbObj || !bbObj.lower || spotPrice >= bbObj.lower)) sellMatch = false;
+                if (r.target === "marketStructure" && r.condition === "swingLowBreak" && (!swingLow || spotPrice >= swingLow)) sellMatch = false;
             }
         }
 

@@ -101,5 +101,29 @@
         { "target": "rvol", "condition": "gte", "value": 1.40 }
       ]
     }
+  },
+  {
+    "id": "STRAT_10_MARKET_STRUCTURE_SWING_BREAKOUT",
+    "name": "Market Structure & Swing High-Low Breakout (1:3 Target)",
+    "winrate": "76.5%",
+    "riskRewardRatio": 3.0,
+    "indicators": {
+      "rvolMin": 1.30,
+      "adxMin": 20
+    },
+    "rules": {
+      "buy": [
+        { "target": "marketStructure", "condition": "swingHighBreak" },
+        { "target": "vwap", "condition": "above" },
+        { "target": "rsi", "condition": "gte", "value": 52 },
+        { "target": "rvol", "condition": "gte", "value": 1.30 }
+      ],
+      "sell": [
+        { "target": "marketStructure", "condition": "swingLowBreak" },
+        { "target": "vwap", "condition": "below" },
+        { "target": "rsi", "condition": "lte", "value": 48 },
+        { "target": "rvol", "condition": "gte", "value": 1.30 }
+      ]
+    }
   }
 ]
