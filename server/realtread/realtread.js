@@ -68,7 +68,10 @@ class RealTradeEngine {
      * Ensures masterSL.activePosition matches actual live position in Dhan Account
      */
     async syncRealPositionsFromDhan() {
-        if (!realConfig.getConfig().realTradeEnabled) return;
+        const mainConfig = require('../config_manager');
+        const isEnabled = realConfig.getConfig().realTradeEnabled || mainConfig.getConfig().realTradeEnabled;
+        if (!isEnabled) return;
+
         try {
             const { DhanOrders } = require('../../utility/dhan-orders');
             const orders = new DhanOrders();
@@ -81,12 +84,12 @@ class RealTradeEngine {
                     const activeDhanPos = openDhanPositions[0];
                     const secId = String(activeDhanPos.securityId);
 
-                    // If masterSL activePosition already matches this securityId, update latest values
+                    // If masterSL activePosition already matches this securityId, ensure streaming is active
                     if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
                         return masterSL.activePosition;
                     }
 
-                    console.log(`🔄 [REAL POSITIONS SYNC] Synced live open Dhan broker position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${activeDhanPos.netQty} @ ₹${activeDhanPos.buyAvg}`);
+                    console.log(`🔄 [REAL POSITIONS SYNC] Overwriting stale ghost with real Dhan open position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${activeDhanPos.netQty} @ ₹${activeDhanPos.buyAvg}`);
 
                     const optionType = activeDhanPos.drvOptionType === "PUT" ? "PE" : "CE";
                     const entryPrice = Number(activeDhanPos.buyAvg || activeDhanPos.costPrice || 0);
@@ -122,6 +125,9 @@ class RealTradeEngine {
                         entryDate: new Date().toLocaleDateString("en-CA"),
                         entryTime: new Date().toLocaleTimeString("en-IN"),
                         entryPrice: entryPrice,
+                        liveLtp: entryPrice,
+                        pnl: 0,
+                        pnlPercent: "0.00%",
                         initialSl: initialSl,
                         currentSl: initialSl,
                         targetPrice: tr2,
@@ -161,6 +167,11 @@ class RealTradeEngine {
                         qty: qty
                     }, (liveTick) => {
                         this.latestOptionTick = liveTick;
+                        if (masterSL.activePosition) {
+                            masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || entryPrice);
+                            masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
+                            masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
+                        }
                         this.processTick(liveTick);
                     });
 
