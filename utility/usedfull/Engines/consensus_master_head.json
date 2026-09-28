@@ -1,25 +1,13 @@
 {
   "id": "consensus_master_head",
-  "name": "👑 Master Head Multi-Strategy Engine",
+  "name": "👑 Master Head Single Quantum Strategy Engine",
   "enabled": true,
   "minStrategyVotes": 1,
   "enableSignalConfirmation": true,
   "warmupCount": 200,
   "strategies": {
-    "one_to_two_strategies.json": {
-      "enabled": false,
-      "minVotes": 2
-    },
-    "one_to_three_strategies.json": {
+    "master_strategy.json": {
       "enabled": true,
-      "minVotes": 5
-    },
-    "one_to_four_strategies.json": {
-      "enabled": false,
-      "minVotes": 2
-    },
-    "one_to_five_strategies.json": {
-      "enabled": false,
       "minVotes": 1
     }
   }
