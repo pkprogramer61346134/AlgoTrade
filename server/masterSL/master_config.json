@@ -10,7 +10,7 @@
   "autoSquareOffTime": "15:10:00",
   "confidenceThreshold": 80,
   "startupGracePeriodSeconds": 60,
-  "postExitCooldownSeconds": 300,
+  "postExitCooldownSeconds": 900,
   "autoTrailOnTR1": true,
   "autoTrailOnTR2": true,
   "autoTrailOnTR3": true,
