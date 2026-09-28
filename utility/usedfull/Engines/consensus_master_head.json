@@ -12,7 +12,7 @@
     },
     "one_to_three_strategies.json": {
       "enabled": true,
-      "minVotes": 2
+      "minVotes": 4
     },
     "one_to_four_strategies.json": {
       "enabled": false,

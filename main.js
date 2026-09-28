@@ -160,6 +160,13 @@ async function startMasterSystem() {
                     signalBadge = `⏳ WAITING CONFIRMATION [${rawDir}]`;
                     waitTimerLine = `⏳ Signal Wait   : ${remSecs}s Remaining (${elapsedMins}m / ${reqMins}m Configured)`;
                 }
+                if (consensusResult.consensus === "POST_EXIT_COOLDOWN") {
+                    const remSecs = consensusResult.cooldown?.remainingSecs || 0;
+                    const totalSecs = consensusResult.cooldown?.postExitCooldownSecs || 90;
+                    const rawDir = consensusResult.rawType === "BUY" ? "🟢 BUY" : "🔴 SELL";
+                    signalBadge = `⏳ POST-EXIT COOLDOWN [${rawDir}] (${remSecs}s / ${totalSecs}s Delay Buffer)`;
+                    waitTimerLine = `⏳ Cooldown Wait : ${remSecs}s Remaining (Preventing immediate re-entry after trade exit)`;
+                }
 
                 console.clear();
                 console.log("==========================================================================");

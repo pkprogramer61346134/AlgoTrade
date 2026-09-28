@@ -21,6 +21,7 @@ class MasterTrailingEngine {
         this.activePosition = null;
         this.tradeHistory = [];
         this.isOrderInFlight = false;
+        this.lastExitTimestamp = 0;
     }
 
     /**
@@ -150,6 +151,17 @@ class MasterTrailingEngine {
         if (elapsedStartupSecs < startupGraceSecs && envName !== "BACKTEST" && envName !== "TEST_SIM") {
             logger.logInfo(envName, "SIGNAL_IGNORED", `System in startup stabilization period (${elapsedStartupSecs}s / ${startupGraceSecs}s). Ignoring signal.`);
             return { status: "IGNORED", reason: `SYSTEM_STABILIZING (${startupGraceSecs - elapsedStartupSecs}s remaining)` };
+        }
+
+        // 4. Guard Check: Post-Exit Cooldown Guard (Prevents immediate re-entry right after trade exit)
+        if (this.lastExitTimestamp > 0 && envName !== "BACKTEST") {
+            const elapsedExitSecs = Math.round((Date.now() - this.lastExitTimestamp) / 1000);
+            const cooldownSecs = Number(cfg.postExitCooldownSeconds || 90);
+            if (elapsedExitSecs < cooldownSecs) {
+                const remCooldownSecs = cooldownSecs - elapsedExitSecs;
+                logger.logInfo(envName, "SIGNAL_IGNORED", `Post-exit cooldown active (${elapsedExitSecs}s / ${cooldownSecs}s). Ignoring signal.`);
+                return { status: "IGNORED", reason: `POST_EXIT_COOLDOWN (${remCooldownSecs}s remaining)` };
+            }
         }
 
         // Synchronously acquire atomic lock BEFORE any async operations
@@ -488,6 +500,7 @@ class MasterTrailingEngine {
             this.tradeHistory.push({ ...pos });
             const closedPosition = { ...pos };
             this.activePosition = null;
+            this.lastExitTimestamp = Date.now();
 
             logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
             return closedPosition;
@@ -506,11 +519,23 @@ class MasterTrailingEngine {
             this.activePosition = null;
         }
 
+        const cfg = masterConfig.getConfig();
+        const cooldownSecs = Number(cfg.postExitCooldownSeconds || 90);
+        const elapsedExitSecs = this.lastExitTimestamp > 0 ? Math.round((Date.now() - this.lastExitTimestamp) / 1000) : 9999;
+        const isCooldownActive = elapsedExitSecs < cooldownSecs;
+
         return {
             activePosition: this.activePosition,
             history: this.tradeHistory,
             totalTrades: this.tradeHistory.length,
-            totalPnl: Number(this.tradeHistory.reduce((acc, t) => acc + (t.realizedPnl || 0), 0).toFixed(2))
+            totalPnl: Number(this.tradeHistory.reduce((acc, t) => acc + (t.realizedPnl || 0), 0).toFixed(2)),
+            lastExitTimestamp: this.lastExitTimestamp,
+            cooldownInfo: {
+                cooldownSecs,
+                elapsedExitSecs,
+                remainingSecs: Math.max(0, cooldownSecs - elapsedExitSecs),
+                isCooldownActive
+            }
         };
     }
 }

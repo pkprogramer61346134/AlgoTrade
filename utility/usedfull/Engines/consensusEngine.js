@@ -832,6 +832,42 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
             isStabilized: !isSystemStabilizing
         };
 
+        // Post-Exit Cooldown Protection (Prevents immediate re-entry right after previous position exit)
+        const postExitCooldownSecs = Number(config.postExitCooldownSeconds || 90);
+        let isPostExitCooldownActive = false;
+        let elapsedExitSecs = 9999;
+        let remCooldownSecs = 0;
+
+        if (masterSL && masterSL.lastExitTimestamp > 0) {
+            elapsedExitSecs = Math.round((nowMs - masterSL.lastExitTimestamp) / 1000);
+            if (elapsedExitSecs < postExitCooldownSecs) {
+                isPostExitCooldownActive = true;
+                remCooldownSecs = Math.max(0, postExitCooldownSecs - elapsedExitSecs);
+
+                // Reset confidence time tracker during cooldown so post-cooldown requires fresh ramp-up
+                confidenceTimeTracker = {
+                    lastSignalType: "NO_SIGNAL",
+                    firstSeenMs: nowMs,
+                    lastIntervalStep: 0,
+                    rampBonus: 0,
+                    decayPenalty: 0
+                };
+
+                if (result.consensus === "BUY" || result.consensus === "SELL" || result.consensus === "BUILDING_CONFIDENCE") {
+                    result.rawType = result.rawType || result.consensus;
+                    result.consensus = "POST_EXIT_COOLDOWN";
+                    result.reason = `⏳ Post-Exit Cooldown (${remCooldownSecs}s remaining after trade closure). Re-evaluating fresh entries...`;
+                }
+            }
+        }
+
+        result.cooldown = {
+            postExitCooldownSecs,
+            elapsedExitSecs,
+            remainingSecs: remCooldownSecs,
+            isCooldownActive: isPostExitCooldownActive
+        };
+
     } catch (alignErr) {
         console.warn(`⚠️ [CONSENSUS ENGINE] Alignment confidence check notice: ${alignErr.message}`);
     }
