@@ -84,8 +84,8 @@ class SmartOrderExecutor {
                 trailingJump: params.trailingJump || 0
             });
 
-            if (!superRes || superRes.status !== "success" || !superRes.data?.orderId) {
-                const errMsg = superRes?.message || superRes?.rawResponse?.remarks || superRes?.remarks || "Dhan Super Order placement failed";
+            if (!superRes || superRes.status !== "success" || !superRes.data?.orderId || superRes.data?.orderStatus === "REJECTED" || superRes.data?.orderStatus === "CANCELLED") {
+                const errMsg = superRes?.data?.omsErrorDescription || superRes?.message || superRes?.rawResponse?.remarks || superRes?.remarks || "Dhan Super Order placement rejected/failed";
                 throw new Error(`[ORDER EXECUTOR ERROR] ${errMsg}`);
             }
 
@@ -116,8 +116,8 @@ class SmartOrderExecutor {
             price
         });
 
-        if (!regRes || regRes.status !== "success" || !regRes.data?.orderId) {
-            const errMsg = regRes?.message || regRes?.remarks || "Dhan Regular Order placement failed";
+        if (!regRes || regRes.status !== "success" || !regRes.data?.orderId || regRes.data?.orderStatus === "REJECTED" || regRes.data?.orderStatus === "CANCELLED") {
+            const errMsg = regRes?.data?.omsErrorDescription || regRes?.message || regRes?.remarks || "Dhan Regular Order placement rejected/failed";
             throw new Error(`[ORDER EXECUTOR ERROR] ${errMsg}`);
         }
 

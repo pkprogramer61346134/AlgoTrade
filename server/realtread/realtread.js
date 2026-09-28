@@ -89,7 +89,7 @@ class RealTradeEngine {
                         return masterSL.activePosition;
                     }
 
-                    console.log(`🔄 [REAL POSITIONS SYNC] Overwriting stale ghost with real Dhan open position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${activeDhanPos.netQty} @ ₹${activeDhanPos.buyAvg}`);
+                    console.log(`🔄 [REAL POSITIONS SYNC] Syncing real Dhan open position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${activeDhanPos.netQty} @ ₹${activeDhanPos.buyAvg}`);
 
                     const optionType = activeDhanPos.drvOptionType === "PUT" ? "PE" : "CE";
                     const entryPrice = Number(activeDhanPos.buyAvg || activeDhanPos.costPrice || 0);
@@ -178,7 +178,7 @@ class RealTradeEngine {
                 } else {
                     // No open positions in Dhan API: Auto-cleanup any real ghost position in masterSL
                     if (masterSL.activePosition && masterSL.activePosition.envName === "REAL_TRADE") {
-                        console.log(`🧹 [REAL POSITIONS SYNC] Dhan API shows 0 open positions. Cleaning up stale position (${masterSL.activePosition.symbol}).`);
+                        console.log(`🧹 [REAL POSITIONS SYNC] Dhan API shows 0 open positions. Clearing stale ghost position (${masterSL.activePosition.symbol}).`);
                         masterSL.activePosition = null;
                         this.activeOptionContract = null;
                     }
