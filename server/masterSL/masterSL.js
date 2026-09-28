@@ -89,14 +89,23 @@ class MasterTrailingEngine {
         const maxRetries = cfg.maxRetriesPerStep || 5;
         const retryDelay = cfg.retryDelayMs || 1000;
 
-        // 1. Guard Check: Single Open Position Guard & Atomic In-Flight Order Guard
+        // 1. Guard Check: Single Open Position Guard, Atomic In-Flight Lock & 30s Cooldown Guard
+        const ORDER_COOLDOWN_MS = 30000;
+        const timeSinceLastOrder = Date.now() - (this.lastOrderTimestamp || 0);
+        if (timeSinceLastOrder < ORDER_COOLDOWN_MS) {
+            const remSecs = Math.ceil((ORDER_COOLDOWN_MS - timeSinceLastOrder) / 1000);
+            logger.logInfo(envName, "SIGNAL_IGNORED", `Order placement cooldown active (${remSecs}s remaining). Ignoring signal.`);
+            return { status: "IGNORED", reason: `ORDER_COOLDOWN_ACTIVE (${remSecs}s)` };
+        }
+
         if ((this.activePosition && this.activePosition.status === "OPEN") || this.isOrderInFlight) {
             logger.logInfo(envName, "SIGNAL_IGNORED", `Position already open or order in flight (${this.activePosition?.symbol || 'ORDER_IN_FLIGHT'}). Ignoring signal.`);
             return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_ORDER_IN_FLIGHT" };
         }
 
-        // Synchronously acquire atomic lock BEFORE any async operations
+        // Synchronously acquire atomic lock & record timestamp BEFORE any async operations
         this.isOrderInFlight = true;
+        this.lastOrderTimestamp = Date.now();
 
         try {
             // 2. Guard Check: Max Trades Per Day Check
@@ -224,12 +233,12 @@ class MasterTrailingEngine {
                 status: "OPEN"
             };
 
-            // STEP 4: Place Order via Handler (With 5 Retries)
+            // STEP 4: Place Order via Handler (Max 1 attempt for order placement to prevent duplicate orders!)
             const placedOrderResult = await this.retryStepAsync(
                 () => environmentHandlers.placeOrder(orderPayload),
                 "PLACE_ORDER",
                 envName,
-                maxRetries,
+                1,
                 retryDelay
             );
 
@@ -249,7 +258,10 @@ class MasterTrailingEngine {
             this.activePosition = null;
             return null;
         } finally {
-            this.isOrderInFlight = false;
+            // Retain atomic in-flight lock for a 5-second post-placement settling window
+            setTimeout(() => {
+                this.isOrderInFlight = false;
+            }, 5000);
         }
     }
 

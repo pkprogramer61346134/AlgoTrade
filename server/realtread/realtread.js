@@ -167,11 +167,15 @@ class RealTradeEngine {
                 }
 
             } else {
-                // No open positions in Dhan API: Unconditionally clear any ghost position
-                masterSL.activePosition = null;
-                this.activeOptionContract = null;
-                this.latestOptionTick = null;
-                this.activeOptionStreamSecId = null;
+                // No open positions in Dhan API:
+                // ONLY clear activePosition if NO order is in-flight and 30s order cooldown has passed!
+                const isRecentOrder = masterSL.isOrderInFlight || (Date.now() - (masterSL.lastOrderTimestamp || 0) < 30000);
+                if (!isRecentOrder) {
+                    masterSL.activePosition = null;
+                    this.activeOptionContract = null;
+                    this.latestOptionTick = null;
+                    this.activeOptionStreamSecId = null;
+                }
             }
         } catch (err) {
             console.warn(`⚠️ [REAL POSITIONS SYNC WARN] Notice syncing Dhan positions: ${err.message}`);
@@ -410,8 +414,9 @@ class RealTradeEngine {
      */
     async processSignal(signal, stockInfo = null) {
         if (!realConfig.getConfig().realTradeEnabled || !signal) return null;
-        if (this.isOrderPlacing || this.activePosition) {
-            return { status: "IGNORED", reason: "ORDER_IN_FLIGHT_OR_POSITION_ACTIVE" };
+        const isRecentOrder = masterSL.isOrderInFlight || (Date.now() - (masterSL.lastOrderTimestamp || 0) < 30000);
+        if (this.isOrderPlacing || this.activePosition || masterSL.activePosition || isRecentOrder) {
+            return { status: "IGNORED", reason: "ORDER_IN_FLIGHT_OR_POSITION_ACTIVE_OR_COOLDOWN" };
         }
 
         if (signal.consensus === "BUY" || signal.consensus === "SELL") {
