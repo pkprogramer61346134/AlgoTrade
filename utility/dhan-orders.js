@@ -145,6 +145,10 @@ class DhanOrders {
         return await this.request(`/orders/${orderId}`, { method: "GET" });
     }
 
+    async getPositions() {
+        return await this.request("/positions", { method: "GET" });
+    }
+
     // --- Trades ---
     async getTradeHistory() {
         return await this.request("/trades", { method: "GET" });

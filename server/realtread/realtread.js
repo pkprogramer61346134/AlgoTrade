@@ -64,6 +64,121 @@ class RealTradeEngine {
     }
 
     /**
+     * Fetch and Sync Live Real Positions from Dhan Broker API
+     * Ensures masterSL.activePosition matches actual live position in Dhan Account
+     */
+    async syncRealPositionsFromDhan() {
+        if (!realConfig.getConfig().realTradeEnabled) return;
+        try {
+            const { DhanOrders } = require('../../utility/dhan-orders');
+            const orders = new DhanOrders();
+            const posRes = await orders.getPositions();
+
+            if (posRes && posRes.status === "success" && Array.isArray(posRes.data)) {
+                const openDhanPositions = posRes.data.filter(p => (p.positionType === "LONG" || Number(p.netQty) > 0) && Number(p.netQty) !== 0);
+
+                if (openDhanPositions.length > 0) {
+                    const activeDhanPos = openDhanPositions[0];
+                    const secId = String(activeDhanPos.securityId);
+
+                    // If masterSL activePosition already matches this securityId, update latest values
+                    if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
+                        return masterSL.activePosition;
+                    }
+
+                    console.log(`🔄 [REAL POSITIONS SYNC] Synced live open Dhan broker position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${activeDhanPos.netQty} @ ₹${activeDhanPos.buyAvg}`);
+
+                    const optionType = activeDhanPos.drvOptionType === "PUT" ? "PE" : "CE";
+                    const entryPrice = Number(activeDhanPos.buyAvg || activeDhanPos.costPrice || 0);
+                    const qty = Math.abs(Number(activeDhanPos.netQty || 65));
+                    const lotSize = 65;
+
+                    // Calculate Option SL & Targets via Stack Module
+                    let slTargetData = null;
+                    try {
+                        slTargetData = await calculateOptionSLAndTargets({
+                            securityId: secId,
+                            entryPrice: entryPrice,
+                            interval: "5",
+                            method: "HYBRID"
+                        });
+                    } catch (e) {}
+
+                    const initialSl = Number(slTargetData?.stopLoss?.sl || (entryPrice * 0.85).toFixed(2));
+                    const tr1 = Number(slTargetData?.targets?.tr1?.price || (entryPrice + Math.abs(entryPrice - initialSl)).toFixed(2));
+                    const tr2 = Number(slTargetData?.targets?.tr2?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 2).toFixed(2));
+                    const tr3 = Number(slTargetData?.targets?.tr3?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 3).toFixed(2));
+                    const tr4 = Number(slTargetData?.targets?.tr4?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 4).toFixed(2));
+                    const tr5 = Number(slTargetData?.targets?.tr5?.price || (entryPrice + Math.abs(entryPrice - initialSl) * 5).toFixed(2));
+
+                    const orderId = activeDhanPos.orderId || "DHAN_REAL_POS_" + secId;
+
+                    masterSL.activePosition = {
+                        tradeId: "MASTER_SL_REAL_" + secId,
+                        symbol: activeDhanPos.tradingSymbol || `NIFTY_${activeDhanPos.drvStrikePrice}_${optionType}`,
+                        securityId: secId,
+                        optionType: optionType,
+                        isOptionTrade: true,
+                        entryDate: new Date().toLocaleDateString("en-CA"),
+                        entryTime: new Date().toLocaleTimeString("en-IN"),
+                        entryPrice: entryPrice,
+                        initialSl: initialSl,
+                        currentSl: initialSl,
+                        targetPrice: tr2,
+                        targetLabel: "TR2 (1:2)",
+                        targetMode: "1:2",
+                        qty: qty,
+                        lotSize: lotSize,
+                        levels: { initialSl, tr1, tr2, tr3, tr4, tr5 },
+                        trailingStage: "INITIAL",
+                        status: "OPEN",
+                        orderId: orderId,
+                        handlers: this.getRealHandlers(),
+                        envName: "REAL_TRADE"
+                    };
+
+                    this.activeOptionContract = {
+                        status: "success",
+                        securityId: secId,
+                        exchangeSegment: activeDhanPos.exchangeSegment || "NSE_FNO",
+                        symbol: activeDhanPos.tradingSymbol,
+                        lotSize: lotSize,
+                        totalQty: qty,
+                        liveLtp: entryPrice,
+                        optionSL: initialSl,
+                        optionTR1: tr1,
+                        optionTR2: tr2,
+                        optionTR3: tr3,
+                        optionTR4: tr4,
+                        optionTR5: tr5
+                    };
+
+                    // Start Live Option WebSocket Streaming
+                    this.livePriceTracker.streamOptionLtp({
+                        securityId: secId,
+                        exchangeSegment: activeDhanPos.exchangeSegment || "NSE_FNO",
+                        buyPrice: entryPrice,
+                        qty: qty
+                    }, (liveTick) => {
+                        this.latestOptionTick = liveTick;
+                        this.processTick(liveTick);
+                    });
+
+                } else {
+                    // No open positions in Dhan API: Auto-cleanup any real ghost position in masterSL
+                    if (masterSL.activePosition && masterSL.activePosition.envName === "REAL_TRADE") {
+                        console.log(`🧹 [REAL POSITIONS SYNC] Dhan API shows 0 open positions. Cleaning up stale position (${masterSL.activePosition.symbol}).`);
+                        masterSL.activePosition = null;
+                        this.activeOptionContract = null;
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn(`⚠️ [REAL POSITIONS SYNC WARN] Notice syncing Dhan positions: ${err.message}`);
+        }
+    }
+
+    /**
      * Start Real Trading
      */
     async startRealTrading() {
@@ -72,8 +187,12 @@ class RealTradeEngine {
         const selectedStock = cfg.selectedStock;
 
         await this.fetchLiveFunds();
+        await this.syncRealPositionsFromDhan();
         if (this.fundsPollTimer) clearInterval(this.fundsPollTimer);
-        this.fundsPollTimer = setInterval(() => this.fetchLiveFunds(), 5000);
+        this.fundsPollTimer = setInterval(async () => {
+            await this.fetchLiveFunds();
+            await this.syncRealPositionsFromDhan();
+        }, 5000);
 
         console.log("==========================================================================");
         console.log(`⚡ [REAL ENGINE START] Active via MasterSL (ONLY STACK UTILITIES USED)`);
