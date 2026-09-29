@@ -1,12 +1,17 @@
 /**
- * Fast & Clean Backtesting Engine (100% Honest Strategy Target vs SL Evaluation)
+ * Standalone Simple Backtesting Engine (Direct Strategy Consensus Target vs SL Evaluation)
  * Location: C:\AlgoTrade\server\backtesting\backtesting.js
  * 
- * Audit Verification:
- * - REAL Market Candles downloaded from Dhan API / Disk Cache.
- * - Zero Mock/Fake Data or Arbitrary Point Fallbacks.
- * - Conservative Execution: Stop Loss priority on same-bar high/low breach.
- * - Intraday EOD Square-Off at 15:15 PM to prevent overnight holding bugs.
+ * Features:
+ * 1. Independent & Decoupled: Zero dependency on MasterSL.
+ * 2. Real Cached Market Candles: Loaded via cached-historical-data.js.
+ * 3. Strategy Evaluation: Calls evaluateConsensusEngine({ securityId, exchangeSegment, interval, date, time })
+ *    passing ONLY date and time options (no candle arrays passed).
+ * 4. Honest Point Evaluation:
+ *    - BUY : SL Hit if candleLow <= SL | Target Hit if candleHigh >= Target | PnL = Exit - Entry
+ *    - SELL: SL Hit if candleHigh >= SL | Target Hit if candleLow <= Target | PnL = Entry - Exit
+ * 5. Intraday EOD Protection: Auto square-off at 15:15 PM.
+ * 6. Generates clean backtest report with Winrate, PASS/LOSS count, Net Points, and Daily Breakdown.
  */
 
 const fs = require('fs');
@@ -26,18 +31,18 @@ class BacktestEngine {
      */
     async streamHistoricalCandles(params = {}, onCandleTick = null) {
         const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-        const fromDate = params.fromDate || "2026-09-21";
-        const toDate = params.toDate || todayStr;
+        const fromDate = params.fromDate || params.date || "2026-09-21";
+        const toDate = params.toDate || params.date || todayStr;
         const interval = String(params.interval || "5");
         const maxTradesPerDay = Number(params.maxTradesPerDay || 3);
 
         console.log("==========================================================================");
-        console.log(`🧪 [HONEST BACKTEST ENGINE] Streaming Candles (${fromDate} to ${toDate})`);
+        console.log(`🧪 [SIMPLE BACKTEST ENGINE] Streaming Candles (${fromDate} to ${toDate})`);
         console.log(` Config: Interval: ${interval}m, Max Trades/Day: ${maxTradesPerDay}`);
-        console.log(" Real Market Candles | Conservative Execution | Intraday EOD Protection");
+        console.log(" Standalone Target vs SL Evaluation | Calling evaluateConsensusEngine({ date, time })");
         console.log("==========================================================================\n");
 
-        // Fetch real cached candles via cached-historical-data.js
+        // 1. Fetch main date range candles
         const candleRes = await getCachedCandles({
             securityId: "13",
             exchangeSegment: "IDX_I",
@@ -47,9 +52,9 @@ class BacktestEngine {
             interval: interval
         });
 
-        const candles = candleRes.data || [];
-        if (candles.length === 0) {
-            console.warn(`⚠️ [HISTORICAL STREAMER] No candles found for ${fromDate} to ${toDate}`);
+        const targetCandles = candleRes.data || [];
+        if (targetCandles.length === 0) {
+            console.warn(`⚠️ [BACKTEST ENGINE] No candles found for ${fromDate} to ${toDate}`);
             const emptyReport = {
                 status: "success",
                 symbol: "NIFTY",
@@ -77,34 +82,32 @@ class BacktestEngine {
             return { candles: [], report: emptyReport };
         }
 
-        console.log(`✅ [HISTORICAL STREAMER] Loaded ${candles.length} real market candles. Processing tick-by-tick...\n`);
+        console.log(`✅ [BACKTEST ENGINE] Loaded ${targetCandles.length} target candles. Running consensus evaluation...\n`);
 
         let activePosition = null;
         const tradesHistory = [];
         const dailyTradeCountMap = {};
 
-        // Process tick-by-tick
-        for (let i = 0; i < candles.length; i++) {
-            const tick = candles[i];
+        for (let i = 0; i < targetCandles.length; i++) {
+            const tick = targetCandles[i];
             const candleClose = Number(tick.close || tick.candleClose || tick.price || 0);
             const candleHigh = Number(tick.high || tick.candleHigh || candleClose);
             const candleLow = Number(tick.low || tick.candleLow || candleClose);
-            tick.price = candleClose;
 
             let closedTradeThisTick = null;
+            let consensusResult = { consensus: "NO_SIGNAL", reason: "NO_EVALUATION" };
 
             try {
-                // 1. Process active trade exit conditions (Target TR vs Stop Loss SL vs Intraday EOD Square-Off)
+                // 1. Process Active Position Exit Rules (Target vs SL vs EOD)
                 if (activePosition) {
                     const isBUY = activePosition.type === "BUY";
                     let isTargetHit = false;
                     let isSLHit = false;
                     let isEODSquareOff = false;
 
-                    const isLastCandleOfDay = (tick.time >= "15:15:00" || i === candles.length - 1 || (i < candles.length - 1 && candles[i + 1].date !== tick.date));
+                    const isLastCandleOfDay = (tick.time >= "15:15:00" || i === targetCandles.length - 1 || (i < targetCandles.length - 1 && targetCandles[i + 1].date !== tick.date));
 
                     if (isBUY) {
-                        // Conservative Priority: Stop Loss takes priority if both SL and TR are touched in high volatility candle
                         if (candleLow <= activePosition.sl) isSLHit = true;
                         else if (candleHigh >= activePosition.tr) isTargetHit = true;
                         else if (isLastCandleOfDay) isEODSquareOff = true;
@@ -125,7 +128,7 @@ class BacktestEngine {
                             strategyId: activePosition.strategyId,
                             strategyName: activePosition.strategyName,
                             type: activePosition.type,
-                            optionType: activePosition.optionType,
+                            optionType: activePosition.type === "BUY" ? "CE" : "PE",
                             entryDate: activePosition.entryDate,
                             entryTime: activePosition.entryTime,
                             entryPrice: activePosition.entryPrice,
@@ -136,7 +139,7 @@ class BacktestEngine {
                             exitPrice: Number(exitPrice.toFixed(2)),
                             exitReason: exitReason,
                             points: pointsNum,
-                            result: isTargetHit ? "TARGET_HIT" : (isSLHit ? "SL_HIT" : (pointsNum >= 0 ? "EOD_PROFIT" : "EOD_LOSS"))
+                            result: pointsNum >= 0 ? "PASS" : "LOSS"
                         };
 
                         tradesHistory.push(closedTradeThisTick);
@@ -144,35 +147,34 @@ class BacktestEngine {
                     }
                 }
 
-                // 2. Evaluate Strategy Signal via Consensus Engine
-                const consensusResult = await evaluateConsensusEngine(tick, -1, {
+                // 2. Evaluate Strategy Signal via Consensus Engine (passing ONLY options object with date & time)
+                const dayKey = tick.date || "DEFAULT";
+                const currentDayTrades = dailyTradeCountMap[dayKey] || 0;
+
+                consensusResult = await evaluateConsensusEngine({
                     securityId: "13",
                     exchangeSegment: "IDX_I",
-                    interval: interval
+                    interval: interval,
+                    date: tick.date,
+                    time: tick.time
                 });
 
-                // 3. Open New Trade if no position is active, signal triggered, and valid SL/TR provided by strategy (before 3:00 PM)
+                // 3. Open New Position if no position active and valid signal triggered before 3:00 PM
                 if (!activePosition && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
-                    if (consensusResult.sl && consensusResult.tr && tick.time <= "15:00:00") {
-                        const dayKey = tick.date || "DEFAULT";
-                        const currentDayTrades = dailyTradeCountMap[dayKey] || 0;
+                    if (consensusResult.sl && consensusResult.tr && tick.time <= "15:00:00" && currentDayTrades < maxTradesPerDay) {
+                        dailyTradeCountMap[dayKey] = currentDayTrades + 1;
 
-                        if (currentDayTrades < maxTradesPerDay) {
-                            dailyTradeCountMap[dayKey] = currentDayTrades + 1;
-
-                            activePosition = {
-                                tradeId: `BT_${i}_${Date.now()}`,
-                                strategyId: consensusResult.strategyId || "STRAT_MASTER",
-                                strategyName: consensusResult.strategyName || "Master Strategy",
-                                type: consensusResult.consensus,
-                                optionType: consensusResult.consensus === "BUY" ? "CE" : "PE",
-                                entryDate: tick.date,
-                                entryTime: tick.time,
-                                entryPrice: Number((consensusResult.entry || candleClose).toFixed(2)),
-                                sl: Number(consensusResult.sl.toFixed(2)),
-                                tr: Number(consensusResult.tr.toFixed(2))
-                            };
-                        }
+                        activePosition = {
+                            tradeId: `BT_${i}_${Date.now()}`,
+                            strategyId: consensusResult.strategyId || "STRAT_CONSENSUS",
+                            strategyName: consensusResult.strategyName || "Consensus Engine Strategy",
+                            type: consensusResult.consensus,
+                            entryDate: tick.date,
+                            entryTime: tick.time,
+                            entryPrice: Number((consensusResult.entry || candleClose).toFixed(2)),
+                            sl: Number(consensusResult.sl.toFixed(2)),
+                            tr: Number(consensusResult.tr.toFixed(2))
+                        };
                     }
                 }
 
@@ -180,8 +182,8 @@ class BacktestEngine {
                 if (typeof onCandleTick === 'function') {
                     await onCandleTick({
                         index: i + 1,
-                        total: candles.length,
-                        percent: Math.round(((i + 1) / candles.length) * 100),
+                        total: targetCandles.length,
+                        percent: Math.round(((i + 1) / targetCandles.length) * 100),
                         tick: {
                             date: tick.date,
                             time: tick.time,
@@ -190,8 +192,8 @@ class BacktestEngine {
                             low: candleLow
                         },
                         consensusResult: {
-                            consensus: consensusResult.consensus,
-                            reason: consensusResult.reason
+                            consensus: consensusResult?.consensus || "NO_SIGNAL",
+                            reason: consensusResult?.reason || "WAITING"
                         },
                         activePosition: activePosition,
                         tradeCount: tradesHistory.length,
@@ -204,9 +206,7 @@ class BacktestEngine {
             }
         }
 
-        // -------------------------------------------------------------
-        // CALCULATE FINAL ACCURATE PERFORMANCE METRICS & REPORT
-        // -------------------------------------------------------------
+        // Calculate final accurate performance metrics
         let totalPoints = 0;
         let grossWinPoints = 0;
         let grossLossPoints = 0;
@@ -215,14 +215,14 @@ class BacktestEngine {
         let eodCount = 0;
 
         const formattedTrades = tradesHistory.map(t => {
-            const isWin = t.points > 0;
+            const isWin = t.points >= 0;
             if (t.exitReason === "TARGET_HIT") trHitsCount++;
             else if (t.exitReason === "STOP_LOSS_HIT") slHitsCount++;
             else if (t.exitReason === "EOD_SQUARE_OFF") eodCount++;
 
             if (isWin) {
                 grossWinPoints += t.points;
-            } else if (t.points < 0) {
+            } else {
                 grossLossPoints += Math.abs(t.points);
             }
             totalPoints += t.points;
@@ -231,12 +231,12 @@ class BacktestEngine {
                 ...t,
                 initialSl: t.sl,
                 targetPrice: t.tr,
-                result: isWin ? "PASS" : (t.points < 0 ? "LOSS" : "NEUTRAL")
+                result: isWin ? "PASS" : "LOSS"
             };
         });
 
         const totalTrades = formattedTrades.length;
-        const winningTradesCount = formattedTrades.filter(t => t.points > 0).length;
+        const winningTradesCount = formattedTrades.filter(t => t.points >= 0).length;
         const losingTradesCount = formattedTrades.filter(t => t.points < 0).length;
 
         const winrateNum = totalTrades > 0 ? ((winningTradesCount / totalTrades) * 100) : 0;
@@ -254,8 +254,8 @@ class BacktestEngine {
             }
             dailyMap[dayKey].totalTrades += 1;
             dailyMap[dayKey].netPoints = Number((dailyMap[dayKey].netPoints + t.points).toFixed(2));
-            if (t.points > 0) dailyMap[dayKey].winningTrades += 1;
-            if (t.points < 0) dailyMap[dayKey].losingTrades += 1;
+            if (t.points >= 0) dailyMap[dayKey].winningTrades += 1;
+            else dailyMap[dayKey].losingTrades += 1;
             if (t.exitReason === "TARGET_HIT") dailyMap[dayKey].trHits += 1;
             if (t.exitReason === "STOP_LOSS_HIT") dailyMap[dayKey].slHits += 1;
         });
@@ -271,7 +271,7 @@ class BacktestEngine {
             fromDate,
             toDate,
             interval: `${interval}m`,
-            totalCandles: candles.length,
+            totalCandles: targetCandles.length,
             stats: {
                 totalTrades,
                 winningTrades: winningTradesCount,
@@ -293,10 +293,10 @@ class BacktestEngine {
         this.saveReport(completeReport);
 
         console.log("\n==========================================================================");
-        console.log(`🎉 HONEST BACKTEST COMPLETE: Total Trades: ${totalTrades} | Wins: ${winningTradesCount} | Losses: ${losingTradesCount} | TR Hits: ${trHitsCount} | SL Hits: ${slHitsCount} | Winrate: ${winrateStr} | Net Pts: +${netPointsFormatted}`);
+        console.log(`🎉 BACKTEST COMPLETE: Total Trades: ${totalTrades} | Wins: ${winningTradesCount} | Losses: ${losingTradesCount} | TR Hits: ${trHitsCount} | SL Hits: ${slHitsCount} | Winrate: ${winrateStr} | Net Pts: ${netPointsFormatted >= 0 ? '+' : ''}${netPointsFormatted}`);
         console.log("==========================================================================\n");
 
-        return { candles, report: completeReport };
+        return { candles: targetCandles, report: completeReport };
     }
 
     /**

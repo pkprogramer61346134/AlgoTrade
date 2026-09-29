@@ -103,7 +103,7 @@ class CachedHistoricalData {
     /**
      * Fetch or load candle data for a single date range
      */
-    async fetchSingleDateRange(securityId, exchangeSegment, instrument, interval, fromDate, toDate, forceRefresh) {
+    async fetchSingleDateRange(securityId, exchangeSegment, instrument, interval, fromDate, toDate, forceRefresh, targetTimeSeconds = null) {
         const fileName = this.getCacheFileName(securityId, exchangeSegment, interval, fromDate, toDate);
         const filePath = path.join(this.cacheDir, fileName);
 
@@ -131,15 +131,17 @@ class CachedHistoricalData {
                 if (Array.isArray(cachedCandles) && cachedCandles.length > 0) {
                     let isStaleTodayFile = false;
 
-                    // If cache file is for TODAY's date, check if last candle is older than current market time (> 5 mins)
+                    // If cache file is for TODAY's date, check if last candle is older than current target time or current market time
                     if (fromDate === todayStr && toDate === todayStr) {
                         const lastCandleInFile = cachedCandles[cachedCandles.length - 1];
                         if (lastCandleInFile && lastCandleInFile.time) {
                             const lastCandleSecs = this.parseTimeToSeconds(lastCandleInFile.time);
                             const nowSecs = this.parseTimeToSeconds(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
+                            const stepSecs = (Number(interval) || 5) * 60;
 
-                            // During market hours (9:15 AM = 33300s to 3:30 PM = 55800s), if last candle is > 5 mins (300s) old:
-                            if (nowSecs >= 33300 && nowSecs <= 55800 && (nowSecs - lastCandleSecs > 300)) {
+                            // Re-fetch if target time is newer than cached last candle, or if current time is past last candle by >= stepSecs
+                            if ((targetTimeSeconds !== null && targetTimeSeconds > lastCandleSecs) ||
+                                (nowSecs >= 33300 && nowSecs <= 55800 && (nowSecs - lastCandleSecs >= stepSecs))) {
                                 isStaleTodayFile = true;
                             }
                         }
@@ -186,8 +188,28 @@ class CachedHistoricalData {
                 toDate
             });
         } catch (apiErr) {
-            console.warn(`⚠️ [API FETCH NOTICE] Market closed / No data on ${fromDate}: ${apiErr.message}`);
-            candles = [];
+            const errStr = String(apiErr.message || "").toLowerCase();
+            if (errStr.includes("token") || errStr.includes("invalid") || errStr.includes("expired") || errStr.includes("401") || errStr.includes("failed")) {
+                console.warn(`🔄 [DHAN TOKEN REFRESH] Access Token missing/expired. Attempting automatic TOTP refresh...`);
+                try {
+                    const { autoRefreshDhanToken } = require("../token/autoTokenRefresh");
+                    const refRes = await autoRefreshDhanToken();
+                    if (refRes && refRes.status === "success") {
+                        candles = await this.historical.getHistoricalData({
+                            securityId,
+                            exchangeSegment,
+                            instrument,
+                            interval,
+                            fromDate,
+                            toDate
+                        });
+                    }
+                } catch (tokErr) {
+                    console.warn(`⚠️ [TOKEN REFRESH NOTICE] ${tokErr.message}`);
+                }
+            } else {
+                console.warn(`⚠️ [API FETCH NOTICE] Market closed / No data on ${fromDate}: ${apiErr.message}`);
+            }
         }
 
         const normalized = normalizeCandles(candles);
@@ -203,6 +225,156 @@ class CachedHistoricalData {
         }
 
         return { source: "DHAN_API", fileName, filePath, candles: normalized };
+    }
+
+    /**
+     * Get exact N historical candles prior to (and including) a target date and time.
+     * 
+     * @param {Object|string} dateOrParams - Target date string ("YYYY-MM-DD") OR params object
+     * @param {string|number} [timeStr] - Target time cutoff ("HH:MM:SS" or "01:30:00 pm") OR count if positional
+     * @param {number} [count] - Number of candles requested (e.g. 200, 300)
+     * @param {Object} [options={}] - Options (securityId, exchangeSegment, instrument, interval, forceRefresh, inclusive)
+     * @returns {Promise<Object>} Candle Result object { status, mode, requestedCount, targetDate, targetTime, totalCandles, source, data }
+     */
+    async getCandlesBeforeDateTime(dateOrParams, timeStr, count, options = {}) {
+        let dateVal;
+        let timeVal;
+        let countVal;
+        let opts = {};
+
+        if (typeof dateOrParams === "object" && dateOrParams !== null && !(dateOrParams instanceof Date)) {
+            opts = { ...dateOrParams };
+            dateVal = opts.date || opts.toDate || opts.untilDate || opts.fromDate;
+            timeVal = opts.time || opts.toTime || opts.untilTime;
+            countVal = opts.count || opts.candleCount || opts.limit;
+        } else {
+            dateVal = dateOrParams;
+            if (typeof timeStr === "number" && (count === undefined || count === null)) {
+                countVal = timeStr;
+                timeVal = null;
+            } else {
+                timeVal = timeStr;
+                countVal = count;
+            }
+            opts = { ...options };
+        }
+
+        const targetCount = Number(countVal || opts.count || opts.candleCount || opts.limit || 200);
+        const inclusive = opts.inclusive !== false; // Default true (includes candle matching target time)
+
+        // Format target date string ("YYYY-MM-DD")
+        let targetDateStr;
+        if (dateVal instanceof Date) {
+            targetDateStr = this.formatDateStr(dateVal);
+        } else if (typeof dateVal === "string" && dateVal.trim() !== "") {
+            targetDateStr = dateVal.trim();
+        } else {
+            targetDateStr = this.formatDateStr(new Date());
+        }
+
+        const securityId = String(opts.securityId || "13");
+        const exchangeSegment = opts.exchangeSegment || "IDX_I";
+        const instrument = opts.instrument || "INDEX";
+        const interval = String(opts.interval || "5");
+        const forceRefresh = Boolean(opts.forceRefresh || false);
+
+        const targetTimeSeconds = timeVal ? this.parseTimeToSeconds(String(timeVal)) : null;
+        const timeLabel = timeVal ? ` up to ${targetDateStr} ${timeVal}` : ` up to ${targetDateStr} EOD`;
+
+        console.log(`🔍 [GET CANDLES BEFORE] Fetching ${targetCount} candles (${interval}m interval) for scrip ${securityId}${timeLabel}...`);
+
+        // Estimate candles per day based on market hours (375 mins / interval)
+        const intervalMins = Number(interval) || 5;
+        const candlesPerDay = Math.floor(375 / intervalMins) || 75;
+        // Buffer days for weekends, market holidays, partial days
+        const daysNeeded = Math.ceil(targetCount / candlesPerDay) + 7;
+
+        let startFromDateObj = new Date(targetDateStr + "T00:00:00");
+        if (isNaN(startFromDateObj.getTime())) {
+            startFromDateObj = new Date();
+        }
+
+        let accumulatedCandles = [];
+        let lastSource = "DISK_CACHE";
+
+        // Fetch backwards day by day from startFromDateObj
+        for (let i = 0; i < daysNeeded; i++) {
+            const currentDateObj = new Date(startFromDateObj);
+            currentDateObj.setDate(startFromDateObj.getDate() - i);
+            const dateStr = this.formatDateStr(currentDateObj);
+
+            const dayRes = await this.fetchSingleDateRange(
+                securityId,
+                exchangeSegment,
+                instrument,
+                interval,
+                dateStr,
+                dateStr,
+                forceRefresh
+            );
+
+            if (dayRes.source === "DHAN_API") {
+                lastSource = "DHAN_API";
+            }
+
+            if (Array.isArray(dayRes.candles) && dayRes.candles.length > 0) {
+                let filteredDayCandles = dayRes.candles;
+                const todayStr = this.formatDateStr(new Date());
+
+                // If filtering today's date, filter out incomplete/unclosed candles
+                if (dateStr === todayStr) {
+                    const nowSecs = this.parseTimeToSeconds(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }));
+                    const stepSecs = (Number(interval) || 5) * 60;
+
+                    filteredDayCandles = filteredDayCandles.filter(c => {
+                        const candleSecs = this.parseTimeToSeconds(c.time);
+                        // A candle starting at candleSecs is only closed if nowSecs >= candleSecs + stepSecs
+                        const isClosed = nowSecs >= (candleSecs + stepSecs);
+                        const matchesTargetTime = targetTimeSeconds === null || (inclusive ? candleSecs <= targetTimeSeconds : candleSecs < targetTimeSeconds);
+                        return isClosed && matchesTargetTime;
+                    });
+                } else if (dateStr === targetDateStr && targetTimeSeconds !== null) {
+                    // On historical target date, filter by targetTime cutoff
+                    filteredDayCandles = filteredDayCandles.filter(c => {
+                        const candleSecs = this.parseTimeToSeconds(c.time);
+                        return inclusive ? (candleSecs <= targetTimeSeconds) : (candleSecs < targetTimeSeconds);
+                    });
+                }
+
+                accumulatedCandles = filteredDayCandles.concat(accumulatedCandles);
+            }
+
+            // Stop loop early if we have collected enough candles
+            if (accumulatedCandles.length >= targetCount + 50) {
+                break;
+            }
+        }
+
+        // Return exact requested N candles (or all collected if total < targetCount)
+        const slicedCandles = accumulatedCandles.slice(-targetCount).map((c, idx) => ({
+            ...c,
+            index: idx + 1
+        }));
+
+        console.log(`✅ [GET CANDLES BEFORE COMPLETE] Loaded ${slicedCandles.length} candles ending at ${targetDateStr} ${timeVal || "EOD"}.`);
+
+        return {
+            status: "success",
+            mode: "CANDLES_BEFORE_DATETIME",
+            requestedCount: targetCount,
+            targetDate: targetDateStr,
+            targetTime: timeVal || "EOD",
+            totalCandles: slicedCandles.length,
+            source: lastSource,
+            data: slicedCandles
+        };
+    }
+
+    /**
+     * Alias for getCandlesBeforeDateTime
+     */
+    async getCandlesBefore(dateOrParams, timeStr, count, options) {
+        return await this.getCandlesBeforeDateTime(dateOrParams, timeStr, count, options);
     }
 
     /**
@@ -224,106 +396,34 @@ class CachedHistoricalData {
      * @returns {Promise<Object>} Candle Result object { status, source, totalCandles, data }
      */
     async getCandleData(params = {}) {
-        const securityId = String(params.securityId || "13");
-        const exchangeSegment = params.exchangeSegment || "IDX_I";
-        const instrument = params.instrument || "INDEX";
-        const interval = String(params.interval || "5");
-        const requestedCount = Number(params.count || params.candleCount || 0);
-        const forceRefresh = Boolean(params.forceRefresh || false);
+        const requestedCount = Number(params.count || params.candleCount || params.limit || 0);
 
         // =========================================================
         // MODE 1: CANDLE COUNT MODE (e.g. count: 200 or 400 candles)
         // =========================================================
         if (requestedCount > 0) {
-            // Support reference target date (toDate / date) and target time (toTime / time)
-            const anchorDateStr = params.toDate || params.date || params.untilDate || null;
-            const targetTimeStr = params.toTime || params.time || params.untilTime || null;
-            const targetTimeSeconds = targetTimeStr ? this.parseTimeToSeconds(targetTimeStr) : null;
-
-            let startFromDateObj;
-            if (anchorDateStr) {
-                startFromDateObj = new Date(anchorDateStr + "T00:00:00");
-                if (isNaN(startFromDateObj.getTime())) {
-                    startFromDateObj = new Date();
-                }
-            } else {
-                startFromDateObj = new Date();
-            }
-
-            const effectiveAnchorDateStr = this.formatDateStr(startFromDateObj);
-            const timeLabel = targetTimeStr ? ` up to ${effectiveAnchorDateStr} ${targetTimeStr}` : ` up to ${effectiveAnchorDateStr}`;
-            console.log(`🔍 [CANDLE COUNT MODE] Requested latest ${requestedCount} candles (${interval}m interval) for ${securityId}${timeLabel}...`);
-
-            // Estimate candles per day (75 for 5m, 25 for 15m, 375 for 1m)
-            const intervalMins = Number(interval) || 5;
-            const candlesPerDay = Math.floor(375 / intervalMins) || 75;
-            const daysNeeded = Math.ceil(requestedCount / candlesPerDay) + 5; // Add extra buffer for weekends/holidays
-
-            let accumulatedCandles = [];
-            let lastSource = "DISK_CACHE";
-
-            // Loop backwards day by day from startFromDateObj to collect candles
-            for (let i = 0; i < daysNeeded; i++) {
-                const targetDateObj = new Date(startFromDateObj);
-                targetDateObj.setDate(startFromDateObj.getDate() - i);
-                const dateStr = this.formatDateStr(targetDateObj);
-
-                const dayRes = await this.fetchSingleDateRange(
-                    securityId,
-                    exchangeSegment,
-                    instrument,
-                    interval,
-                    dateStr,
-                    dateStr,
-                    forceRefresh
-                );
-
-                if (dayRes.source === "DHAN_API") {
-                    lastSource = "DHAN_API";
-                }
-
-                if (Array.isArray(dayRes.candles) && dayRes.candles.length > 0) {
-                    let filteredDayCandles = dayRes.candles;
-                    // If target date matches effectiveAnchorDateStr and a cutoff time is provided, filter candles strictly BEFORE target time (only closed candles)
-                    if (dateStr === effectiveAnchorDateStr && targetTimeSeconds !== null) {
-                        filteredDayCandles = dayRes.candles.filter(c => {
-                            const candleSecs = this.parseTimeToSeconds(c.time);
-                            return candleSecs < targetTimeSeconds;
-                        });
-                    }
-
-                    accumulatedCandles = filteredDayCandles.concat(accumulatedCandles);
-                }
-
-                // Stop loop early if we have collected enough candles
-                if (accumulatedCandles.length >= requestedCount + 50) {
-                    break;
-                }
-            }
-
-            // Re-index candles sequentially (1 to N)
-            const slicedCandles = accumulatedCandles.slice(-requestedCount).map((c, index) => ({
-                ...c,
-                index: index + 1
-            }));
-
-            // console.log(`✅ [CANDLE COUNT COMPLETE] Returning exact ${slicedCandles.length} latest candles.`);
-
+            const res = await this.getCandlesBeforeDateTime(params);
             return {
-                status: "success",
+                status: res.status,
                 mode: "CANDLE_COUNT",
-                requestedCount,
-                untilDate: effectiveAnchorDateStr,
-                untilTime: targetTimeStr || "EOD",
-                totalCandles: slicedCandles.length,
-                source: lastSource,
-                data: slicedCandles
+                requestedCount: res.requestedCount,
+                untilDate: res.targetDate,
+                untilTime: res.targetTime,
+                totalCandles: res.totalCandles,
+                source: res.source,
+                data: res.data
             };
         }
 
         // =========================================================
         // MODE 2: DATE RANGE MODE (fromDate & toDate)
         // =========================================================
+        const securityId = String(params.securityId || "13");
+        const exchangeSegment = params.exchangeSegment || "IDX_I";
+        const instrument = params.instrument || "INDEX";
+        const interval = String(params.interval || "5");
+        const forceRefresh = Boolean(params.forceRefresh || false);
+
         const todayStr = this.formatDateStr(new Date());
         const fromDate = params.fromDate || todayStr;
         const toDate = params.toDate || fromDate;
@@ -380,13 +480,25 @@ class CachedHistoricalData {
     }
 }
 
-// Global helper function for quick one-line calling
+// Global helper functions for quick one-line calling
 async function getCachedCandles(params) {
     const manager = new CachedHistoricalData();
     return await manager.getCandleData(params);
 }
 
+async function getCandlesBeforeDateTime(dateOrParams, timeStr, count, options) {
+    const manager = new CachedHistoricalData();
+    return await manager.getCandlesBeforeDateTime(dateOrParams, timeStr, count, options);
+}
+
+async function getCandlesBefore(dateOrParams, timeStr, count, options) {
+    const manager = new CachedHistoricalData();
+    return await manager.getCandlesBefore(dateOrParams, timeStr, count, options);
+}
+
 module.exports = {
     CachedHistoricalData,
-    getCachedCandles
+    getCachedCandles,
+    getCandlesBeforeDateTime,
+    getCandlesBefore
 };

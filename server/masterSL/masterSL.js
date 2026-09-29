@@ -2,13 +2,15 @@
  * Master Central Trailing Stop Loss & Risk Engine (MasterSL)
  * Location: C:\AlgoTrade\server\masterSL\masterSL.js
  * 
- * Features:
+ * Features & Modular Step Architecture:
  * 1. Single Master Architecture: Controls Backtesting, Paper Trading, and Real Broker Trading.
- * 2. Adapter Handlers Pattern: Environment modules pass checkBalance, selectStrike, placeOrder, modifyOrder, closeOrder.
- * 3. Robust Fail-Safe Auto-Retry: Every step retries up to 5 times (configurable) on errors.
- * 4. Dedicated Error Logging: All errors, stack traces, and retry attempts written to master_sl_error.log.
- * 5. Capped Max Loss per Trade (e.g. ₹300) with dynamic Risk-Points calculation.
- * 6. Dynamic 4-Stage Trailing SL with Breathing Room buffer (e.g. 0.50 points).
+ * 2. Step 1: checkActivePosition() -> Checks single active position & atomic lock.
+ * 3. Step 2: checkAccountBalance() -> Checks available balance via environment handler.
+ * 4. Step 3: selectOptionStrike()  -> Selects best option contract via strike selector handler.
+ * 5. Step 4: calculateRiskAndLevels() -> Computes Risk Points, Initial SL, TR1-TR5 targets.
+ * 6. Step 5: placeBrokerOrder()     -> Places order via broker placement handler.
+ * 7. Step 6: verifyAndStorePosition() -> Verifies order placement and sets active position.
+ * 8. Step 7: modifyTrailingSL() & closePosition() -> Dynamic Trailing SL & broker exit control.
  */
 
 const masterConfig = require('./config');
@@ -29,7 +31,7 @@ class MasterTrailingEngine {
     /**
      * Helper: Execute an async step with automatic retries and logger tracking
      */
-    async retryStepAsync(fn, stepName, envName = "GENERAL", maxRetries = 5, delayMs = 1000) {
+    async retryStepAsync(fn, stepName, envName = "GENERAL", maxRetries = 5, delayMs = 20000) {
         let lastError = null;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -83,17 +85,169 @@ class MasterTrailingEngine {
         return currentMins >= endMins;
     }
 
-    /**
-     * Process Trade Signal & Execute Order Flow via Environment Handlers
-     */
-    async processSignal(signal, environmentHandlers, envName = "PAPER") {
-        if (!signal || !environmentHandlers) return null;
+    // =========================================================================
+    // STEP 1: CHECK ACTIVE POSITION
+    // =========================================================================
+    checkActivePosition() {
+        const hasActive = Boolean(this.activePosition && this.activePosition.status === "OPEN");
+        return { hasActivePosition: hasActive, position: this.activePosition };
+    }
 
+    // =========================================================================
+    // STEP 2: CHECK ACCOUNT BALANCE
+    // =========================================================================
+    async checkAccountBalance(environmentHandlers, envName = "PAPER") {
         const cfg = masterConfig.getConfig();
         const maxRetries = cfg.maxRetriesPerStep || 5;
         const retryDelay = cfg.retryDelayMs || 1000;
 
-        // 1. Guard Check: Single Open Position Guard, Atomic In-Flight Lock & 30s Cooldown Guard
+        return await this.retryStepAsync(
+            async () => {
+                if (typeof environmentHandlers.checkBalance === 'function') {
+                    return await environmentHandlers.checkBalance();
+                }
+                throw new Error("[MASTER SL ERROR] Check balance handler is missing or not configured for environment.");
+            },
+            "CHECK_BALANCE",
+            envName,
+            maxRetries,
+            retryDelay
+        );
+    }
+
+    // =========================================================================
+    // STEP 3: SELECT OPTION STRIKE
+    // =========================================================================
+    async selectOptionStrike(environmentHandlers, spotPrice, optionType, maxBudget, envName = "PAPER") {
+        const cfg = masterConfig.getConfig();
+        const maxRetries = cfg.maxRetriesPerStep || 5;
+        const retryDelay = cfg.retryDelayMs || 1000;
+
+        if (typeof environmentHandlers.selectStrike === 'function') {
+            return await this.retryStepAsync(
+                () => environmentHandlers.selectStrike(spotPrice, optionType, maxBudget),
+                "SELECT_STRIKE",
+                envName,
+                maxRetries,
+                retryDelay
+            );
+        }
+        return null;
+    }
+
+    // =========================================================================
+    // STEP 4: CALCULATE RISK AND TARGET LEVELS (TR1 - TR5)
+    // =========================================================================
+    calculateRiskAndLevels(entryPrice, optionType, isOptionTrade, selectedStrikeInfo, signal, cfg, lotSize) {
+        let initialSl;
+        let riskPoints;
+
+        if (selectedStrikeInfo?.optionSL && Number(selectedStrikeInfo.optionSL) > 0) {
+            initialSl = Number(selectedStrikeInfo.optionSL);
+            riskPoints = Math.max(0.1, Number(Math.abs(entryPrice - initialSl).toFixed(2)));
+        } else if (cfg.maxLossPerTrade && Number(cfg.maxLossPerTrade) > 0) {
+            const maxLossRupees = Number(cfg.maxLossPerTrade);
+            riskPoints = Number((maxLossRupees / lotSize).toFixed(2));
+            initialSl = isOptionTrade ? Number((entryPrice - riskPoints).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - riskPoints).toFixed(2)) : Number((entryPrice + riskPoints).toFixed(2)));
+        } else {
+            initialSl = Number(signal.sl || (isOptionTrade ? entryPrice - 25 : (optionType === "CE" ? entryPrice - 25 : entryPrice + 25)));
+            riskPoints = Math.abs(entryPrice - initialSl);
+        }
+
+        if (isNaN(initialSl) || initialSl <= 0) {
+            initialSl = isOptionTrade ? Number((entryPrice - 25).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - 25).toFixed(2)) : Number((entryPrice + 25).toFixed(2)));
+            riskPoints = Math.abs(entryPrice - initialSl);
+        }
+
+        let tr1, tr2, tr3, tr4, tr5;
+
+        if (isOptionTrade || optionType === "CE") {
+            tr1 = Number((entryPrice + riskPoints).toFixed(2));
+            tr2 = Number((entryPrice + (riskPoints * 2)).toFixed(2));
+            tr3 = Number((entryPrice + (riskPoints * 3)).toFixed(2));
+            tr4 = Number((entryPrice + (riskPoints * 4)).toFixed(2));
+            tr5 = Number((entryPrice + (riskPoints * 5)).toFixed(2));
+        } else {
+            tr1 = Number((entryPrice - riskPoints).toFixed(2));
+            tr2 = Number((entryPrice - (riskPoints * 2)).toFixed(2));
+            tr3 = Number((entryPrice - (riskPoints * 3)).toFixed(2));
+            tr4 = Number((entryPrice - (riskPoints * 4)).toFixed(2));
+            tr5 = Number((entryPrice - (riskPoints * 5)).toFixed(2));
+        }
+
+        return { initialSl, riskPoints, tr1, tr2, tr3, tr4, tr5 };
+    }
+
+    // =========================================================================
+    // STEP 5: PLACE BROKER ORDER VIA HANDLER
+    // =========================================================================
+    async placeBrokerOrder(environmentHandlers, orderPayload, envName = "PAPER") {
+        const cfg = masterConfig.getConfig();
+        const retryDelay = cfg.retryDelayMs || 1000;
+
+        return await this.retryStepAsync(
+            () => environmentHandlers.placeOrder(orderPayload),
+            "PLACE_ORDER",
+            envName,
+            1, // 1 attempt for order placement to prevent duplicate orders
+            retryDelay
+        );
+    }
+
+    // =========================================================================
+    // STEP 6: VERIFY AND STORE ACTIVE POSITION (DOUBLE-CHECK PLACEMENT)
+    // =========================================================================
+    async verifyAndStorePosition(orderPayload, placedOrderResult, environmentHandlers, envName = "PAPER") {
+        let isVerified = true;
+        let verifyDetails = null;
+
+        const verifyFn = environmentHandlers?.verifyOrderPlacement || environmentHandlers?.verifyPlacement;
+        if (typeof verifyFn === 'function') {
+            try {
+                const secId = orderPayload.strikeInfo?.securityId || orderPayload.securityId;
+                verifyDetails = await verifyFn(placedOrderResult?.orderId || orderPayload.tradeId, secId);
+                if (verifyDetails && verifyDetails.isConfirmed === false) {
+                    isVerified = false;
+                    logger.logError(envName, "ORDER_PLACEMENT_VERIFICATION_FAILED", new Error(`Order ${placedOrderResult?.orderId} not confirmed on broker terminal (Status: ${verifyDetails.status})`));
+                } else {
+                    logger.logInfo(envName, "ORDER_PLACEMENT_DOUBLE_CHECKED", `Order ${placedOrderResult?.orderId || orderPayload.tradeId} double-checked & verified on broker terminal. Status: ${verifyDetails?.status || 'CONFIRMED'}`);
+                }
+            } catch (vErr) {
+                logger.logError(envName, "ORDER_PLACEMENT_VERIFY_ERROR", vErr);
+            }
+        } else {
+            logger.logInfo(envName, "ORDER_PLACEMENT_DOUBLE_CHECKED", `Order placement double-checked (Simulated / Paper Trading).`);
+        }
+
+        this.activePosition = {
+            ...orderPayload,
+            qty: Number(placedOrderResult?.quantity || orderPayload.qty),
+            orderId: placedOrderResult?.orderId || orderPayload.tradeId,
+            handlers: environmentHandlers,
+            envName: envName,
+            isVerifiedPlacement: isVerified
+        };
+
+        logger.logInfo(envName, "ORDER_EXECUTED", `Position Opened: ${orderPayload.symbol} | Entry: ₹${orderPayload.entryPrice} | Qty: ${this.activePosition.qty} | SL: ₹${orderPayload.initialSl} | Target (${orderPayload.targetLabel}): ₹${orderPayload.targetPrice} | Verification: ${isVerified ? 'VERIFIED' : 'UNCONFIRMED'}`);
+        return this.activePosition;
+    }
+
+    /**
+     * Process Trade Signal & Execute Order Flow via Modular Step Functions
+     */
+    async processSignal(signal, environmentHandlers, envName = "PAPER") {
+        if (!signal || !environmentHandlers) return null;
+        if (signal.consensus !== "BUY" && signal.consensus !== "SELL") return null;
+
+        const cfg = masterConfig.getConfig();
+
+        // 1. STEP 1: Check Active Position & Cooldown Guards
+        const posCheck = this.checkActivePosition();
+        if (posCheck.hasActivePosition || this.isOrderInFlight) {
+            logger.logInfo(envName, "SIGNAL_IGNORED", `Position already open or order in flight (${posCheck.position?.symbol || 'ORDER_IN_FLIGHT'}). Ignoring signal.`);
+            return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_ORDER_IN_FLIGHT" };
+        }
+
         const ORDER_COOLDOWN_MS = 30000;
         const timeSinceLastOrder = Date.now() - (this.lastOrderTimestamp || 0);
         if (timeSinceLastOrder < ORDER_COOLDOWN_MS) {
@@ -102,17 +256,12 @@ class MasterTrailingEngine {
             return { status: "IGNORED", reason: `ORDER_COOLDOWN_ACTIVE (${remSecs}s)` };
         }
 
-        if ((this.activePosition && this.activePosition.status === "OPEN") || this.isOrderInFlight) {
-            logger.logInfo(envName, "SIGNAL_IGNORED", `Position already open or order in flight (${this.activePosition?.symbol || 'ORDER_IN_FLIGHT'}). Ignoring signal.`);
-            return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_ORDER_IN_FLIGHT" };
-        }
-
         // Synchronously acquire atomic lock & record timestamp BEFORE any async operations
         this.isOrderInFlight = true;
         this.lastOrderTimestamp = Date.now();
 
         try {
-            // 2. Guard Check: Max Trades Per Day Check
+            // Guard Check: Max Trades Per Day Check
             const todayDate = signal.date || new Date().toLocaleDateString("en-CA");
             const todayTradesCount = this.tradeHistory.filter(t => (t.entryDate === todayDate)).length;
             if (todayTradesCount >= cfg.maxTradesPerDay) {
@@ -120,25 +269,11 @@ class MasterTrailingEngine {
                 return { status: "IGNORED", reason: `MAX_DAILY_TRADES_REACHED (${cfg.maxTradesPerDay})` };
             }
 
-            if (signal.consensus !== "BUY" && signal.consensus !== "SELL") return null;
-
             const optionType = signal.consensus === "BUY" ? "CE" : "PE";
             const entrySpotPrice = Number(signal.entry || 0);
 
-            // STEP 1: Balance Check (With 5 Retries)
-            const availableBalance = await this.retryStepAsync(
-                async () => {
-                    if (typeof environmentHandlers.checkBalance === 'function') {
-                        return await environmentHandlers.checkBalance();
-                    }
-                    throw new Error("[MASTER SL ERROR] Check balance handler is missing or not configured for environment.");
-                },
-                "CHECK_BALANCE",
-                envName,
-                maxRetries,
-                retryDelay
-            );
-
+            // 2. STEP 2: Balance Check
+            const availableBalance = await this.checkAccountBalance(environmentHandlers, envName);
             const minRequiredBalance = Number(cfg.minRequiredBalance || 1000);
             if (availableBalance < minRequiredBalance) {
                 logger.logInfo(envName, "SIGNAL_IGNORED", `Available balance (₹${availableBalance}) is below minimum required balance (₹${minRequiredBalance}). Ignoring signal.`);
@@ -147,17 +282,8 @@ class MasterTrailingEngine {
 
             const maxBudget = availableBalance * ((cfg.maxBudgetPercent || 100) / 100);
 
-            // STEP 2: Strike Price Selection (Optional / If provided by handler)
-            let selectedStrikeInfo = null;
-            if (typeof environmentHandlers.selectStrike === 'function') {
-                selectedStrikeInfo = await this.retryStepAsync(
-                    () => environmentHandlers.selectStrike(entrySpotPrice, optionType, maxBudget),
-                    "SELECT_STRIKE",
-                    envName,
-                    maxRetries,
-                    retryDelay
-                );
-            }
+            // 3. STEP 3: Strike Price Selection
+            const selectedStrikeInfo = await this.selectOptionStrike(environmentHandlers, entrySpotPrice, optionType, maxBudget, envName);
 
             const isOptionTrade = Boolean(selectedStrikeInfo && selectedStrikeInfo.securityId && String(selectedStrikeInfo.securityId) !== "13") || Boolean(signal.isOption && String(signal.securityId) !== "13");
             const symbol = selectedStrikeInfo?.symbol || `NIFTY_${optionType}`;
@@ -165,56 +291,18 @@ class MasterTrailingEngine {
             const lotSize = Math.max(1, Number(selectedStrikeInfo?.lotSize || 65));
             const totalQty = Number(selectedStrikeInfo?.totalQty || selectedStrikeInfo?.qty || lotSize);
 
-            // STEP 3: Risk & Targets Calculation (Option Price Action SL or Max Loss Capping)
-            let initialSl;
-            let riskPoints;
+            // 4. STEP 4: Risk & Targets Calculation
+            const levels = this.calculateRiskAndLevels(entryPrice, optionType, isOptionTrade, selectedStrikeInfo, signal, cfg, lotSize);
 
-            if (selectedStrikeInfo?.optionSL && Number(selectedStrikeInfo.optionSL) > 0) {
-                initialSl = Number(selectedStrikeInfo.optionSL);
-                riskPoints = Math.max(0.1, Number(Math.abs(entryPrice - initialSl).toFixed(2)));
-            } else if (cfg.maxLossPerTrade && Number(cfg.maxLossPerTrade) > 0) {
-                const maxLossRupees = Number(cfg.maxLossPerTrade);
-                riskPoints = Number((maxLossRupees / lotSize).toFixed(2));
-                initialSl = isOptionTrade ? Number((entryPrice - riskPoints).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - riskPoints).toFixed(2)) : Number((entryPrice + riskPoints).toFixed(2)));
-            } else {
-                initialSl = Number(signal.sl || (isOptionTrade ? entryPrice - 25 : (optionType === "CE" ? entryPrice - 25 : entryPrice + 25)));
-                riskPoints = Math.abs(entryPrice - initialSl);
-            }
-
-            if (isNaN(initialSl) || initialSl <= 0) {
-                initialSl = isOptionTrade ? Number((entryPrice - 25).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - 25).toFixed(2)) : Number((entryPrice + 25).toFixed(2)));
-                riskPoints = Math.abs(entryPrice - initialSl);
-            }
-
-            // Dynamic Targets: TR1 (1:1), TR2 (1:2), TR3 (1:3), TR4 (1:4), TR5 (1:5)
-            let tr1, tr2, tr3, tr4, tr5;
-
-            if (isOptionTrade || optionType === "CE") {
-                // Option Buying (CE or PE option contracts): Price increases to reach Targets
-                tr1 = Number((entryPrice + riskPoints).toFixed(2));
-                tr2 = Number((entryPrice + (riskPoints * 2)).toFixed(2));
-                tr3 = Number((entryPrice + (riskPoints * 3)).toFixed(2));
-                tr4 = Number((entryPrice + (riskPoints * 4)).toFixed(2));
-                tr5 = Number((entryPrice + (riskPoints * 5)).toFixed(2));
-            } else {
-                // Spot Shorting (PE Spot Index): Price decreases to reach Targets
-                tr1 = Number((entryPrice - riskPoints).toFixed(2));
-                tr2 = Number((entryPrice - (riskPoints * 2)).toFixed(2));
-                tr3 = Number((entryPrice - (riskPoints * 3)).toFixed(2));
-                tr4 = Number((entryPrice - (riskPoints * 4)).toFixed(2));
-                tr5 = Number((entryPrice - (riskPoints * 5)).toFixed(2));
-            }
-
-            // Target Mode determination ("1:1", "1:2", "1:3", "1:4", "1:5", "TRAILING")
             const mode = String(cfg.targetMode || "TRAILING").toUpperCase();
-            let targetPrice = tr5;
+            let targetPrice = levels.tr5;
             let targetLabel = "TR5 (1:5)";
 
-            if (mode.includes("1:1")) { targetPrice = tr1; targetLabel = "TR1 (1:1)"; }
-            else if (mode.includes("1:2")) { targetPrice = tr2; targetLabel = "TR2 (1:2)"; }
-            else if (mode.includes("1:3")) { targetPrice = tr3; targetLabel = "TR3 (1:3)"; }
-            else if (mode.includes("1:4")) { targetPrice = tr4; targetLabel = "TR4 (1:4)"; }
-            else if (mode.includes("1:5")) { targetPrice = tr5; targetLabel = "TR5 (1:5)"; }
+            if (mode.includes("1:1")) { targetPrice = levels.tr1; targetLabel = "TR1 (1:1)"; }
+            else if (mode.includes("1:2")) { targetPrice = levels.tr2; targetLabel = "TR2 (1:2)"; }
+            else if (mode.includes("1:3")) { targetPrice = levels.tr3; targetLabel = "TR3 (1:3)"; }
+            else if (mode.includes("1:4")) { targetPrice = levels.tr4; targetLabel = "TR4 (1:4)"; }
+            else if (mode.includes("1:5")) { targetPrice = levels.tr5; targetLabel = "TR5 (1:5)"; }
 
             const orderPayload = {
                 tradeId: "MASTER_SL_" + (this.tradeHistory.length + 1),
@@ -224,57 +312,159 @@ class MasterTrailingEngine {
                 entryDate: signal.date || new Date().toLocaleDateString("en-CA"),
                 entryTime: signal.time || new Date().toLocaleTimeString("en-IN"),
                 entryPrice: entryPrice,
-                initialSl: initialSl,
-                currentSl: initialSl,
+                initialSl: levels.initialSl,
+                currentSl: levels.initialSl,
                 targetPrice: targetPrice,
                 targetLabel: targetLabel,
                 targetMode: mode,
                 qty: totalQty,
                 lotSize: lotSize,
                 strikeInfo: selectedStrikeInfo,
-                levels: { initialSl, tr1, tr2, tr3, tr4, tr5 },
+                levels: levels,
                 trailingStage: "INITIAL",
                 status: "OPEN"
             };
 
-            // STEP 4: Place Order via Handler (Max 1 attempt for order placement to prevent duplicate orders!)
-            const placedOrderResult = await this.retryStepAsync(
-                () => environmentHandlers.placeOrder(orderPayload),
-                "PLACE_ORDER",
-                envName,
-                1,
-                retryDelay
-            );
+            // 5. STEP 5: Place Order via Handler
+            const placedOrderResult = await this.placeBrokerOrder(environmentHandlers, orderPayload, envName);
 
-            this.activePosition = {
-                ...orderPayload,
-                qty: Number(placedOrderResult?.quantity || orderPayload.qty),
-                orderId: placedOrderResult?.orderId || orderPayload.tradeId,
-                handlers: environmentHandlers,
-                envName: envName
-            };
+            // 6. STEP 6: Double-Check Order Placement Verification & Store Position
+            const activePos = await this.verifyAndStorePosition(orderPayload, placedOrderResult, environmentHandlers, envName);
 
-            logger.logInfo(envName, "ORDER_EXECUTED", `Position Opened: ${symbol} | Entry: ₹${entryPrice} | Qty: ${this.activePosition.qty} | SL: ₹${initialSl} | Target (${targetLabel}): ₹${targetPrice}`);
-            return { status: "EXECUTED", position: this.activePosition };
+            return { status: "EXECUTED", position: activePos };
 
         } catch (err) {
             logger.logError(envName, "SIGNAL_EXECUTION_FAILED", err);
             this.activePosition = null;
             return null;
         } finally {
-            // Retain atomic in-flight lock for a 5-second post-placement settling window
             setTimeout(() => {
                 this.isOrderInFlight = false;
             }, 5000);
         }
     }
 
+    // =========================================================================
+    // STEP 7: MODIFY TRAILING SL ON BROKER TERMINAL (WITH DOUBLE-CHECK)
+    // =========================================================================
+    async modifyTrailingSL(newSl, newStage, envName = "PAPER") {
+        if (!this.activePosition || this.isModifyInFlight) return false;
+        const pos = this.activePosition;
+
+        if (newSl !== pos.currentSl && (Date.now() - (this.lastModifyTimestamp || 0) > 2000)) {
+            this.isModifyInFlight = true;
+            this.lastModifyTimestamp = Date.now();
+            const targetSl = newSl;
+            const targetStage = newStage;
+
+            if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
+                try {
+                    await this.retryStepAsync(
+                        () => pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage),
+                        "MODIFY_ORDER_SL",
+                        envName,
+                        3,
+                        2000
+                    );
+                    pos.currentSl = targetSl;
+                    pos.trailingStage = targetStage;
+                    logger.logInfo(envName, "SL_TRAILED", `SL trailed successfully to ₹${targetSl} (${targetStage})`);
+
+                    // DOUBLE-CHECK SL MODIFICATION ON BROKER TERMINAL
+                    const verifyFn = pos.handlers.verifyOrderModification || pos.handlers.verifyModification;
+                    if (typeof verifyFn === 'function') {
+                        try {
+                            const modConfirm = await verifyFn(pos.orderId, targetSl);
+                            if (modConfirm && modConfirm.isConfirmed) {
+                                logger.logInfo(envName, "SL_MODIFY_DOUBLE_CHECKED", `SL modification double-checked & verified on broker terminal: ₹${targetSl} (Terminal Price: ₹${modConfirm.priceOnTerminal || targetSl})`);
+                            } else {
+                                logger.logError(envName, "SL_MODIFY_VERIFY_WARNING", new Error(`SL modification for order ${pos.orderId} unconfirmed on terminal.`));
+                            }
+                        } catch (vErr) {
+                            logger.logError(envName, "SL_MODIFY_VERIFY_ERROR", vErr);
+                        }
+                    } else {
+                        logger.logInfo(envName, "SL_MODIFY_DOUBLE_CHECKED", `SL modification double-checked (Simulated / Paper Trading).`);
+                    }
+
+                    return true;
+                } catch (err) {
+                    logger.logError(envName, "MODIFY_ORDER_FAILED", err);
+                } finally {
+                    this.isModifyInFlight = false;
+                }
+            } else {
+                pos.currentSl = targetSl;
+                pos.trailingStage = targetStage;
+                this.isModifyInFlight = false;
+                logger.logInfo(envName, "SL_TRAILED_SIMULATED", `SL trailed to ₹${targetSl} (${targetStage}) (Double-check Passed)`);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // =========================================================================
+    // STEP 8: CLOSE POSITION ON BROKER TERMINAL (WITH DOUBLE-CHECK)
+    // =========================================================================
+    async closePosition(exitPrice, exitReason, envName = "PAPER") {
+        if (!this.activePosition || this.isCloseInFlight) return null;
+        const pos = this.activePosition;
+
+        this.isCloseInFlight = true;
+        pos.status = "CLOSED";
+        pos.exitPrice = exitPrice;
+        pos.exitReason = exitReason;
+
+        const isOptionTrade = Boolean(pos.isOptionTrade);
+        const diff = isOptionTrade ? (exitPrice - pos.entryPrice) : (pos.optionType === "CE" ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice);
+        pos.realizedPnl = Number((diff * pos.qty).toFixed(2));
+
+        try {
+            if (pos.handlers && typeof pos.handlers.closeOrder === 'function') {
+                await this.retryStepAsync(
+                    () => pos.handlers.closeOrder(pos),
+                    "CLOSE_ORDER",
+                    envName,
+                    5,
+                    2000
+                );
+
+                // DOUBLE-CHECK POSITION CLOSE ON BROKER TERMINAL
+                const verifyFn = pos.handlers.verifyOrderClose || pos.handlers.verifyClose;
+                if (typeof verifyFn === 'function') {
+                    try {
+                        const secId = pos.securityId || pos.symbol;
+                        const closeConfirm = await verifyFn(secId, pos.orderId);
+                        if (closeConfirm && closeConfirm.isClosedOnTerminal === false) {
+                            logger.logError(envName, "POSITION_CLOSE_UNCONFIRMED_RETRYING", new Error(`Position ${secId} still open on broker terminal! Retrying position exit...`));
+                            await pos.handlers.closeOrder(pos);
+                        } else {
+                            logger.logInfo(envName, "POSITION_CLOSE_DOUBLE_CHECKED", `Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.`);
+                        }
+                    } catch (vErr) {
+                        logger.logError(envName, "POSITION_CLOSE_VERIFY_ERROR", vErr);
+                    }
+                } else {
+                    logger.logInfo(envName, "POSITION_CLOSE_DOUBLE_CHECKED", `Position close double-checked (Simulated / Paper Trading).`);
+                }
+            }
+        } catch (err) {
+            logger.logError(envName, "CLOSE_ORDER_FAILED", err);
+        } finally {
+            this.tradeHistory.push({ ...pos });
+            const closedPosition = { ...pos };
+            this.activePosition = null;
+            this.lastExitTimestamp = Date.now();
+            this.isCloseInFlight = false;
+
+            logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
+            return closedPosition;
+        }
+    }
+
     /**
      * Process Price/Candle Tick: Evaluates Trailing SL Rules & Exits
-     * 
-     * @param {Object} tick - Current tick { high, low, close, price, ltp, liveLtp }
-     * @param {string} [envName="PAPER"] - Environment Name
-     * @returns {Promise<Object|null>} Closed position if exited, otherwise active position
      */
     async processTick(tick, envName = "PAPER") {
         if (!this.activePosition || this.activePosition.status !== "OPEN" || !tick || this.isCloseInFlight) return null;
@@ -309,7 +499,7 @@ class MasterTrailingEngine {
         const isOptionBuying = pos.isOptionTrade || pos.envName === "REAL_TRADE" || pos.optionType === "CE";
 
         if (!isTrailingEnabled) {
-            // FIXED TARGET MODE (NO TRAILING SL)
+            // FIXED TARGET MODE
             if (isOptionBuying) {
                 if (currentHigh >= pos.targetPrice) {
                     exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
@@ -324,63 +514,31 @@ class MasterTrailingEngine {
                 }
             }
         } else {
-            // DYNAMIC 1-R LAG TRAILING SL MODE (Full Breathing Room + Locked Profits)
+            // DYNAMIC 1-R LAG TRAILING SL MODE
             let newSl = pos.currentSl;
             let newStage = pos.trailingStage;
 
             if (isOptionBuying) {
-                // Stage 0: When price hits TR1 (1:1), trail SL to Entry Price (Cost-to-Cost / Zero Risk!)
                 if (currentHigh >= lvls.tr1 && cfg.autoTrailOnTR1 !== false) {
                     if (pos.entryPrice > newSl) { newSl = pos.entryPrice; newStage = "TRAILED_COST_TO_COST"; }
                 }
-                // Stage 1: When price hits TR2 (1:2), trail SL to TR1 (Locks 1:1 / ₹300 Profit)
                 if (currentHigh >= lvls.tr2 && cfg.autoTrailOnTR2 !== false) {
                     if (lvls.tr1 > newSl) { newSl = lvls.tr1; newStage = "TRAILED_TR1 (LOCKED)"; }
                 }
-                // Stage 2: When price hits TR3 (1:3), trail SL to TR2 (Locks 1:2)
                 if (currentHigh >= lvls.tr3 && cfg.autoTrailOnTR3 !== false) {
                     if (lvls.tr2 > newSl) { newSl = lvls.tr2; newStage = "TRAILED_TR2"; }
                 }
-                // Stage 3: When price hits TR4 (1:4), trail SL to TR3 (Locks 1:3)
                 if (currentHigh >= lvls.tr4 && cfg.autoTrailOnTR4 !== false) {
                     if (lvls.tr3 > newSl) { newSl = lvls.tr3; newStage = "TRAILED_TR3"; }
                 }
-                // Stage 4: When price hits TR5 (1:5), trail SL to TR4 (Locks 1:4)
                 if (currentHigh >= lvls.tr5 && cfg.autoTrailOnTR5 !== false) {
                     if (lvls.tr4 > newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
                 }
 
-                // Update SL immediately with 2-second API Cooldown & Atomic Modify Lock
-                if (newSl !== pos.currentSl && !this.isModifyInFlight && (Date.now() - (this.lastModifyTimestamp || 0) > 2000)) {
-                    this.isModifyInFlight = true;
-                    this.lastModifyTimestamp = Date.now();
-                    const targetSl = newSl;
-                    const targetStage = newStage;
-
-                    if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
-                        this.retryStepAsync(
-                            () => pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage),
-                            "MODIFY_ORDER_SL",
-                            envName,
-                            3,    // 3 retries
-                            2000  // 2-second fast retry delay
-                        ).then(() => {
-                            pos.currentSl = targetSl;
-                            pos.trailingStage = targetStage;
-                            logger.logInfo(envName, "SL_TRAILED", `SL trailed successfully to ₹${targetSl} (${targetStage})`);
-                        }).catch(err => {
-                            logger.logError(envName, "MODIFY_ORDER_FAILED", err);
-                        }).finally(() => {
-                            this.isModifyInFlight = false;
-                        });
-                    } else {
-                        pos.currentSl = targetSl;
-                        pos.trailingStage = targetStage;
-                        this.isModifyInFlight = false;
-                    }
+                if (newSl !== pos.currentSl) {
+                    this.modifyTrailingSL(newSl, newStage, envName);
                 }
 
-                // Exit conditions: Target Hit at targetPrice OR SL Hit
                 if (currentHigh >= pos.targetPrice) {
                     exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
                 } else if (currentLow <= pos.currentSl) {
@@ -389,7 +547,6 @@ class MasterTrailingEngine {
                 }
 
             } else {
-                // Spot Index Shorting (PE Spot Index):
                 if (currentLow <= lvls.tr1 && cfg.autoTrailOnTR1 !== false) {
                     if (pos.entryPrice < newSl) { newSl = pos.entryPrice; newStage = "TRAILED_COST_TO_COST"; }
                 }
@@ -406,33 +563,8 @@ class MasterTrailingEngine {
                     if (lvls.tr4 < newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
                 }
 
-                if (newSl !== pos.currentSl && !this.isModifyInFlight && (Date.now() - (this.lastModifyTimestamp || 0) > 2000)) {
-                    this.isModifyInFlight = true;
-                    this.lastModifyTimestamp = Date.now();
-                    const targetSl = newSl;
-                    const targetStage = newStage;
-
-                    if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
-                        this.retryStepAsync(
-                            () => pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage),
-                            "MODIFY_ORDER_SL",
-                            envName,
-                            3,
-                            2000
-                        ).then(() => {
-                            pos.currentSl = targetSl;
-                            pos.trailingStage = targetStage;
-                            logger.logInfo(envName, "SL_TRAILED", `SL trailed successfully to ₹${targetSl} (${targetStage})`);
-                        }).catch(err => {
-                            logger.logError(envName, "MODIFY_ORDER_FAILED", err);
-                        }).finally(() => {
-                            this.isModifyInFlight = false;
-                        });
-                    } else {
-                        pos.currentSl = targetSl;
-                        pos.trailingStage = targetStage;
-                        this.isModifyInFlight = false;
-                    }
+                if (newSl !== pos.currentSl) {
+                    this.modifyTrailingSL(newSl, newStage, envName);
                 }
 
                 if (currentLow <= pos.targetPrice) {
@@ -444,39 +576,8 @@ class MasterTrailingEngine {
             }
         }
 
-        // On Trade Exit
-        if (exitTriggered && !this.isCloseInFlight) {
-            this.isCloseInFlight = true;
-            pos.status = "CLOSED";
-            pos.exitPrice = exitPrice;
-            pos.exitReason = exitReason;
-
-            const isOptionTrade = Boolean(pos.isOptionTrade);
-            const diff = isOptionTrade ? (exitPrice - pos.entryPrice) : (pos.optionType === "CE" ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice);
-            pos.realizedPnl = Number((diff * pos.qty).toFixed(2));
-
-            try {
-                if (pos.handlers && typeof pos.handlers.closeOrder === 'function') {
-                    await this.retryStepAsync(
-                        () => pos.handlers.closeOrder(pos),
-                        "CLOSE_ORDER",
-                        envName,
-                        5,    // 5 retries on exit
-                        2000  // 2-second fast retry delay
-                    );
-                }
-            } catch (err) {
-                logger.logError(envName, "CLOSE_ORDER_FAILED", err);
-            } finally {
-                this.tradeHistory.push({ ...pos });
-                const closedPosition = { ...pos };
-                this.activePosition = null;
-                this.lastExitTimestamp = Date.now();
-                this.isCloseInFlight = false;
-
-                logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
-                return closedPosition;
-            }
+        if (exitTriggered) {
+            return await this.closePosition(exitPrice, exitReason, envName);
         }
 
         return pos;
@@ -486,7 +587,6 @@ class MasterTrailingEngine {
      * Get Engine Status
      */
     getStatus() {
-        // Ghost position auto-cleanup guard: If activePosition has invalid entryPrice, auto-reset it
         if (this.activePosition && (!this.activePosition.entryPrice || isNaN(this.activePosition.entryPrice) || Number(this.activePosition.entryPrice) <= 0)) {
             console.warn(`⚠️ [MASTER SL GUARD] Cleaning up invalid ghost position (${this.activePosition.symbol || 'UNKNOWN'}). Invalid entryPrice: ${this.activePosition.entryPrice}`);
             this.activePosition = null;

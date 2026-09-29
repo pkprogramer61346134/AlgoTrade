@@ -924,5 +924,66 @@ input:checked + .slider:before { transform: translateX(20px); }
     color: var(--text-primary);
 }
 
+/* CANDLE OHLC SUMMARY BANNER */
+.candle-ohlc-banner {
+    margin-top: 1rem;
+    padding: 0.85rem 1.25rem;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 12px;
+}
+
+.ohlc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.ohlc-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #a5b4fc;
+    letter-spacing: 0.3px;
+}
+
+.ohlc-time-badge {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 3px 10px;
+    border-radius: 6px;
+}
+
+.ohlc-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 0.75rem;
+}
+
+.ohlc-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.o-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+
+.o-val {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f8fafc;
+}
+
 
 

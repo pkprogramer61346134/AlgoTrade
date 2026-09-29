@@ -96,6 +96,34 @@ function renderLiveConsensus(data) {
     if (slEl) slEl.innerText = c.sl ? `₹${c.sl}` : "--";
     if (confEl) confEl.innerText = c.confidence || "0%";
 
+    // Render Evaluated Candle OHLC Details
+    const candleData = c.evaluatedCandle || c.candle || c.lastCandle || data.candle;
+    if (candleData) {
+        const timeEl = document.getElementById("candle-eval-time");
+        const openEl = document.getElementById("candle-eval-open");
+        const highEl = document.getElementById("candle-eval-high");
+        const lowEl = document.getElementById("candle-eval-low");
+        const closeEl = document.getElementById("candle-eval-close");
+        const volEl = document.getElementById("candle-eval-vol");
+        const warmupEl = document.getElementById("candle-eval-warmup");
+
+        const cDate = candleData.date || "";
+        const cTime = candleData.time || "";
+        const cOpen = Number(candleData.open || candleData.candleOpen || candleData.close || 0);
+        const cHigh = Number(candleData.high || candleData.candleHigh || cOpen);
+        const cLow = Number(candleData.low || candleData.candleLow || cOpen);
+        const cClose = Number(candleData.close || candleData.candleClose || cOpen);
+        const cVol = Number(candleData.volume || candleData.candleVolume || 0);
+
+        if (timeEl) timeEl.innerText = `${cDate} ${cTime}`.trim() || "Latest Closed Candle";
+        if (openEl) openEl.innerText = `₹${cOpen.toFixed(2)}`;
+        if (highEl) highEl.innerText = `₹${cHigh.toFixed(2)}`;
+        if (lowEl) lowEl.innerText = `₹${cLow.toFixed(2)}`;
+        if (closeEl) closeEl.innerText = `₹${cClose.toFixed(2)}`;
+        if (volEl) volEl.innerText = cVol > 0 ? cVol.toLocaleString("en-IN") : "--";
+        if (warmupEl) warmupEl.innerText = c.warmupCandleCount ? `${c.warmupCandleCount} Candles` : "200 Candles";
+    }
+
     // Render Strategy Voting Breakdown Table
     const tbody = document.getElementById("consensus-strategies-tbody");
     if (tbody) {

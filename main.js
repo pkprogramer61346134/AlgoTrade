@@ -4,7 +4,7 @@
  * 
  * Integrated Components:
  * 1. Master System Config (`server/main_config.json` via `config_manager.js`)
- * 2. Dhan Live Price Feed (`utility/dhan-live-price.js`)
+ * 2. Time-based 5-minute Candle Evaluator using `getCandlesBefore`
  * 3. Strategy Consensus Engine (`utility/usedfull/Engines/consensusEngine.js`)
  * 4. Real Trading Engine (`server/realtread/realtread.js`)
  * 5. UI Dashboard Server (`server/ui_server.js`)
@@ -12,16 +12,15 @@
 
 const mainConfig = require('./server/config_manager');
 const realTradeEngine = require('./server/realtread/realtread');
-const { DhanLivePrice } = require('./utility/dhan-live-price');
 const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { createUIServer } = require('./server/ui_server');
 const { ensureValidDhanToken } = require('./utility/token/autoTokenRefresh');
-const { getCachedCandles } = require('./utility/usedfull/cached-historical-data');
+const { getCandlesBefore } = require('./utility/usedfull/cached-historical-data');
 
 let latestLivePrice = 0;
 let latestTickTime = null;
-let isProcessingLiveTick = false;
-let lastEvaluatedCandleKey = null;
+let isEvaluating = false;
+let fiveMinIntervalTimer = null;
 
 let latestConsensusResult = {
     consensus: "NO_SIGNAL",
@@ -30,7 +29,7 @@ let latestConsensusResult = {
     sl: null,
     tr: null,
     confidence: "0%",
-    strategyName: "Waiting for Live Feed...",
+    strategyName: "Waiting for 5-Min Cycle...",
     strategyStates: []
 };
 
@@ -47,24 +46,10 @@ function getLiveMarketData() {
         livePrice: latestLivePrice,
         tickTime: latestTickTime,
         consensus: latestConsensusResult,
+        candle: latestConsensusResult?.evaluatedCandle || latestConsensusResult?.candle || null,
         config: mainConfig.getConfig(),
         realStatus: realTradeEngine.getStatus()
     };
-}
-
-/**
- * Helper: Calculate standard timeframe candle window start time (e.g. 5m / 15m intervals)
- */
-function getCandleTimeWindow(timeStr, intervalMins = 5) {
-    if (!timeStr) return "00:00:00";
-    const cleanStr = String(timeStr).replace(/(am|pm)/gi, "").trim();
-    const parts = cleanStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hrs = parseInt(parts[0], 10) || 0;
-    const mins = parseInt(parts[1], 10) || 0;
-    const interval = Number(intervalMins) || 5;
-    const windowMins = Math.floor(mins / interval) * interval;
-    return `${String(hrs).padStart(2, '0')}:${String(windowMins).padStart(2, '0')}:00`;
 }
 
 // Process-Level Global Crash Protection Handlers
@@ -76,9 +61,95 @@ process.on('uncaughtException', (err) => {
     console.error('💥 [PROCESS GUARD] Intercepted Uncaught Exception:', err?.message || err);
 });
 
+/**
+ * Time-based Evaluation Loop:
+ * Passes date, time, securityId, exchangeSegment, interval directly to evaluateConsensusEngine.
+ * evaluateConsensusEngine automatically uses auto-warmup to fetch 200 candles from cached-historical-data.js.
+ */
+async function runFiveMinuteEvaluation() {
+    if (isEvaluating) return;
+    isEvaluating = true;
+
+    try {
+        const cfg = mainConfig.getConfig();
+        const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
+
+        const now = new Date();
+        const currentDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+        const currentTimeStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+
+        console.log(`\n--------------------------------------------------------------------------`);
+        console.log(`⏰ [CYCLE TRIGGER] Running Consensus Evaluation at ${currentDateStr} ${currentTimeStr}`);
+
+        // Direct call to evaluateConsensusEngine passing scrip parameters, date and time.
+        // Auto-warmup in evaluateConsensusEngine automatically fetches 200 candles from cached-historical-data.js
+        const consensusResult = await evaluateConsensusEngine({
+            securityId: String(scrip.securityId),
+            exchangeSegment: scrip.exchangeSegment,
+            interval: String(scrip.interval || "5"),
+            date: currentDateStr,
+            time: currentTimeStr
+        });
+
+        latestConsensusResult = consensusResult;
+
+        if (consensusResult && consensusResult.lastCandle) {
+            const lc = consensusResult.lastCandle;
+            latestLivePrice = Number(lc.close || lc.price || 0);
+            latestTickTime = `${lc.date} ${lc.time}`;
+            console.log(`📊 [MARKET DATA] Scrip: ${scrip.symbol || scrip.securityId} | Latest Candle: ${latestTickTime} | Close: ₹${latestLivePrice}`);
+        }
+
+        console.log(`🧠 [CONSENSUS RESULT] Consensus: ${consensusResult.consensus} | Strategy: ${consensusResult.strategyName || 'None'} | Entry: ₹${consensusResult.entry || 0}`);
+
+        // Process Signal in Real Trading Engine if enabled
+        if (cfg.realTradeEnabled && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
+            await realTradeEngine.processSignal(consensusResult, scrip);
+        }
+    } catch (err) {
+        console.error("❌ [CYCLE ERROR]:", err.message);
+    } finally {
+        isEvaluating = false;
+    }
+}
+
+/**
+ * Schedules evaluation execution aligned with clock boundaries (e.g. at 11:10:02, 11:15:02, 11:20:02)
+ */
+function scheduleClockAlignedFiveMinLoop(intervalMins = 5) {
+    const getMsToNextBoundary = () => {
+        const now = new Date();
+        const mins = now.getMinutes();
+        const secs = now.getSeconds();
+        const ms = now.getMilliseconds();
+        
+        const nextMin = (Math.floor(mins / intervalMins) + 1) * intervalMins;
+        const diffMins = nextMin - mins;
+        
+        // Target is diffMins minutes ahead, 2 seconds past boundary (to ensure candle is closed)
+        const totalMsToTarget = (diffMins * 60 - secs + 2) * 1000 - ms;
+        return totalMsToTarget > 0 ? totalMsToTarget : (intervalMins * 60 * 1000);
+    };
+
+    const runCycleAndScheduleNext = async () => {
+        await runFiveMinuteEvaluation();
+
+        const msToNext = getMsToNextBoundary();
+        const nextTimeStr = new Date(Date.now() + msToNext).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+        console.log(`⏳ Next cycle scheduled for ~${nextTimeStr} (in ${Math.round(msToNext / 1000)}s)...`);
+
+        if (fiveMinIntervalTimer) {
+            clearTimeout(fiveMinIntervalTimer);
+        }
+        fiveMinIntervalTimer = setTimeout(runCycleAndScheduleNext, msToNext);
+    };
+
+    runCycleAndScheduleNext();
+}
+
 async function startMasterSystem() {
     console.log("==========================================================================");
-    console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM");
+    console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (REALTIME CLOCK-ALIGNED LOOP)");
     console.log("==========================================================================");
     console.log("🔑 Checking Dhan Access Token...");
 
@@ -92,23 +163,6 @@ async function startMasterSystem() {
     const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
     const intervalMins = Number(scrip.interval || 5);
 
-    try {
-        await realTradeEngine.fetchLiveFunds();
-        const initCandlesRes = await getCachedCandles({
-            securityId: String(scrip.securityId),
-            exchangeSegment: scrip.exchangeSegment,
-            interval: String(scrip.interval || "5"),
-            count: 1
-        });
-        if (initCandlesRes && initCandlesRes.status === "success" && Array.isArray(initCandlesRes.data) && initCandlesRes.data.length > 0) {
-            const lastCandle = initCandlesRes.data[initCandlesRes.data.length - 1];
-            latestLivePrice = Number(lastCandle.close || lastCandle.price || 0);
-            latestTickTime = `${lastCandle.date || ''} ${lastCandle.time || ''}`;
-        }
-    } catch (e) {
-        console.warn("⚠️ Initial market price fetch notice:", e.message);
-    }
-
     // 1. Initialize Real Trading Engine if enabled
     if (cfg.realTradeEnabled) {
         await realTradeEngine.startRealTrading();
@@ -118,56 +172,10 @@ async function startMasterSystem() {
     startUIServer(3000);
     console.log("🌐 Dashboard UI Active at : http://localhost:3000");
 
-    const tracker = new DhanLivePrice();
-    console.log(`📡 Live Stream Started for ${scrip.symbol} (${scrip.securityId})...\n`);
+    console.log(`⏱️ Starting clock-aligned ${intervalMins}-minute consensus evaluation loop for ${scrip.symbol} (${scrip.securityId})...\n`);
 
-    tracker.getLivePrice(
-        scrip.securityId,
-        scrip.exchangeSegment,
-        intervalMins,
-        async (tick) => {
-            if (isProcessingLiveTick) return;
-            isProcessingLiveTick = true;
-            try {
-                // Update live market payload for UI Server on every tick
-                latestLivePrice = Number(tick.price || 0);
-                latestTickTime = `${tick.date || ''} ${tick.time || ''}`;
-
-                // Calculate current timeframe candle window (e.g. "09:15:00", "09:20:00")
-                const candleTimeWindow = getCandleTimeWindow(tick.time, intervalMins);
-                const currentCandleKey = `${tick.date}_${candleTimeWindow}`;
-
-                // Check candle close transition
-                const isCandleClosed = Boolean(tick.isCandleClose) || (lastEvaluatedCandleKey && lastEvaluatedCandleKey !== currentCandleKey);
-
-                if (!lastEvaluatedCandleKey) {
-                    // Initialize first startup anchor key
-                    lastEvaluatedCandleKey = currentCandleKey;
-                } else if (isCandleClosed) {
-                    lastEvaluatedCandleKey = currentCandleKey;
-
-                    const consensusResult = await evaluateConsensusEngine(tick, -1, {
-                        securityId: String(scrip.securityId),
-                        exchangeSegment: scrip.exchangeSegment,
-                        interval: String(scrip.interval || "5")
-                    });
-
-                    latestConsensusResult = consensusResult;
-
-                    // Process Signal in Real Trading Engine ONLY on confirmed Candle Close
-                    if (mainConfig.getConfig().realTradeEnabled && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
-                        await realTradeEngine.processSignal(consensusResult, scrip);
-                    }
-                }
-
-            } catch (err) {
-                console.error("❌ Live Tick Processing Error:", err.message);
-            } finally {
-                isProcessingLiveTick = false;
-            }
-        },
-        scrip.instrument || "INDEX"
-    );
+    // Start clock-aligned evaluation loop
+    scheduleClockAlignedFiveMinLoop(intervalMins);
 }
 
 // Auto-start master system
@@ -176,6 +184,7 @@ startMasterSystem();
 module.exports = {
     startMasterSystem,
     getLiveMarketData,
+    runFiveMinuteEvaluation,
     mainConfig,
     realTradeEngine
 };

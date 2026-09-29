@@ -85,9 +85,21 @@
                             <span class="m-label">Signal Wait Timer</span>
                             <span class="m-val text-warning" id="consensus-wait-timer">--</span>
                         </div>
-                        <div class="metric-box">
-                            <span class="m-label">Confidence</span>
-                            <span class="m-val" id="consensus-confidence">0%</span>
+                    </div>
+
+                    <!-- PROCESSED CANDLE OHLC SUMMARY ROW -->
+                    <div class="candle-ohlc-banner">
+                        <div class="ohlc-header">
+                            <span class="ohlc-title">🕯️ Evaluated 5-Min Candle Data</span>
+                            <span class="ohlc-time-badge" id="candle-eval-time">Time: --</span>
+                        </div>
+                        <div class="ohlc-metrics-grid">
+                            <div class="ohlc-item"><span class="o-label">OPEN</span><span class="o-val" id="candle-eval-open">--</span></div>
+                            <div class="ohlc-item"><span class="o-label">HIGH</span><span class="o-val text-success" id="candle-eval-high">--</span></div>
+                            <div class="ohlc-item"><span class="o-label">LOW</span><span class="o-val text-danger" id="candle-eval-low">--</span></div>
+                            <div class="ohlc-item"><span class="o-label">CLOSE</span><span class="o-val highlight" id="candle-eval-close">--</span></div>
+                            <div class="ohlc-item"><span class="o-label">VOLUME</span><span class="o-val" id="candle-eval-vol">--</span></div>
+                            <div class="ohlc-item"><span class="o-label">WARMUP HISTORY</span><span class="o-val text-info" id="candle-eval-warmup">200 Candles</span></div>
                         </div>
                     </div>
 

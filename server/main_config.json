@@ -5,6 +5,6 @@
     "exchangeSegment": "IDX_I",
     "symbol": "NIFTY",
     "instrument": "INDEX",
-    "interval": "15"
+    "interval": "5"
   }
 }

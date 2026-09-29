@@ -1,4 +1,4 @@
-const { getCachedCandles } = require("../usedfull/cached-historical-data");
+const { getCachedCandles, getCandlesBeforeDateTime, getCandlesBefore } = require("../usedfull/cached-historical-data");
 
 async function test() {
     try {
@@ -43,20 +43,28 @@ async function test() {
             console.log("Last Candle in list:", countResult200Date.data[countResult200Date.data.length - 1].date, countResult200Date.data[countResult200Date.data.length - 1].time);
         }
 
-        console.log("\n================ 4. TEST CANDLE COUNT MODE WITH TARGET DATE & TIME ('2026-09-23' up to '1:30:00 pm') ================");
-        const countResult200DateTime = await getCachedCandles({
+        console.log("\n================ 4. TEST NEW FUNCTION: getCandlesBeforeDateTime (OBJECT PARAM SYNTAX) ================");
+        const resObj = await getCandlesBeforeDateTime({
             securityId: 13,
-            exchangeSegment: "IDX_I",
             interval: "5",
-            count: 200,
             date: "2026-09-23",
-            time: "1:30:00 pm"
+            time: "13:30:00",
+            count: 200
         });
-        console.log("Count Mode Status:", countResult200DateTime.status);
-        console.log("Total Candles Returned:", countResult200DateTime.totalCandles);
-        if (countResult200DateTime.data.length > 0) {
-            console.log("First Candle in list:", countResult200DateTime.data[0].date, countResult200DateTime.data[0].time);
-            console.log("Last Candle in list:", countResult200DateTime.data[countResult200DateTime.data.length - 1].date, countResult200DateTime.data[countResult200DateTime.data.length - 1].time);
+        console.log("Status:", resObj.status);
+        console.log("Total Candles:", resObj.totalCandles);
+        if (resObj.data.length > 0) {
+            console.log("First Candle:", resObj.data[0].date, resObj.data[0].time);
+            console.log("Last Candle:", resObj.data[resObj.data.length - 1].date, resObj.data[resObj.data.length - 1].time);
+        }
+
+        console.log("\n================ 5. TEST NEW FUNCTION: getCandlesBefore (POSITIONAL PARAMS SYNTAX) ================");
+        const resPos = await getCandlesBefore("2026-09-23", "13:30:00", 300, { securityId: 13, interval: "5" });
+        console.log("Status:", resPos.status);
+        console.log("Total Candles:", resPos.totalCandles);
+        if (resPos.data.length > 0) {
+            console.log("First Candle:", resPos.data[0].date, resPos.data[0].time);
+            console.log("Last Candle:", resPos.data[resPos.data.length - 1].date, resPos.data[resPos.data.length - 1].time);
         }
 
     } catch (error) {
@@ -65,3 +73,4 @@ async function test() {
 }
 
 test();
+

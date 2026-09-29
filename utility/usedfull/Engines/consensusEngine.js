@@ -508,41 +508,45 @@ function consolidateSignals(signals, minVotes = 2) {
  * @param {Object} [options={}] - Options: { warmupCount: 200, minVotes: 2, securityId: "13", exchangeSegment: "IDX_I", interval: "5" }
  * @returns {Promise<Object>} Signal output { consensus, type, entry, sl, tr, confidence, strategyId, strategyName, triggeredSignals, warmupCandleCount, minVotesRequired }
  */
-async function evaluateConsensusEngine(inputCandles, i = -1, options = {}) {
-    let candlesArray = Array.isArray(inputCandles) ? [...inputCandles] : (inputCandles ? [inputCandles] : []);
+async function evaluateConsensusEngine(inputCandles = [], i = -1, options = {}) {
+    let candlesArray = [];
+    let opts = {};
+    let candleIndex = i;
 
-    if (candlesArray.length === 0) {
-        return {
-            consensus: "NO_SIGNAL",
-            type: "NO_SIGNAL",
-            entry: null,
-            sl: null,
-            tr: null,
-            confidence: "0%",
-            strategyId: null,
-            strategyName: null,
-            triggeredSignals: []
-        };
+    // Support calling evaluateConsensusEngine(options) directly with single options object
+    if (typeof inputCandles === "object" && inputCandles !== null && !Array.isArray(inputCandles) && inputCandles.close === undefined && inputCandles.price === undefined && inputCandles.open === undefined) {
+        opts = { ...inputCandles };
+        candlesArray = [];
+        candleIndex = -1;
+    } else {
+        candlesArray = Array.isArray(inputCandles) ? [...inputCandles] : (inputCandles ? [inputCandles] : []);
+        opts = { ...options };
+        candleIndex = i;
     }
 
     const config = loadStrategyConfig("consensus_master_head.json");
-    const warmupCount = Number(options.warmupCount || options.count || config.warmupCount || 200);
+    const warmupCount = Number(opts.warmupCount || opts.count || config.warmupCount || 200);
 
     // Auto-warmup check: If input candles are less than required warmup threshold (e.g. 200 candles)
     if (candlesArray.length < warmupCount) {
-        const lastCandle = candlesArray[candlesArray.length - 1];
-        const targetDate = lastCandle.date || options.date;
-        const targetTime = lastCandle.time || options.time;
-        const securityId = lastCandle.securityId || lastCandle.symbol || options.securityId || "13";
-        const exchangeSegment = lastCandle.exchangeSegment || options.exchangeSegment || "IDX_I";
-        const interval = String(lastCandle.interval || options.interval || "5");
+        const lastCandle = candlesArray.length > 0 ? candlesArray[candlesArray.length - 1] : null;
+
+        const now = new Date();
+        const defaultDate = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+        const defaultTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+
+        const targetDate = opts.date || (lastCandle ? lastCandle.date : defaultDate);
+        const targetTime = opts.time || (lastCandle ? lastCandle.time : defaultTime);
+        const securityId = opts.securityId || (lastCandle ? (lastCandle.securityId || lastCandle.symbol) : "13");
+        const exchangeSegment = opts.exchangeSegment || (lastCandle ? lastCandle.exchangeSegment : "IDX_I");
+        const interval = String(opts.interval || (lastCandle ? lastCandle.interval : "5"));
 
         if (targetDate) {
             try {
                 const warmupRes = await getCachedCandles({
-                    securityId,
+                    securityId: String(securityId),
                     exchangeSegment,
-                    interval,
+                    interval: String(interval),
                     count: warmupCount,
                     date: targetDate,
                     time: targetTime
@@ -559,14 +563,7 @@ async function evaluateConsensusEngine(inputCandles, i = -1, options = {}) {
         }
     }
 
-    return evaluateConsensusEngineSync(candlesArray, i, options);
-}
-
-/**
- * Synchronous version for callers that already pass full prepended candles (e.g. 200+ candles)
- */
-function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
-    if (!candlesArray || !Array.isArray(candlesArray) || candlesArray.length === 0) {
+    if (candlesArray.length === 0) {
         return {
             consensus: "NO_SIGNAL",
             type: "NO_SIGNAL",
@@ -577,6 +574,29 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
             strategyId: null,
             strategyName: null,
             triggeredSignals: []
+        };
+    }
+
+    return evaluateConsensusEngineSync(candlesArray, candleIndex, opts);
+}
+
+/**
+ * Synchronous version for callers that already pass full prepended candles (e.g. 200+ candles)
+ */
+function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
+    if (!candlesArray || !Array.isArray(candlesArray) || candlesArray.length < 10) {
+        console.warn(`⚠️ [CONSENSUS ENGINE WARN] Insufficient candle history (${candlesArray?.length || 0} candles). Minimum 10+ candles required for accurate indicator calculation.`);
+        return {
+            consensus: "NO_SIGNAL",
+            type: "NO_SIGNAL",
+            entry: null,
+            sl: null,
+            tr: null,
+            confidence: "0%",
+            strategyId: null,
+            strategyName: null,
+            triggeredSignals: [],
+            reason: "INSUFFICIENT_CANDLE_HISTORY"
         };
     }
 
@@ -602,6 +622,17 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
 
     const c = candlesArray[index];
     const computed = (options && options.precomputed) ? options.precomputed : computeIndicators(candlesArray, {});
+
+    const processedCandle = c ? {
+        index: index + 1,
+        date: c.date,
+        time: c.time,
+        open: Number(c.open || c.candleOpen || c.close || 0),
+        high: Number(c.high || c.candleHigh || c.close || 0),
+        low: Number(c.low || c.candleLow || c.close || 0),
+        close: Number(c.close || c.candleClose || c.price || 0),
+        volume: Number(c.volume || c.candleVolume || 0)
+    } : null;
 
     const triggeredSignals = [];
     const strategyStates = [];
@@ -641,6 +672,10 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
     const result = consolidateSignals(triggeredSignals, minVotes);
     result.strategyStates = strategyStates;
     result.warmupCandleCount = candlesArray.length;
+    result.evaluatedCandle = processedCandle;
+    result.processedCandle = processedCandle;
+    result.candle = processedCandle;
+    result.lastCandle = processedCandle || (candlesArray.length > 0 ? candlesArray[candlesArray.length - 1] : null);
 
     return result;
 }

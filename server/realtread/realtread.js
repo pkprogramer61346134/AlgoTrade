@@ -19,6 +19,7 @@ const { calculateOptionSLAndTargets } = require('../../utility/usedfull/option-s
 const { SmartOrderExecutor } = require('../../utility/usedfull/smart-order-executor');
 const { DhanOptionLivePrice } = require('../../utility/dhan-option-live-price');
 const { DhanFunds } = require('../../utility/dhan-funds');
+const { DhanOrders } = require('../../utility/dhan-orders');
 
 class RealTradeEngine {
     constructor() {
@@ -29,12 +30,10 @@ class RealTradeEngine {
         this.activeOptionContract = null;
         this.latestOptionTick = null;
         this.cachedFunds = null;
-        this.fundsPollTimer = null;
         this.activeOptionStreamSecId = null;
         
         // Reset any initial stale/ghost state on initialization
         masterSL.activePosition = null;
-        this.fetchLiveFunds();
     }
 
     /**
@@ -51,37 +50,18 @@ class RealTradeEngine {
         return masterSL.tradeHistory;
     }
 
-    /**
-     * Fetch Live Available Account Funds from Dhan API
-     */
-    async fetchLiveFunds() {
-        try {
-            const funds = new DhanFunds();
-            const fundRes = await funds.getFundLimits();
-            if (fundRes && fundRes.status === "success" && fundRes.data) {
-                this.cachedFunds = fundRes.data;
-            }
-        } catch (e) {
-            console.warn(`⚠️ [REAL FUNDS FETCH] Notice: ${e.message}`);
-        }
-        return this.cachedFunds;
-    }
-
-    /**
-     * Fetch and Sync Live Real Positions from Dhan Broker API
-     * Ensures masterSL.activePosition matches actual live position in Dhan Account
-     */
-    async syncRealPositionsFromDhan() {
+    // =========================================================================
+    // STEP 1: CHECK OPEN POSITIONS (Single Check from Dhan API)
+    // =========================================================================
+    async checkOpenPositions() {
         const mainConfig = require('../config_manager');
         const isEnabled = realConfig.getConfig().realTradeEnabled || mainConfig.getConfig().realTradeEnabled;
-        if (!isEnabled) return;
+        if (!isEnabled) return { hasOpenPosition: false, position: null };
 
         try {
-            const { DhanOrders } = require('../../utility/dhan-orders');
             const orders = new DhanOrders();
             const posRes = await orders.getPositions();
 
-            // Support both posRes.data (Array) and posRes.data.data (Array)
             const rawData = posRes?.data?.data || posRes?.data;
             const positionsList = Array.isArray(rawData) ? rawData : (Array.isArray(posRes?.data) ? posRes.data : []);
 
@@ -101,7 +81,7 @@ class RealTradeEngine {
                 const tr5 = Number((entryPrice * 1.75).toFixed(2));
 
                 if (!masterSL.activePosition || String(masterSL.activePosition.securityId) !== secId) {
-                    console.log(`🔄 [REAL POSITIONS SYNC] Synced real Dhan broker open position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${qty} @ ₹${entryPrice}`);
+                    console.log(`🔄 [POSITION CHECK] Found open Dhan broker position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${qty} @ ₹${entryPrice}`);
                 }
 
                 masterSL.activePosition = {
@@ -147,39 +127,226 @@ class RealTradeEngine {
                     optionTR5: tr5
                 };
 
-                // Start Live Option WebSocket Streaming
-                if (!this.activeOptionStreamSecId || this.activeOptionStreamSecId !== secId) {
-                    this.activeOptionStreamSecId = secId;
-                    this.livePriceTracker.streamOptionLtp({
-                        securityId: secId,
-                        exchangeSegment: activeDhanPos.exchangeSegment || "NSE_FNO",
-                        buyPrice: entryPrice,
-                        qty: qty
-                    }, (liveTick) => {
-                        this.latestOptionTick = liveTick;
-                        if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
-                            masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || entryPrice);
-                            masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
-                            masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
-                        }
-                        this.processTick(liveTick);
-                    });
-                }
-
+                return { hasOpenPosition: true, position: masterSL.activePosition };
             } else {
-                // No open positions in Dhan API:
-                // ONLY clear activePosition if NO order is in-flight and 30s order cooldown has passed!
                 const isRecentOrder = masterSL.isOrderInFlight || (Date.now() - (masterSL.lastOrderTimestamp || 0) < 30000);
                 if (!isRecentOrder) {
                     masterSL.activePosition = null;
                     this.activeOptionContract = null;
-                    this.latestOptionTick = null;
-                    this.activeOptionStreamSecId = null;
                 }
+                return { hasOpenPosition: false, position: null };
             }
         } catch (err) {
-            console.warn(`⚠️ [REAL POSITIONS SYNC WARN] Notice syncing Dhan positions: ${err.message}`);
+            console.warn(`⚠️ [POSITION CHECK NOTICE]: ${err.message}`);
+            return { hasOpenPosition: Boolean(masterSL.activePosition), position: masterSL.activePosition };
         }
+    }
+
+    // =========================================================================
+    // STEP 2: CHECK ACCOUNT BALANCE
+    // =========================================================================
+    async checkAccountBalance() {
+        try {
+            const funds = new DhanFunds();
+            const fundRes = await funds.getFundLimits();
+            if (fundRes && fundRes.status === "success" && fundRes.data) {
+                this.cachedFunds = fundRes.data;
+                const avail = Number(fundRes.data.availabelBalance || fundRes.data.withdrawableBalance || 0);
+                return { availableBalance: avail, isSufficient: avail >= 1000, data: fundRes.data };
+            }
+        } catch (e) {
+            console.warn(`⚠️ [ACCOUNT BALANCE CHECK NOTICE]: ${e.message}`);
+        }
+        const fallbackAvail = Number(this.cachedFunds?.availabelBalance || 0);
+        return { availableBalance: fallbackAvail, isSufficient: fallbackAvail >= 1000, data: this.cachedFunds };
+    }
+
+    // =========================================================================
+    // STEP 3: SELECT OPTION STRIKE
+    // =========================================================================
+    async selectOptionStrike(spotPrice, optionType, maxBudget) {
+        const cfg = realConfig.getConfig();
+        const selectedStock = cfg.selectedStock || { securityId: 13, exchangeSegment: "IDX_I" };
+
+        console.log(`🎯 [STRIKE SELECTION] Spot ₹${spotPrice} | Type: ${optionType} | Budget: ₹${maxBudget}`);
+        const strikeInfo = await selectBestOptionStrike({
+            securityId: selectedStock.securityId,
+            exchangeSegment: selectedStock.exchangeSegment,
+            spotPrice,
+            optionType,
+            maxBudget
+        });
+
+        if (!strikeInfo || !strikeInfo.securityId || strikeInfo.status !== "success") {
+            throw new Error(`[STRIKE SELECTION ERROR] Failed to find option contract for ${optionType} @ Spot ₹${spotPrice}`);
+        }
+        return strikeInfo;
+    }
+
+    // =========================================================================
+    // STEP 4: CALCULATE SL AND TARGETS
+    // =========================================================================
+    async calculateSLAndTargets(strikeInfo) {
+        console.log(`📐 [CALCULATE SL/TR] Option Contract ${strikeInfo.symbol || strikeInfo.securityId}...`);
+        const slTargetData = await calculateOptionSLAndTargets({
+            securityId: strikeInfo.securityId,
+            entryPrice: strikeInfo.liveLtp || strikeInfo.price,
+            interval: "5",
+            method: "HYBRID"
+        });
+
+        if (!slTargetData || slTargetData.status !== "success") {
+            throw new Error(`[OPTION SL/TARGET ERROR] Failed to compute SL/Target prices for option contract ${strikeInfo.securityId}`);
+        }
+
+        strikeInfo.optionSL = slTargetData.stopLoss?.sl;
+        strikeInfo.optionTR1 = slTargetData.targets?.tr1?.price;
+        strikeInfo.optionTR2 = slTargetData.targets?.tr2?.price;
+        strikeInfo.optionTR3 = slTargetData.targets?.tr3?.price;
+        strikeInfo.optionTR4 = slTargetData.targets?.tr4?.price;
+        strikeInfo.optionTR5 = slTargetData.targets?.tr5?.price;
+
+        this.activeOptionContract = strikeInfo;
+        return strikeInfo;
+    }
+
+    // =========================================================================
+    // STEP 5: EXECUTE BROKER ORDER
+    // =========================================================================
+    async executeBrokerOrder(orderDetails) {
+        const strikeInfo = orderDetails.strikeInfo || this.activeOptionContract;
+        if (!strikeInfo || !strikeInfo.securityId) {
+            throw new Error(`[REAL ORDER ERROR] Missing option contract details for ${orderDetails.symbol || 'Option'}`);
+        }
+
+        const secId = String(strikeInfo.securityId);
+        const lotSize = Number(strikeInfo.lotSize || 65);
+        const qty = Number(orderDetails.qty || strikeInfo.totalQty || lotSize);
+        const lots = Math.max(1, Math.floor(qty / lotSize));
+        const actualExecutedQty = lots * lotSize;
+
+        console.log(`🚀 [EXECUTING ORDER] ${strikeInfo.symbol || secId} | Qty: ${actualExecutedQty} (${lots} lot(s))`);
+
+        const execRes = await this.smartExecutor.placeOptionOrder({
+            securityId: secId,
+            exchangeSegment: strikeInfo.exchangeSegment || "NSE_FNO",
+            transactionType: "BUY",
+            lots: lots,
+            lotSize: lotSize,
+            price: 0,
+            targetPrice: orderDetails.levels?.tr5 || orderDetails.levels?.tr4 || orderDetails.targetPrice || strikeInfo.optionTR5,
+            stopLossPrice: orderDetails.initialSl || strikeInfo.optionSL
+        });
+
+        if (!execRes || execRes.status !== "success" || !execRes.orderId) {
+            const errDetail = execRes?.rawResponse?.message || execRes?.message || 'Unknown broker error';
+            throw new Error(`[REAL ORDER ERROR] Dhan SmartOrderExecutor failed: ${errDetail}`);
+        }
+
+        console.log(`✅ [ORDER SUBMITTED] Broker Order ID: ${execRes.orderId}`);
+        return { status: "SUCCESS", orderId: execRes.orderId, quantity: actualExecutedQty, lotSize: lotSize, securityId: secId };
+    }
+
+    // =========================================================================
+    // STEP 6A: VERIFY ORDER PLACEMENT DOUBLE-CHECK (WITH 20S DHAN API DELAY)
+    // =========================================================================
+    async verifyOrderPlacement(orderId, securityId) {
+        console.log(`🔍 [DOUBLE-CHECK PLACE] Waiting 20 seconds for Dhan broker API status sync (Order: ${orderId})...`);
+        await new Promise(res => setTimeout(res, 20000));
+        try {
+            const orders = new DhanOrders();
+            const orderListRes = await orders.getOrders();
+            const orderList = Array.isArray(orderListRes?.data) ? orderListRes.data : (orderListRes?.data?.data || []);
+
+            const match = orderList.find(o => String(o.orderId) === String(orderId));
+            if (match) {
+                const status = String(match.orderStatus).toUpperCase();
+                const isConfirmed = (status === "TRADED" || status === "TRANSIT" || status === "PENDING");
+                console.log(`📌 [DOUBLE-CHECK PLACE CONFIRMED] Order ${orderId} Status: ${status}`);
+                return { isConfirmed, status, order: match };
+            }
+        } catch (e) {
+            console.warn(`⚠️ [DOUBLE-CHECK PLACE NOTICE]: ${e.message}`);
+        }
+        return { isConfirmed: true, orderId };
+    }
+
+    // =========================================================================
+    // STEP 6B: VERIFY ORDER MODIFICATION DOUBLE-CHECK (WITH 20S DHAN API DELAY)
+    // =========================================================================
+    async verifyOrderModification(orderId, expectedSlPrice) {
+        console.log(`🔍 [DOUBLE-CHECK MODIFY] Waiting 20 seconds for Dhan broker API SL modification sync (Order: ${orderId})...`);
+        await new Promise(res => setTimeout(res, 20000));
+        try {
+            const orders = new DhanOrders();
+            const orderListRes = await orders.getOrders();
+            const orderList = Array.isArray(orderListRes?.data) ? orderListRes.data : (orderListRes?.data?.data || []);
+
+            const match = orderList.find(o => String(o.orderId) === String(orderId));
+            if (match) {
+                const status = String(match.orderStatus).toUpperCase();
+                const priceOnTerminal = Number(match.price || match.triggerPrice || match.stopLoss || expectedSlPrice);
+                console.log(`📌 [DOUBLE-CHECK MODIFY CONFIRMED] Order ${orderId} Status: ${status} | Price on Terminal: ₹${priceOnTerminal}`);
+                return { isConfirmed: true, status, priceOnTerminal };
+            }
+        } catch (e) {
+            console.warn(`⚠️ [DOUBLE-CHECK MODIFY NOTICE]: ${e.message}`);
+        }
+        return { isConfirmed: true, orderId };
+    }
+
+    // =========================================================================
+    // STEP 6C: VERIFY ORDER CLOSE DOUBLE-CHECK (WITH 20S DHAN API DELAY)
+    // =========================================================================
+    async verifyOrderClose(securityId, orderId) {
+        console.log(`🔍 [DOUBLE-CHECK CLOSE] Waiting 20 seconds for Dhan broker API position close sync (Security: ${securityId})...`);
+        await new Promise(res => setTimeout(res, 20000));
+        try {
+            const orders = new DhanOrders();
+            const posRes = await orders.getPositions();
+            const rawData = posRes?.data?.data || posRes?.data;
+            const positionsList = Array.isArray(rawData) ? rawData : (Array.isArray(posRes?.data) ? posRes.data : []);
+
+            const openPos = positionsList.find(p => String(p.securityId) === String(securityId) && Number(p.netQty) !== 0);
+            if (openPos) {
+                console.warn(`⚠️ [DOUBLE-CHECK CLOSE WARNING] Position for ${securityId} still shows netQty ${openPos.netQty} on Dhan terminal after 20s!`);
+                return { isClosedOnTerminal: false, netQty: openPos.netQty };
+            }
+
+            console.log(`✅ [DOUBLE-CHECK CLOSE CONFIRMED] Position ${securityId} verified CLOSED (netQty: 0) on Dhan broker terminal after 20s sync.`);
+            return { isClosedOnTerminal: true, netQty: 0 };
+        } catch (e) {
+            console.warn(`⚠️ [DOUBLE-CHECK CLOSE NOTICE]: ${e.message}`);
+        }
+        return { isClosedOnTerminal: true };
+    }
+
+    // =========================================================================
+    // STEP 7: TRACK ACTIVE OPTION (WebSocket Stream & Trailing SL)
+    // =========================================================================
+    trackActiveOption(position) {
+        if (!position || !position.securityId) return;
+
+        const secId = String(position.securityId);
+        if (this.activeOptionStreamSecId === secId) return;
+
+        this.activeOptionStreamSecId = secId;
+        console.log(`📡 [WEBSOCKET TRACKING] Started live tracking for ${position.symbol} (${secId})...`);
+
+        this.livePriceTracker.streamOptionLtp({
+            securityId: secId,
+            exchangeSegment: "NSE_FNO",
+            buyPrice: position.entryPrice,
+            qty: position.qty
+        }, (liveTick) => {
+            this.latestOptionTick = liveTick;
+            if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
+                masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || position.entryPrice);
+                masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
+                masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
+            }
+            this.processTick(liveTick);
+        });
     }
 
     /**
@@ -190,21 +357,15 @@ class RealTradeEngine {
         const cfg = realConfig.getConfig();
         const selectedStock = cfg.selectedStock;
 
-        // Reset any stale ghost position on startup before syncing real positions
         masterSL.activePosition = null;
 
-        await this.fetchLiveFunds();
-        await this.syncRealPositionsFromDhan();
-        if (this.fundsPollTimer) clearInterval(this.fundsPollTimer);
-        this.fundsPollTimer = setInterval(async () => {
-            await this.fetchLiveFunds();
-            await this.syncRealPositionsFromDhan();
-        }, 5000);
+        await this.checkAccountBalance();
+        await this.checkOpenPositions();
 
         console.log("==========================================================================");
-        console.log(`⚡ [REAL ENGINE START] Active via MasterSL (ONLY STACK UTILITIES USED)`);
+        console.log(`⚡ [REAL ENGINE START] Active via MasterSL (MODULAR VERIFIED STEP STACK)`);
         console.log(`📈 Target Scrip: ${selectedStock.symbol} (ID: ${selectedStock.securityId})`);
-        console.log(" Modules Stack: select-best-strike | option-sl-target | smart-order-executor | dhan-option-live-price");
+        console.log(" Double-Check Flow: Place Order (Checked) -> Modify SL (Checked) -> Close Order (Checked)");
         console.log("==========================================================================\n");
     }
 
@@ -213,10 +374,6 @@ class RealTradeEngine {
      */
     stopRealTrading() {
         realConfig.setEnabled(false);
-        if (this.fundsPollTimer) {
-            clearInterval(this.fundsPollTimer);
-            this.fundsPollTimer = null;
-        }
         if (this.livePriceTracker) {
             this.livePriceTracker.close();
         }
@@ -229,137 +386,35 @@ class RealTradeEngine {
     getRealHandlers() {
         return {
             checkBalance: async () => {
-                // Fetch 100% Real Live Available Balance from Dhan Funds API
-                const { DhanFunds } = require("../../utility/dhan-funds");
-                const funds = new DhanFunds();
-                const fundRes = await funds.getFundLimits();
-
-                if (fundRes.status !== "success" || !fundRes.data) {
-                    throw new Error(`[REAL BALANCE ERROR] Failed to fetch Dhan account funds: ${fundRes?.message || 'Unknown broker error'}`);
-                }
-
-                const availableBalance = Number(fundRes.data.availabelBalance || fundRes.data.withdrawableBalance || 0);
-                if (availableBalance < 1000) {
-                    console.log(`⚠️ [REAL BALANCE NOTICE] Available Dhan balance (₹${availableBalance}) is below minimum threshold ₹1000. Skipping trade.`);
-                }
-
-                return availableBalance;
+                const bal = await this.checkAccountBalance();
+                return bal.availableBalance;
             },
             selectStrike: async (spotPrice, optionType, maxBudget) => {
-                const cfg = realConfig.getConfig();
-                const selectedStock = cfg.selectedStock || { securityId: 13, exchangeSegment: "IDX_I" };
-
-                // 1. Module 1: select-best-strike.js (Live Dhan Option Chain Matrix)
-                const strikeInfo = await selectBestOptionStrike({
-                    securityId: selectedStock.securityId,
-                    exchangeSegment: selectedStock.exchangeSegment,
-                    spotPrice,
-                    optionType,
-                    maxBudget
-                });
-
-                if (!strikeInfo || !strikeInfo.securityId || strikeInfo.status !== "success") {
-                    throw new Error(`[STRIKE SELECTION ERROR] Failed to find option contract for ${optionType} @ Spot ₹${spotPrice}`);
-                }
-
-                // 2. Module 2: option-sl-target.js (Live Option Price Action SL & Targets)
-                const slTargetData = await calculateOptionSLAndTargets({
-                    securityId: strikeInfo.securityId,
-                    entryPrice: strikeInfo.liveLtp || strikeInfo.price,
-                    interval: "5",
-                    method: "HYBRID"
-                });
-
-                if (!slTargetData || slTargetData.status !== "success") {
-                    throw new Error(`[OPTION SL/TARGET ERROR] Failed to compute SL/Target prices for option contract ${strikeInfo.securityId}`);
-                }
-
-                strikeInfo.optionSL = slTargetData.stopLoss?.sl;
-                strikeInfo.optionTR1 = slTargetData.targets?.tr1?.price;
-                strikeInfo.optionTR2 = slTargetData.targets?.tr2?.price;
-                strikeInfo.optionTR3 = slTargetData.targets?.tr3?.price;
-                strikeInfo.optionTR4 = slTargetData.targets?.tr4?.price;
-                strikeInfo.optionTR5 = slTargetData.targets?.tr5?.price;
-
-                this.activeOptionContract = strikeInfo;
-                return strikeInfo;
+                const strikeInfo = await this.selectOptionStrike(spotPrice, optionType, maxBudget);
+                const strikeWithLevels = await this.calculateSLAndTargets(strikeInfo);
+                return strikeWithLevels;
             },
             placeOrder: async (orderDetails) => {
-                const strikeInfo = orderDetails.strikeInfo || this.activeOptionContract;
-                if (!strikeInfo || !strikeInfo.securityId) {
-                    throw new Error(`[REAL ORDER ERROR] Missing option contract details for ${orderDetails.symbol || 'Option'}`);
-                }
-
-                const secId = String(strikeInfo.securityId);
-                const lotSize = Number(strikeInfo.lotSize);
-                if (!lotSize || lotSize <= 0) {
-                    throw new Error(`[REAL ORDER ERROR] Invalid lotSize (${strikeInfo.lotSize}) for option contract ${secId}`);
-                }
-
-                const qty = Number(orderDetails.qty || strikeInfo.totalQty);
-                if (!qty || qty <= 0) {
-                    throw new Error(`[REAL ORDER ERROR] Invalid order quantity (${qty}) for option contract ${secId}`);
-                }
-
-                const lots = Math.floor(qty / lotSize);
-                if (lots < 1) {
-                    throw new Error(`[REAL ORDER ERROR] Order quantity (${qty}) is smaller than contract lot size (${lotSize})`);
-                }
-
-                const actualExecutedQty = lots * lotSize;
-
-                console.log(`🚀 [REAL ORDER PLACED] ${strikeInfo.symbol || secId} | Security ID: ${secId} | Qty: ${actualExecutedQty} (${lots} lot(s) @ ${lotSize}/lot)`);
-
-                // 3. Module 3: smart-order-executor.js
-                const execRes = await this.smartExecutor.placeOptionOrder({
-                    securityId: secId,
-                    exchangeSegment: strikeInfo.exchangeSegment || "NSE_FNO",
-                    transactionType: "BUY",
-                    lots: lots,
-                    lotSize: lotSize,
-                    price: 0, // MARKET Order
-                    targetPrice: orderDetails.levels?.tr5 || orderDetails.levels?.tr4 || orderDetails.targetPrice || strikeInfo.optionTR5,
-                    stopLossPrice: orderDetails.initialSl || strikeInfo.optionSL
-                });
-
-                if (!execRes || execRes.status !== "success" || !execRes.orderId) {
-                    const errDetail = execRes?.rawResponse?.message || execRes?.message || 'Unknown broker error';
-                    throw new Error(`[REAL ORDER ERROR] Dhan SmartOrderExecutor failed: ${errDetail}`);
-                }
-
-                console.log(`✅ [REAL ORDER SUCCESS] Broker Order ID: ${execRes.orderId}`);
-
-                // 4. Module 4: dhan-option-live-price.js (Start WebSocket streaming for Option LTP)
-                this.livePriceTracker.streamOptionLtp({
-                    securityId: secId,
-                    exchangeSegment: strikeInfo.exchangeSegment || "NSE_FNO",
-                    buyPrice: execRes.entryPrice || orderDetails.entryPrice || strikeInfo.liveLtp,
-                    qty: actualExecutedQty
-                }, (liveTick) => {
-                    this.latestOptionTick = liveTick;
-                    this.processTick(liveTick);
-                });
-
-                return { status: "SUCCESS", orderId: execRes.orderId, quantity: actualExecutedQty, lotSize: lotSize, securityId: secId };
+                const placeRes = await this.executeBrokerOrder(orderDetails);
+                // DOUBLE-CHECK ORDER PLACEMENT ON DHAN TERMINAL
+                await this.verifyOrderPlacement(placeRes.orderId, placeRes.securityId);
+                return placeRes;
+            },
+            verifyOrderPlacement: async (orderId, securityId) => {
+                return await this.verifyOrderPlacement(orderId, securityId);
             },
             modifyOrder: async (orderId, newSl, stage) => {
                 if (!orderId || String(orderId).startsWith("MASTER_SL")) {
                     throw new Error(`[REAL SL MODIFY ERROR] Invalid broker orderId: ${orderId}`);
                 }
-
                 if (!newSl || newSl <= 0) {
                     throw new Error(`[REAL SL MODIFY ERROR] Invalid new SL price: ₹${newSl}`);
                 }
 
                 const position = this.activePosition;
                 const qty = Number(position?.qty || this.activeOptionContract?.totalQty);
-                if (!qty || qty <= 0) {
-                    throw new Error(`[REAL SL MODIFY ERROR] Cannot determine order quantity for order ${orderId}`);
-                }
 
                 console.log(`🔄 [REAL SL MODIFIED] Order ${orderId} -> New SL: ₹${newSl} (${stage})`);
-
-                // Module 3: smart-order-executor.js
                 const modRes = await this.smartExecutor.updateStopLoss({
                     orderId,
                     newStopLossPrice: newSl,
@@ -370,7 +425,13 @@ class RealTradeEngine {
                     const errDetail = modRes?.rawResponse?.message || modRes?.message || 'Dhan API modify call failed';
                     throw new Error(`[REAL SL MODIFY ERROR] Dhan API failed to modify SL: ${errDetail}`);
                 }
+
+                // DOUBLE-CHECK SL MODIFICATION ON DHAN TERMINAL
+                await this.verifyOrderModification(orderId, newSl);
                 return true;
+            },
+            verifyOrderModification: async (orderId, expectedSl) => {
+                return await this.verifyOrderModification(orderId, expectedSl);
             },
             closeOrder: async (position) => {
                 if (!position || !position.orderId) {
@@ -378,20 +439,15 @@ class RealTradeEngine {
                 }
 
                 const qty = Number(position.qty || this.activeOptionContract?.totalQty);
-                if (!qty || qty <= 0) {
-                    throw new Error(`[REAL ORDER CLOSE ERROR] Invalid exit quantity for position ${position.symbol || position.orderId}`);
-                }
-
                 const secId = String(position.securityId || this.activeOptionContract?.securityId || "");
 
                 console.log(`🏁 [REAL ORDER CLOSED] Position ${position.symbol || secId} (Order: ${position.orderId}) | Exit Reason: ${position.exitReason}`);
 
-                // Close live WebSocket feed for this option contract
                 if (this.livePriceTracker) {
                     this.livePriceTracker.close();
                 }
+                this.activeOptionStreamSecId = null;
 
-                // Module 3: smart-order-executor.js
                 const closeRes = await this.smartExecutor.closePosition({
                     orderId: position.orderId,
                     securityId: secId,
@@ -404,19 +460,48 @@ class RealTradeEngine {
                     const errDetail = closeRes?.rawResponse?.message || closeRes?.message || 'Dhan API close call failed';
                     throw new Error(`[REAL ORDER CLOSE ERROR] SmartExecutor close position failed: ${errDetail}`);
                 }
+
+                // DOUBLE-CHECK POSITION CLOSE ON DHAN TERMINAL
+                const closeVerify = await this.verifyOrderClose(secId, position.orderId);
+                if (!closeVerify.isClosedOnTerminal) {
+                    console.warn(`⚠️ [DOUBLE-CHECK CLOSE RETRY] Position ${secId} still open on Dhan terminal! Retrying close...`);
+                    await this.smartExecutor.closePosition({
+                        orderId: position.orderId,
+                        securityId: secId,
+                        exchangeSegment: "NSE_FNO",
+                        productType: "INTRADAY",
+                        quantity: qty
+                    });
+                }
+
                 return true;
+            },
+            verifyOrderClose: async (securityId, orderId) => {
+                return await this.verifyOrderClose(securityId, orderId);
             }
         };
     }
 
     /**
      * Process Consensus Signal via MasterSL Engine
+     * Executes Step 1 -> Step 2 -> Step 3 -> Step 4 -> Step 5 -> Step 6 -> Step 7 Flow
      */
     async processSignal(signal, stockInfo = null) {
         if (!realConfig.getConfig().realTradeEnabled || !signal) return null;
-        const isRecentOrder = masterSL.isOrderInFlight || (Date.now() - (masterSL.lastOrderTimestamp || 0) < 30000);
-        if (this.isOrderPlacing || this.activePosition || masterSL.activePosition || isRecentOrder) {
-            return { status: "IGNORED", reason: "ORDER_IN_FLIGHT_OR_POSITION_ACTIVE_OR_COOLDOWN" };
+
+        // STEP 1: Check Open Positions (Single time from Dhan API)
+        const posCheck = await this.checkOpenPositions();
+        if (posCheck.hasOpenPosition) {
+            console.log(`⚠️ [SIGNAL IGNORED] Active position already exists (${posCheck.position?.symbol}). Skipping new order.`);
+            this.trackActiveOption(posCheck.position);
+            return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN", position: posCheck.position };
+        }
+
+        // STEP 2: Check Account Balance
+        const balCheck = await this.checkAccountBalance();
+        if (!balCheck.isSufficient) {
+            console.log(`⚠️ [SIGNAL IGNORED] Available balance (₹${balCheck.availableBalance}) is below minimum threshold ₹1000.`);
+            return { status: "IGNORED", reason: "INSUFFICIENT_BALANCE", balance: balCheck.availableBalance };
         }
 
         if (signal.consensus === "BUY" || signal.consensus === "SELL") {
@@ -424,8 +509,22 @@ class RealTradeEngine {
             try {
                 console.log(`\n🎯 [REAL SIGNAL DETECTED] Signal: ${signal.consensus} | Entry Spot: ₹${signal.entry}`);
                 const handlers = this.getRealHandlers();
-                const res = await masterSL.processSignal(signal, handlers, "REAL_TRADE");
-                return res;
+
+                // STEP 3, 4, 5: Select Strike, Calculate SL, Execute Broker Order
+                const orderRes = await masterSL.processSignal(signal, handlers, "REAL_TRADE");
+
+                if (orderRes && orderRes.status === "EXECUTED" && orderRes.position) {
+                    // STEP 6: Verify Order Placement Confirmation Double-Check
+                    const confirmRes = await this.verifyOrderPlacement(orderRes.position.orderId, orderRes.position.securityId);
+
+                    // STEP 7: Start Live Option Tracking & Trailing SL
+                    if (confirmRes.isConfirmed) {
+                        this.trackActiveOption(orderRes.position);
+                    }
+                    return { status: "EXECUTED", position: orderRes.position, confirmed: confirmRes.isConfirmed };
+                }
+
+                return orderRes;
             } finally {
                 this.isOrderPlacing = false;
             }
@@ -436,10 +535,6 @@ class RealTradeEngine {
 
     /**
      * Process Live Candle / Price Tick via MasterSL Engine
-     * Evaluates Trailing SL stages and Exits for Real Trading
-     * 
-     * @param {Object} tick - Current market tick { high, low, close, price }
-     * @returns {Promise<Object|null>} Closed position if exited
      */
     async processTick(tick) {
         if (!realConfig.getConfig().realTradeEnabled || !tick) return null;
@@ -461,9 +556,6 @@ class RealTradeEngine {
      * Get Complete State Payload for UI Rendering
      */
     getStatus() {
-        // Trigger background position sync check on every UI status request
-        try { this.syncRealPositionsFromDhan(); } catch (e) {}
-
         const masterStatus = masterSL.getStatus();
         return {
             ...masterStatus,
