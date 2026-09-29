@@ -9,7 +9,7 @@
   "autoTrailOnTR2": true,
   "autoTrailOnTR3": true,
   "maxRetriesPerStep": 5,
-  "retryDelayMs": 20000,
+  "retryDelayMs": 1000,
   "selectedStock": {
     "securityId": "13",
     "exchangeSegment": "IDX_I",

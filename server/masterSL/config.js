@@ -22,7 +22,7 @@ const DEFAULT_CONFIG = {
     autoTrailOnTR2: true,         // Trail to TR1 when TR2 (1:2) hit
     autoTrailOnTR3: true,         // Trail to TR2 when TR3 (1:3) hit
     maxRetriesPerStep: 5,         // Max 5 automatic retries per step on error
-    retryDelayMs: 30000,          // Retry delay in ms (30 seconds)
+    retryDelayMs: 1000,           // Retry delay in ms (1 second)
     selectedStock: {
         securityId: "13",
         exchangeSegment: "IDX_I",

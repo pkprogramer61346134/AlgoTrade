@@ -5349,3 +5349,62 @@ Error: [REAL_TRADE] Step PLACE_ORDER failed after 1 retries: [ORDER EXECUTOR ERR
     at async Timeout.runCycleAndScheduleNext [as _onTimeout] (C:\AlgoTrade\main.js:135:9)
 ==========================================================================
 
+[30/9/2026, 00:07:26] [PAPER] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order SIM_BROKER_ORD_999 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:07:26] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
+[30/9/2026, 00:07:26] [PAPER] ℹ️ [SL_TRAILED] SL trailed successfully to ₹150 (TRAILED_COST_TO_COST)
+[30/9/2026, 00:07:26] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹150 (Terminal Price: ₹150)
+[30/9/2026, 00:07:26] [PAPER] ℹ️ [SIGNAL_IGNORED] Order placement cooldown active (30s remaining). Ignoring signal.
+[30/9/2026, 00:07:59] [PAPER] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order SIM_BROKER_ORD_999 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:07:59] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
+[30/9/2026, 00:07:59] [PAPER] ℹ️ [SL_TRAILED] SL trailed successfully to ₹150 (TRAILED_COST_TO_COST)
+[30/9/2026, 00:07:59] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹150 (Terminal Price: ₹150)
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [SL_TRAILED] SL trailed successfully to ₹175 (TRAILED_TR1 (LOCKED))
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹175 (Terminal Price: ₹175)
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24800_CE | Exit: ₹175 | Reason: TRAILED_SL_HIT (TRAILED_TR1 (LOCKED)) | PnL: ₹1625
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order SIM_BROKER_ORD_999 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:08:01] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24800_CE | Exit: ₹275 | Reason: TARGET_HIT (TR5 (1:5)) | PnL: ₹8125
+[30/9/2026, 00:34:12] [REAL_TRADE] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORD_AUDIT_101 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:34:12] [REAL_TRADE] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22600_CE | Entry: ₹115.95 | Qty: 65 | SL: ₹95 | Target (TR5 (1:5)): ₹220.7 | Verification: VERIFIED
+[30/9/2026, 00:34:27] [REAL_TRADE] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORD_AUDIT_101 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:34:27] [REAL_TRADE] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22600_CE | Entry: ₹115.95 | Qty: 65 | SL: ₹95 | Target (TR5 (1:5)): ₹220.7 | Verification: VERIFIED
+[30/9/2026, 00:34:55] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORD_AUDIT_505 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:34:55] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22600_CE | Entry: ₹115.95 | Qty: 65 | SL: ₹95 | Target (TR5 (1:5)): ₹220.7 | Verification: VERIFIED
+[30/9/2026, 00:34:55] [TEST_ENV] ℹ️ [SL_TRAILED] SL trailed successfully to ₹115.95 (TRAILED_COST_TO_COST)
+[30/9/2026, 00:34:55] [TEST_ENV] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹115.95 (Terminal Price: ₹115.95)
+[30/9/2026, 00:34:57] [TEST_ENV] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:34:57] [TEST_ENV] ℹ️ [POSITION_CLOSED] Closed NIFTY_22600_CE | Exit: ₹115.95 | Reason: TRAILED_SL_HIT (TRAILED_COST_TO_COST) | PnL: ₹0
+[30/9/2026, 00:44:55] [PAPER] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order SIM_BROKER_ORD_999 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:44:55] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
+[30/9/2026, 00:44:55] [PAPER] ℹ️ [SL_TRAILED] SL trailed successfully to ₹150 (TRAILED_COST_TO_COST)
+[30/9/2026, 00:44:55] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹150 (Terminal Price: ₹150)
+[30/9/2026, 00:44:57] [PAPER] ℹ️ [SL_TRAILED] SL trailed successfully to ₹175 (TRAILED_TR1 (LOCKED))
+[30/9/2026, 00:44:57] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹175 (Terminal Price: ₹175)
+[30/9/2026, 00:44:57] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:44:57] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24800_CE | Exit: ₹175 | Reason: TRAILED_SL_HIT (TRAILED_TR1 (LOCKED)) | PnL: ₹1625
+[30/9/2026, 00:44:58] [PAPER] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order SIM_BROKER_ORD_999 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:44:58] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
+[30/9/2026, 00:44:58] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:44:58] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24800_CE | Exit: ₹275 | Reason: TARGET_HIT (TR5 (1:5)) | PnL: ₹8125
+[30/9/2026, 00:46:15] [REAL_TRADE] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORD_AUDIT_101 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:46:15] [REAL_TRADE] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22600_CE | Entry: ₹115.95 | Qty: 65 | SL: ₹95 | Target (TR5 (1:5)): ₹220.7 | Verification: VERIFIED
+[30/9/2026, 00:46:15] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORD_AUDIT_505 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:46:15] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22600_CE | Entry: ₹115.95 | Qty: 65 | SL: ₹95 | Target (TR5 (1:5)): ₹220.7 | Verification: VERIFIED
+[30/9/2026, 00:46:15] [TEST_ENV] ℹ️ [SL_TRAILED] SL trailed successfully to ₹115.95 (TRAILED_COST_TO_COST)
+[30/9/2026, 00:46:15] [TEST_ENV] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹115.95 (Terminal Price: ₹115.95)
+[30/9/2026, 00:46:17] [TEST_ENV] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:46:17] [TEST_ENV] ℹ️ [POSITION_CLOSED] Closed NIFTY_22600_CE | Exit: ₹115.95 | Reason: TRAILED_SL_HIT (TRAILED_COST_TO_COST) | PnL: ₹0
+[30/9/2026, 00:46:18] [PAPER] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order SIM_BROKER_ORD_999 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:46:18] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
+[30/9/2026, 00:46:18] [PAPER] ℹ️ [SL_TRAILED] SL trailed successfully to ₹150 (TRAILED_COST_TO_COST)
+[30/9/2026, 00:46:18] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹150 (Terminal Price: ₹150)
+[30/9/2026, 00:46:20] [PAPER] ℹ️ [SL_TRAILED] SL trailed successfully to ₹175 (TRAILED_TR1 (LOCKED))
+[30/9/2026, 00:46:20] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified on broker terminal: ₹175 (Terminal Price: ₹175)
+[30/9/2026, 00:46:20] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:46:20] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24800_CE | Exit: ₹175 | Reason: TRAILED_SL_HIT (TRAILED_TR1 (LOCKED)) | PnL: ₹1625
+[30/9/2026, 00:46:21] [PAPER] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order SIM_BROKER_ORD_999 double-checked & verified on broker terminal. Status: TRADED
+[30/9/2026, 00:46:21] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
+[30/9/2026, 00:46:21] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[30/9/2026, 00:46:21] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24800_CE | Exit: ₹275 | Reason: TARGET_HIT (TR5 (1:5)) | PnL: ₹8125

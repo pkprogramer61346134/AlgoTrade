@@ -89,7 +89,7 @@ class MasterTrailingEngine {
     // STEP 1: CHECK ACTIVE POSITION
     // =========================================================================
     checkActivePosition() {
-        const hasActive = Boolean(this.activePosition && this.activePosition.status === "OPEN");
+        const hasActive = Boolean(this.activePosition && (this.activePosition.status === "OPEN" || this.activePosition.status === "EXIT_FAILED"));
         return { hasActivePosition: hasActive, position: this.activePosition };
     }
 
@@ -204,6 +204,8 @@ class MasterTrailingEngine {
         const verifyFn = environmentHandlers?.verifyOrderPlacement || environmentHandlers?.verifyPlacement;
         if (typeof verifyFn === 'function') {
             try {
+                // Short 500ms delay to allow broker OMS to process & update fill status
+                await new Promise(res => setTimeout(res, 500));
                 const secId = orderPayload.strikeInfo?.securityId || orderPayload.securityId;
                 verifyDetails = await verifyFn(placedOrderResult?.orderId || orderPayload.tradeId, secId);
                 if (verifyDetails && verifyDetails.isConfirmed === false) {
@@ -266,6 +268,7 @@ class MasterTrailingEngine {
             const todayTradesCount = this.tradeHistory.filter(t => (t.entryDate === todayDate)).length;
             if (todayTradesCount >= cfg.maxTradesPerDay) {
                 logger.logInfo(envName, "SIGNAL_IGNORED", `Max trades per day reached (${cfg.maxTradesPerDay}). Ignoring signal.`);
+                this.isOrderInFlight = false;
                 return { status: "IGNORED", reason: `MAX_DAILY_TRADES_REACHED (${cfg.maxTradesPerDay})` };
             }
 
@@ -277,6 +280,7 @@ class MasterTrailingEngine {
             const minRequiredBalance = Number(cfg.minRequiredBalance || 1000);
             if (availableBalance < minRequiredBalance) {
                 logger.logInfo(envName, "SIGNAL_IGNORED", `Available balance (₹${availableBalance}) is below minimum required balance (₹${minRequiredBalance}). Ignoring signal.`);
+                this.isOrderInFlight = false;
                 return { status: "IGNORED", reason: `INSUFFICIENT_MIN_BALANCE (₹${availableBalance} < ₹${minRequiredBalance})` };
             }
 
@@ -305,7 +309,7 @@ class MasterTrailingEngine {
             else if (mode.includes("1:5")) { targetPrice = levels.tr5; targetLabel = "TR5 (1:5)"; }
 
             const orderPayload = {
-                tradeId: "MASTER_SL_" + (this.tradeHistory.length + 1),
+                tradeId: "MASTER_SL_" + Date.now() + "_" + (this.tradeHistory.length + 1),
                 symbol: symbol,
                 optionType: optionType,
                 isOptionTrade: isOptionTrade,
@@ -338,9 +342,7 @@ class MasterTrailingEngine {
             this.activePosition = null;
             return null;
         } finally {
-            setTimeout(() => {
-                this.isOrderInFlight = false;
-            }, 5000);
+            this.isOrderInFlight = false;
         }
     }
 
@@ -412,13 +414,14 @@ class MasterTrailingEngine {
         const pos = this.activePosition;
 
         this.isCloseInFlight = true;
-        pos.status = "CLOSED";
         pos.exitPrice = exitPrice;
         pos.exitReason = exitReason;
 
         const isOptionTrade = Boolean(pos.isOptionTrade);
         const diff = isOptionTrade ? (exitPrice - pos.entryPrice) : (pos.optionType === "CE" ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice);
         pos.realizedPnl = Number((diff * pos.qty).toFixed(2));
+
+        let isCloseSuccessful = false;
 
         try {
             if (pos.handlers && typeof pos.handlers.closeOrder === 'function') {
@@ -449,17 +452,27 @@ class MasterTrailingEngine {
                     logger.logInfo(envName, "POSITION_CLOSE_DOUBLE_CHECKED", `Position close double-checked (Simulated / Paper Trading).`);
                 }
             }
+            isCloseSuccessful = true;
         } catch (err) {
             logger.logError(envName, "CLOSE_ORDER_FAILED", err);
+            pos.status = "EXIT_FAILED";
         } finally {
-            this.tradeHistory.push({ ...pos });
-            const closedPosition = { ...pos };
-            this.activePosition = null;
-            this.lastExitTimestamp = Date.now();
-            this.isCloseInFlight = false;
+            if (isCloseSuccessful || !pos.handlers || typeof pos.handlers.closeOrder !== 'function') {
+                pos.status = "CLOSED";
+                this.tradeHistory.push({ ...pos });
+                if (this.tradeHistory.length > 1000) this.tradeHistory.shift();
+                const closedPosition = { ...pos };
+                this.activePosition = null;
+                this.lastExitTimestamp = Date.now();
+                this.isCloseInFlight = false;
 
-            logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
-            return closedPosition;
+                logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
+                return closedPosition;
+            } else {
+                this.isCloseInFlight = false;
+                logger.logError(envName, "POSITION_CLOSE_RETAINED", new Error(`Position close failed on broker terminal! Retaining active position for retry.`));
+                return null;
+            }
         }
     }
 
@@ -467,7 +480,7 @@ class MasterTrailingEngine {
      * Process Price/Candle Tick: Evaluates Trailing SL Rules & Exits
      */
     async processTick(tick, envName = "PAPER") {
-        if (!this.activePosition || this.activePosition.status !== "OPEN" || !tick || this.isCloseInFlight) return null;
+        if (!this.activePosition || (this.activePosition.status !== "OPEN" && this.activePosition.status !== "EXIT_FAILED") || !tick || this.isCloseInFlight) return null;
 
         const pos = this.activePosition;
         const lvls = pos.levels;
@@ -481,7 +494,7 @@ class MasterTrailingEngine {
         const currentHigh = isLiveTick ? livePrice : Number(tick.candleHigh || tick.high || livePrice);
         const currentLow = isLiveTick ? livePrice : Number(tick.candleLow || tick.low || livePrice);
 
-        if (isNaN(currentHigh) || isNaN(currentLow)) return null;
+        if (isNaN(currentHigh) || isNaN(currentLow) || currentHigh <= 0 || currentLow <= 0 || isNaN(pos.currentSl) || isNaN(pos.targetPrice)) return null;
 
         let exitTriggered = false;
         let exitPrice = 0;
@@ -496,7 +509,7 @@ class MasterTrailingEngine {
 
         const mode = String(pos.targetMode || cfg.targetMode || "TRAILING").toUpperCase();
         const isTrailingEnabled = !mode.includes("FIXED") && cfg.disableTrailing !== true && cfg.enableAutoTrailing !== false;
-        const isOptionBuying = pos.isOptionTrade || pos.envName === "REAL_TRADE" || pos.optionType === "CE";
+        const isOptionBuying = Boolean(pos.isOptionTrade) || pos.optionType === "CE";
 
         if (!isTrailingEnabled) {
             // FIXED TARGET MODE
@@ -536,7 +549,7 @@ class MasterTrailingEngine {
                 }
 
                 if (newSl !== pos.currentSl) {
-                    this.modifyTrailingSL(newSl, newStage, envName);
+                    await this.modifyTrailingSL(newSl, newStage, envName);
                 }
 
                 if (currentHigh >= pos.targetPrice) {
@@ -564,7 +577,7 @@ class MasterTrailingEngine {
                 }
 
                 if (newSl !== pos.currentSl) {
-                    this.modifyTrailingSL(newSl, newStage, envName);
+                    await this.modifyTrailingSL(newSl, newStage, envName);
                 }
 
                 if (currentLow <= pos.targetPrice) {

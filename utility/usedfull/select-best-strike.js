@@ -189,48 +189,56 @@ class StrikeSelector {
             return optionType === "CE" ? node.ce : node.pe;
         };
 
-        // 5. Check exact ATM Strike first
-        const atmItem = allStrikes[atmIndex];
-        const atmSide = getOptionSide(atmItem.key);
-        const atmLtp = Number(atmSide?.last_price || atmSide?.top_bid_price || 0);
-        const atmReqMargin = atmLtp * totalQty;
-
         // Apply 15% Fee & STT Buffer to safe available budget to guarantee Dhan RMS acceptance
         const safeBudget = (availableBudget !== null && availableBudget > 0) ? Number((availableBudget * 0.85).toFixed(2)) : null;
+
+        // 5. Search all valid strikes in Option Chain that fit within safeBudget
+        const validCandidates = [];
+
+        for (const item of allStrikes) {
+            const side = getOptionSide(item.key);
+            if (!side || !side.security_id) continue;
+
+            const ltp = Number(side.last_price || side.top_bid_price || 0);
+            if (ltp <= 0) continue;
+
+            const reqMargin = ltp * totalQty;
+            if (safeBudget === null || reqMargin <= safeBudget) {
+                const distFromSpot = Math.abs(item.strike - spotPrice);
+                const isItm = optionType === "CE" ? (item.strike <= spotPrice) : (item.strike >= spotPrice);
+                validCandidates.push({
+                    item,
+                    side,
+                    ltp,
+                    reqMargin,
+                    distFromSpot,
+                    isItm,
+                    strike: item.strike
+                });
+            }
+        }
 
         let selectedItem = null;
         let selectedSide = null;
         let selectedLtp = 0;
         let selectedReqMargin = 0;
 
-        // If ATM strike fits within safeBudget (or budget limit null)
-        if (atmLtp > 0 && (safeBudget === null || atmReqMargin <= safeBudget)) {
-            selectedItem = atmItem;
-            selectedSide = atmSide;
-            selectedLtp = atmLtp;
-            selectedReqMargin = atmReqMargin;
-        } else {
-            // Search ALL strikes in the Option Chain sorted strictly by closeness to spotPrice (closest to ATM first)
-            const sortedByProximity = allStrikes
-                .slice()
-                .sort((a, b) => Math.abs(a.strike - spotPrice) - Math.abs(b.strike - spotPrice));
+        if (validCandidates.length > 0) {
+            // Prefer Near-ATM and ITM candidates within 500 points of Spot Price
+            const nearAtmOrItmCandidates = validCandidates.filter(c => {
+                return c.distFromSpot <= 500 && (c.isItm || c.distFromSpot <= 50);
+            });
 
-            for (const item of sortedByProximity) {
-                const side = getOptionSide(item.key);
-                if (!side || !side.security_id) continue;
+            const poolToSearch = nearAtmOrItmCandidates.length > 0 ? nearAtmOrItmCandidates : validCandidates;
 
-                const ltp = Number(side.last_price || side.top_bid_price || 0);
-                if (ltp <= 0) continue;
+            // Sort by highest reqMargin (best capital utilization <= safeBudget)
+            poolToSearch.sort((a, b) => b.reqMargin - a.reqMargin);
 
-                const reqMargin = ltp * totalQty;
-                if (safeBudget && safeBudget > 0 && reqMargin <= safeBudget) {
-                    selectedItem = item;
-                    selectedSide = side;
-                    selectedLtp = ltp;
-                    selectedReqMargin = reqMargin;
-                    break;
-                }
-            }
+            const bestCandidate = poolToSearch[0];
+            selectedItem = bestCandidate.item;
+            selectedSide = bestCandidate.side;
+            selectedLtp = bestCandidate.ltp;
+            selectedReqMargin = bestCandidate.reqMargin;
         }
 
         // If no budget-friendly strike found at all (e.g. balance is insufficient for 1 lot + STT/brokerage fees), throw error
@@ -242,7 +250,7 @@ class StrikeSelector {
 
         const secId = String(selectedSide.security_id);
         const strikePrice = selectedItem.strike;
-        const isAtm = strikePrice === atmItem.strike;
+        const isAtm = Math.abs(strikePrice - spotPrice) <= 25;
         const realContractLotSize = Number(selectedSide.lot_size || selectedSide.lotSize || lotSize || 65);
         const realTotalQty = lots * realContractLotSize;
         const finalReqMargin = selectedLtp * realTotalQty;

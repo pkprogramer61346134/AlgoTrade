@@ -71,7 +71,8 @@ class RealTradeEngine {
                 const activeDhanPos = openDhanPositions[0];
                 const secId = String(activeDhanPos.securityId);
                 const entryPrice = Number(activeDhanPos.buyAvg || activeDhanPos.costPrice || 0);
-                const qty = Math.abs(Number(activeDhanPos.netQty || 65));
+                const lotSize = Math.max(1, Number(activeDhanPos.lotSize || activeDhanPos.quantityMultiplier || 65));
+                const qty = Math.abs(Number(activeDhanPos.netQty || lotSize));
                 const optionType = activeDhanPos.drvOptionType === "PUT" ? "PE" : "CE";
                 const initialSl = Number((entryPrice * 0.85).toFixed(2));
                 const tr1 = Number((entryPrice * 1.15).toFixed(2));
@@ -84,27 +85,32 @@ class RealTradeEngine {
                     console.log(`🔄 [POSITION CHECK] Found open Dhan broker position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${qty} @ ₹${entryPrice}`);
                 }
 
+                // Preserve existing trailed SL if masterSL is already tracking this position
+                const isSamePos = Boolean(masterSL.activePosition && String(masterSL.activePosition.securityId) === secId);
+                const currentSl = isSamePos ? masterSL.activePosition.currentSl : initialSl;
+                const trailingStage = isSamePos ? masterSL.activePosition.trailingStage : "INITIAL";
+
                 masterSL.activePosition = {
-                    tradeId: "MASTER_SL_REAL_" + secId,
+                    tradeId: isSamePos ? masterSL.activePosition.tradeId : ("MASTER_SL_REAL_" + secId),
                     symbol: activeDhanPos.tradingSymbol || `NIFTY_${activeDhanPos.drvStrikePrice}_${optionType}`,
                     securityId: secId,
                     optionType: optionType,
                     isOptionTrade: true,
-                    entryDate: new Date().toLocaleDateString("en-CA"),
-                    entryTime: new Date().toLocaleTimeString("en-IN"),
-                    entryPrice: entryPrice,
+                    entryDate: isSamePos ? masterSL.activePosition.entryDate : new Date().toLocaleDateString("en-CA"),
+                    entryTime: isSamePos ? masterSL.activePosition.entryTime : new Date().toLocaleTimeString("en-IN"),
+                    entryPrice: isSamePos ? masterSL.activePosition.entryPrice : entryPrice,
                     liveLtp: entryPrice,
-                    pnl: 0,
-                    pnlPercent: "0.00%",
-                    initialSl: initialSl,
-                    currentSl: initialSl,
-                    targetPrice: tr2,
-                    targetLabel: "TR2 (1:2)",
-                    targetMode: "1:2",
+                    pnl: isSamePos ? masterSL.activePosition.pnl : 0,
+                    pnlPercent: isSamePos ? masterSL.activePosition.pnlPercent : "0.00%",
+                    initialSl: isSamePos ? masterSL.activePosition.initialSl : initialSl,
+                    currentSl: currentSl,
+                    targetPrice: isSamePos ? masterSL.activePosition.targetPrice : tr2,
+                    targetLabel: isSamePos ? masterSL.activePosition.targetLabel : "TR2 (1:2)",
+                    targetMode: isSamePos ? masterSL.activePosition.targetMode : "1:2",
                     qty: qty,
-                    lotSize: 65,
-                    levels: { initialSl, tr1, tr2, tr3, tr4, tr5 },
-                    trailingStage: "INITIAL",
+                    lotSize: lotSize,
+                    levels: isSamePos ? masterSL.activePosition.levels : { initialSl, tr1, tr2, tr3, tr4, tr5 },
+                    trailingStage: trailingStage,
                     status: "OPEN",
                     orderId: activeDhanPos.orderId || "DHAN_REAL_POS_" + secId,
                     handlers: this.getRealHandlers(),
@@ -116,7 +122,7 @@ class RealTradeEngine {
                     securityId: secId,
                     exchangeSegment: activeDhanPos.exchangeSegment || "NSE_FNO",
                     symbol: activeDhanPos.tradingSymbol,
-                    lotSize: 65,
+                    lotSize: lotSize,
                     totalQty: qty,
                     liveLtp: entryPrice,
                     optionSL: initialSl,
@@ -151,13 +157,13 @@ class RealTradeEngine {
             const fundRes = await funds.getFundLimits();
             if (fundRes && fundRes.status === "success" && fundRes.data) {
                 this.cachedFunds = fundRes.data;
-                const avail = Number(fundRes.data.availabelBalance || fundRes.data.withdrawableBalance || 0);
+                const avail = Number(fundRes.data.availableBalance || fundRes.data.availabelBalance || fundRes.data.withdrawableBalance || 0);
                 return { availableBalance: avail, isSufficient: avail >= 1000, data: fundRes.data };
             }
         } catch (e) {
             console.warn(`⚠️ [ACCOUNT BALANCE CHECK NOTICE]: ${e.message}`);
         }
-        const fallbackAvail = Number(this.cachedFunds?.availabelBalance || 0);
+        const fallbackAvail = Number(this.cachedFunds?.availableBalance || this.cachedFunds?.availabelBalance || 0);
         return { availableBalance: fallbackAvail, isSufficient: fallbackAvail >= 1000, data: this.cachedFunds };
     }
 
@@ -251,8 +257,8 @@ class RealTradeEngine {
     // STEP 6A: VERIFY ORDER PLACEMENT DOUBLE-CHECK (WITH 20S DHAN API DELAY)
     // =========================================================================
     async verifyOrderPlacement(orderId, securityId) {
-        console.log(`🔍 [DOUBLE-CHECK PLACE] Waiting 20 seconds for Dhan broker API status sync (Order: ${orderId})...`);
-        await new Promise(res => setTimeout(res, 20000));
+        console.log(`🔍 [DOUBLE-CHECK PLACE] Checking Dhan broker API status sync (Order: ${orderId})...`);
+        await new Promise(res => setTimeout(res, 1000));
         try {
             const orders = new DhanOrders();
             const orderListRes = await orders.getOrders();
@@ -272,11 +278,11 @@ class RealTradeEngine {
     }
 
     // =========================================================================
-    // STEP 6B: VERIFY ORDER MODIFICATION DOUBLE-CHECK (WITH 20S DHAN API DELAY)
+    // STEP 6B: VERIFY ORDER MODIFICATION DOUBLE-CHECK (WITH 1S DHAN API DELAY)
     // =========================================================================
     async verifyOrderModification(orderId, expectedSlPrice) {
-        console.log(`🔍 [DOUBLE-CHECK MODIFY] Waiting 20 seconds for Dhan broker API SL modification sync (Order: ${orderId})...`);
-        await new Promise(res => setTimeout(res, 20000));
+        console.log(`🔍 [DOUBLE-CHECK MODIFY] Checking Dhan broker API SL modification sync (Order: ${orderId})...`);
+        await new Promise(res => setTimeout(res, 1000));
         try {
             const orders = new DhanOrders();
             const orderListRes = await orders.getOrders();
@@ -296,11 +302,11 @@ class RealTradeEngine {
     }
 
     // =========================================================================
-    // STEP 6C: VERIFY ORDER CLOSE DOUBLE-CHECK (WITH 20S DHAN API DELAY)
+    // STEP 6C: VERIFY ORDER CLOSE DOUBLE-CHECK (WITH 1S DHAN API DELAY)
     // =========================================================================
     async verifyOrderClose(securityId, orderId) {
-        console.log(`🔍 [DOUBLE-CHECK CLOSE] Waiting 20 seconds for Dhan broker API position close sync (Security: ${securityId})...`);
-        await new Promise(res => setTimeout(res, 20000));
+        console.log(`🔍 [DOUBLE-CHECK CLOSE] Checking Dhan broker API position close sync (Security: ${securityId})...`);
+        await new Promise(res => setTimeout(res, 1000));
         try {
             const orders = new DhanOrders();
             const posRes = await orders.getPositions();
@@ -309,11 +315,11 @@ class RealTradeEngine {
 
             const openPos = positionsList.find(p => String(p.securityId) === String(securityId) && Number(p.netQty) !== 0);
             if (openPos) {
-                console.warn(`⚠️ [DOUBLE-CHECK CLOSE WARNING] Position for ${securityId} still shows netQty ${openPos.netQty} on Dhan terminal after 20s!`);
+                console.warn(`⚠️ [DOUBLE-CHECK CLOSE WARNING] Position for ${securityId} still shows netQty ${openPos.netQty} on Dhan terminal!`);
                 return { isClosedOnTerminal: false, netQty: openPos.netQty };
             }
 
-            console.log(`✅ [DOUBLE-CHECK CLOSE CONFIRMED] Position ${securityId} verified CLOSED (netQty: 0) on Dhan broker terminal after 20s sync.`);
+            console.log(`✅ [DOUBLE-CHECK CLOSE CONFIRMED] Position ${securityId} verified CLOSED (netQty: 0) on Dhan broker terminal.`);
             return { isClosedOnTerminal: true, netQty: 0 };
         } catch (e) {
             console.warn(`⚠️ [DOUBLE-CHECK CLOSE NOTICE]: ${e.message}`);
@@ -396,8 +402,6 @@ class RealTradeEngine {
             },
             placeOrder: async (orderDetails) => {
                 const placeRes = await this.executeBrokerOrder(orderDetails);
-                // DOUBLE-CHECK ORDER PLACEMENT ON DHAN TERMINAL
-                await this.verifyOrderPlacement(placeRes.orderId, placeRes.securityId);
                 return placeRes;
             },
             verifyOrderPlacement: async (orderId, securityId) => {
@@ -514,14 +518,9 @@ class RealTradeEngine {
                 const orderRes = await masterSL.processSignal(signal, handlers, "REAL_TRADE");
 
                 if (orderRes && orderRes.status === "EXECUTED" && orderRes.position) {
-                    // STEP 6: Verify Order Placement Confirmation Double-Check
-                    const confirmRes = await this.verifyOrderPlacement(orderRes.position.orderId, orderRes.position.securityId);
-
                     // STEP 7: Start Live Option Tracking & Trailing SL
-                    if (confirmRes.isConfirmed) {
-                        this.trackActiveOption(orderRes.position);
-                    }
-                    return { status: "EXECUTED", position: orderRes.position, confirmed: confirmRes.isConfirmed };
+                    this.trackActiveOption(orderRes.position);
+                    return { status: "EXECUTED", position: orderRes.position, confirmed: true };
                 }
 
                 return orderRes;
