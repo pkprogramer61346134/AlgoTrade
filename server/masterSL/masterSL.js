@@ -142,7 +142,11 @@ class MasterTrailingEngine {
         let initialSl;
         let riskPoints;
 
-        if (selectedStrikeInfo?.optionSL && Number(selectedStrikeInfo.optionSL) > 0) {
+        if ((cfg.useFixedRupeeSL || cfg.targetMode === "FIXED") && cfg.maxLossPerTrade && Number(cfg.maxLossPerTrade) > 0) {
+            const maxLossRupees = Number(cfg.maxLossPerTrade);
+            riskPoints = Number((maxLossRupees / lotSize).toFixed(2));
+            initialSl = isOptionTrade || optionType === "CE" ? Number((entryPrice - riskPoints).toFixed(2)) : Number((entryPrice + riskPoints).toFixed(2));
+        } else if (selectedStrikeInfo?.optionSL && Number(selectedStrikeInfo.optionSL) > 0) {
             initialSl = Number(selectedStrikeInfo.optionSL);
             riskPoints = Math.max(0.1, Number(Math.abs(entryPrice - initialSl).toFixed(2)));
         } else if (cfg.maxLossPerTrade && Number(cfg.maxLossPerTrade) > 0) {
@@ -161,7 +165,16 @@ class MasterTrailingEngine {
 
         let tr1, tr2, tr3, tr4, tr5;
 
-        if (isOptionTrade || optionType === "CE") {
+        if (String(cfg.targetMode || "").toUpperCase() === "FIXED" || cfg.maxProfitPerTrade) {
+            const maxProfitRupees = Number(cfg.maxProfitPerTrade || 1000);
+            const profitPoints = Number((maxProfitRupees / lotSize).toFixed(2));
+            const fixedTarget = isOptionTrade || optionType === "CE" ? Number((entryPrice + profitPoints).toFixed(2)) : Number((entryPrice - profitPoints).toFixed(2));
+            tr1 = fixedTarget;
+            tr2 = fixedTarget;
+            tr3 = fixedTarget;
+            tr4 = fixedTarget;
+            tr5 = fixedTarget;
+        } else if (isOptionTrade || optionType === "CE") {
             tr1 = Number((entryPrice + riskPoints).toFixed(2));
             tr2 = Number((entryPrice + (riskPoints * 2)).toFixed(2));
             tr3 = Number((entryPrice + (riskPoints * 3)).toFixed(2));
@@ -302,7 +315,10 @@ class MasterTrailingEngine {
             let targetPrice = levels.tr5;
             let targetLabel = "TR5 (1:5)";
 
-            if (mode.includes("1:1")) { targetPrice = levels.tr1; targetLabel = "TR1 (1:1)"; }
+            if (mode.includes("FIXED")) {
+                targetPrice = levels.tr1;
+                targetLabel = `FIXED (₹${cfg.maxProfitPerTrade || 1000})`;
+            } else if (mode.includes("1:1")) { targetPrice = levels.tr1; targetLabel = "TR1 (1:1)"; }
             else if (mode.includes("1:2")) { targetPrice = levels.tr2; targetLabel = "TR2 (1:2)"; }
             else if (mode.includes("1:3")) { targetPrice = levels.tr3; targetLabel = "TR3 (1:3)"; }
             else if (mode.includes("1:4")) { targetPrice = levels.tr4; targetLabel = "TR4 (1:4)"; }
