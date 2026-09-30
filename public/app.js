@@ -287,6 +287,43 @@ function renderRealDashboard(data, config = {}) {
                     </div>
                 </div>
             `;
+        } else if (data.virtualWatch) {
+            const vw = data.virtualWatch;
+            posCard.className = "active-trade-card glass-card virtual-watch-card";
+            posCard.innerHTML = `
+                <div style="background: rgba(255,193,7,0.15); border: 1px solid rgba(255,193,7,0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+                    <div style="font-weight: 700; color: #ffc107; display: flex; justify-content: space-between; align-items: center; font-size: 14px;">
+                        <span>⚡ VIRTUAL WATCH ACTIVE (Liquidity Sweep Filter)</span>
+                        <span class="badge badge-warning" style="background:#ffc107; color:#000; padding:4px 8px; border-radius:4px; font-weight:700;">${vw.status || 'WATCHING_VIRTUAL_SL'}</span>
+                    </div>
+                </div>
+                <div class="trade-details-grid">
+                    <div class="trade-item-box">
+                        <div class="item-label">Contract Symbol</div>
+                        <div class="item-val">${vw.symbol || 'NIFTY_OPTION'}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Virtual Entry LTP</div>
+                        <div class="item-val">₹${vw.virtualEntry ? Number(vw.virtualEntry).toFixed(2) : '--'}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Virtual SL (Fixed ₹300 Loss)</div>
+                        <div class="item-val text-danger" style="font-weight:bold;">₹${vw.virtualSl ? Number(vw.virtualSl).toFixed(2) : '--'}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Virtual Target (Fixed ₹1000 Profit)</div>
+                        <div class="item-val text-success" style="font-weight:bold;">₹${vw.virtualTr ? Number(vw.virtualTr).toFixed(2) : '--'}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">SL Hit / Sweep Status</div>
+                        <div class="item-val ${vw.slHit ? 'text-warning' : 'text-info'}" style="font-weight:bold;">${vw.slHit ? '⚡ HIT (Waiting Recovery to Entry)' : '🎯 Watching for SL Hit'}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Watch Started</div>
+                        <div class="item-val">${vw.startTimeStr || '--'}</div>
+                    </div>
+                </div>
+            `;
         } else {
             posCard.className = "active-trade-card glass-card empty-card";
             const errBanner = data.lastError ? `<p class="text-danger" style="margin-top:5px; font-weight:600;">⚠️ Notice: ${data.lastError}</p>` : '';
