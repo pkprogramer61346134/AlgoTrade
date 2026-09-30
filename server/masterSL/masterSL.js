@@ -547,15 +547,6 @@ class MasterTrailingEngine {
         if (!this.virtualWatch || this.activePosition) return null;
         const vw = this.virtualWatch;
         const cfg = masterConfig.getConfig();
-        const now = Date.now();
-        const maxWatchMs = (cfg.virtualMaxWatchMinutes || 20) * 60 * 1000;
-
-        // Timeout Guard
-        if (now - vw.startTime > maxWatchMs) {
-            logger.logInfo(envName, "VIRTUAL_WATCH_TIMEOUT", `⏳ Virtual watch expired after ${cfg.virtualMaxWatchMinutes || 20} mins for ${vw.symbol}. Real trade skipped.`);
-            this.virtualWatch = null;
-            return null;
-        }
 
         const livePrice = Number(tick.liveLtp || tick.ltp || tick.price || tick.close);
         const candleHigh = Number(tick.candleHigh || tick.high || livePrice);
@@ -565,58 +556,22 @@ class MasterTrailingEngine {
 
         const isBuy = vw.optionType === "CE" || vw.signal?.consensus === "BUY";
 
-        // Phase A: Virtual SL Check
-        if (!vw.slHit) {
-            // Direct Virtual Target Hit before Virtual SL Hit -> SKIP
-            const isTargetHit = isBuy ? (candleHigh >= vw.virtualTr) : (candleLow <= vw.virtualTr);
-            if (isTargetHit) {
-                logger.logInfo(envName, "VIRTUAL_TARGET_HIT_SKIPPED", `🟡 Direct Virtual Target (₹${vw.virtualTr}) hit without Virtual SL hit for ${vw.symbol}. Real trade skipped.`);
-                this.virtualWatch = null;
-                return null;
-            }
-
-            // Virtual SL Hit (Stop Hunt)
-            const isSlHit = isBuy ? (candleLow <= vw.virtualSl) : (candleHigh >= vw.virtualSl);
-            if (isSlHit) {
-                vw.slHit = true;
-                vw.status = "VIRTUAL_SL_HIT_WAITING_RECOVERY";
-                logger.logInfo(envName, "VIRTUAL_SL_HIT", `⚡ [STOP HUNT DETECTED] Virtual SL (₹${vw.virtualSl}) hit for ${vw.symbol}! Waiting for price recovery back to Entry Price (₹${vw.virtualEntry})...`);
-            }
-        } else {
-            // Phase B: Price Recovery Back to Entry Price ($E$)
-            const isRecoveredToEntry = isBuy ? (candleHigh >= vw.virtualEntry) : (candleLow <= vw.virtualEntry);
-            if (isRecoveredToEntry) {
-                logger.logInfo(envName, "VIRTUAL_RECOVERY_DETECTED", `🔄 Price recovered back to Entry Price (₹${vw.virtualEntry}) after Virtual SL hit! Running Consensus Re-Check...`);
-
-                const { evaluateConsensusEngine } = require('../../utility/usedfull/Engines/consensusEngine');
-                const nowObj = new Date();
-                const currentDateStr = nowObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-                const currentTimeStr = nowObj.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
-
-                const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", interval: "5" };
-                const recheckResult = await evaluateConsensusEngine({
-                    securityId: String(scrip.securityId),
-                    exchangeSegment: scrip.exchangeSegment,
-                    interval: String(scrip.interval || "5"),
-                    date: currentDateStr,
-                    time: currentTimeStr
-                });
-
-                if (recheckResult && recheckResult.consensus === vw.signal.consensus) {
-                    logger.logInfo(envName, "RECHECK_CONFIRMED", `🚀 [DOUBLE CONFIRMATION PASSED] Consensus STILL VALID (${recheckResult.consensus})! Placing REAL Broker Order for ${vw.symbol}...`);
-                    
-                    const savedHandlers = vw.environmentHandlers;
-                    const savedSignal = recheckResult;
-                    this.virtualWatch = null;
-
-                    // Execute REAL Order with forceReal = true
-                    return await this.processSignal(savedSignal, savedHandlers, envName, true);
-                } else {
-                    logger.logInfo(envName, "RECHECK_FAILED", `🛑 [DOUBLE CONFIRMATION FAILED] Recovery occurred but Consensus Signal is no longer valid (${recheckResult?.consensus || 'NONE'}). Real trade skipped.`);
-                    this.virtualWatch = null;
-                }
-            }
+        // 1. Virtual Target Check (Fixed ₹1000 Profit)
+        const isTargetHit = isBuy ? (candleHigh >= vw.virtualTr) : (candleLow <= vw.virtualTr);
+        if (isTargetHit) {
+            logger.logInfo(envName, "VIRTUAL_TARGET_HIT_CLEARED", `🟢 Virtual Target (₹${vw.virtualTr}) hit for ${vw.symbol}! Virtual Watch cleared immediately. Ready for next Engine signals.`);
+            this.virtualWatch = null;
+            return null;
         }
+
+        // 2. Virtual SL Check (Fixed ₹300 Loss) - Immediately Clear & Start Listening to Engine
+        const isSlHit = isBuy ? (candleLow <= vw.virtualSl) : (candleHigh >= vw.virtualSl);
+        if (isSlHit) {
+            logger.logInfo(envName, "VIRTUAL_SL_HIT_CLEARED", `🔴 Virtual SL (₹${vw.virtualSl}) hit for ${vw.symbol}! Virtual Watch cleared immediately without 20-min wait. Ready for next Engine signals.`);
+            this.virtualWatch = null;
+            return null;
+        }
+
         return null;
     }
 
