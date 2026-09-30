@@ -571,20 +571,20 @@ class MasterTrailingEngine {
         vw.liveLtp = livePrice;
         vw.lastTickTime = tick.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
 
-        const isBuy = vw.optionType === "CE" || vw.signal?.consensus === "BUY";
+        const isOptionContract = Boolean(vw.selectedStrikeInfo || vw.optionType || vw.symbol?.includes("_"));
 
         // Phase A: Before Virtual SL is Hit
         if (!vw.slHit) {
-            // Direct Virtual Target Hit before Virtual SL Hit -> SKIP (evaluated on live LTP ticks)
-            const isTargetHit = isBuy ? (livePrice >= vw.virtualTr) : (livePrice <= vw.virtualTr);
+            // Direct Virtual Target Hit before Virtual SL Hit -> SKIP (Target hit when Option LTP >= virtualTr)
+            const isTargetHit = isOptionContract ? (livePrice >= vw.virtualTr) : (isBuy ? livePrice >= vw.virtualTr : livePrice <= vw.virtualTr);
             if (isTargetHit) {
                 logger.logInfo(envName, "VIRTUAL_TARGET_HIT_SKIPPED", `🟡 Direct Virtual Target (₹${vw.virtualTr}) hit without Virtual SL hit for ${vw.symbol}. Real trade skipped.`);
                 this.virtualWatch = null;
                 return null;
             }
 
-            // Virtual SL Hit (Stop Hunt Sweep Detected)
-            const isSlHit = isBuy ? (livePrice <= vw.virtualSl) : (livePrice >= vw.virtualSl);
+            // Virtual SL Hit (Stop Hunt Sweep Detected when Option LTP <= virtualSl)
+            const isSlHit = isOptionContract ? (livePrice <= vw.virtualSl) : (isBuy ? livePrice <= vw.virtualSl : livePrice >= vw.virtualSl);
             if (isSlHit) {
                 vw.slHit = true;
                 vw.status = "VIRTUAL_SL_HIT_WAITING_RECOVERY";
@@ -592,7 +592,7 @@ class MasterTrailingEngine {
             }
         } else {
             // Phase B: Price Recovery Back to Original Entry Price ($E$)
-            const isRecoveredToEntry = isBuy ? (livePrice >= vw.virtualEntry) : (livePrice <= vw.virtualEntry);
+            const isRecoveredToEntry = isOptionContract ? (livePrice >= vw.virtualEntry) : (isBuy ? livePrice >= vw.virtualEntry : livePrice <= vw.virtualEntry);
             if (isRecoveredToEntry) {
                 logger.logInfo(envName, "VIRTUAL_RECOVERY_DETECTED", `🔄 Price recovered back to Entry Price (₹${vw.virtualEntry}) after Virtual SL hit! Running Consensus Re-Check...`);
 
