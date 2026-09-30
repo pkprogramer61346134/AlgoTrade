@@ -272,10 +272,11 @@ class MasterTrailingEngine {
             try {
                 const optionType = signal.consensus === "BUY" ? "CE" : "PE";
                 const entrySpotPrice = Number(signal.entry || 0);
-                const availableBalance = await this.checkAccountBalance(environmentHandlers, envName);
+                const fetchedBalance = await this.checkAccountBalance(environmentHandlers, envName).catch(() => 0);
+                const availableBalance = (envName === "REAL_TRADE" && fetchedBalance > 0) ? fetchedBalance : Math.max(fetchedBalance, Number(cfg.paperVirtualBalance || 100000));
                 const maxBudget = availableBalance * ((cfg.maxBudgetPercent || 100) / 100);
-                const selectedStrikeInfo = await this.selectOptionStrike(environmentHandlers, entrySpotPrice, optionType, maxBudget, envName);
-                const entryPrice = Number(selectedStrikeInfo?.liveLtp || selectedStrikeInfo?.ltp || selectedStrikeInfo?.price || entrySpotPrice);
+                const selectedStrikeInfo = await this.selectOptionStrike(environmentHandlers, entrySpotPrice, optionType, maxBudget, envName).catch(() => null);
+                const entryPrice = Number(selectedStrikeInfo?.liveLtp || selectedStrikeInfo?.ltp || selectedStrikeInfo?.price || (entrySpotPrice > 500 ? 120 : entrySpotPrice));
                 const lotSize = Math.max(1, Number(selectedStrikeInfo?.lotSize || 65));
                 const levels = this.calculateRiskAndLevels(entryPrice, optionType, true, selectedStrikeInfo, signal, cfg, lotSize);
 
