@@ -135,10 +135,27 @@ class RealTradeEngine {
 
                 return { hasOpenPosition: true, position: masterSL.activePosition };
             } else {
+                // Dhan Terminal has ZERO open positions (Position Executed/Closed on Dhan)
                 const isRecentOrder = masterSL.isOrderInFlight || (Date.now() - (masterSL.lastOrderTimestamp || 0) < 30000);
-                if (!isRecentOrder) {
+                if (!isRecentOrder && masterSL.activePosition) {
+                    console.log(`✅ [DHAN POSITION SYNC] Dhan terminal has 0 open positions. Closing tracking for ${masterSL.activePosition.symbol || 'Position'}.`);
+                    
+                    const closedPos = {
+                        ...masterSL.activePosition,
+                        status: "CLOSED",
+                        exitPrice: masterSL.activePosition.liveLtp || masterSL.activePosition.entryPrice,
+                        exitReason: "DHAN_SUPER_ORDER_SL_OR_TARGET_HIT",
+                        realizedPnl: masterSL.activePosition.pnl || 0
+                    };
+                    masterSL.tradeHistory.push(closedPos);
+
                     masterSL.activePosition = null;
                     this.activeOptionContract = null;
+                    this.activeOptionStreamSecId = null;
+                } else if (!isRecentOrder) {
+                    masterSL.activePosition = null;
+                    this.activeOptionContract = null;
+                    this.activeOptionStreamSecId = null;
                 }
                 return { hasOpenPosition: false, position: null };
             }
@@ -533,6 +550,19 @@ class RealTradeEngine {
     }
 
     /**
+     * Periodic Dhan Broker Position Sync (Throttled to once every 3 seconds)
+     */
+    async syncPositionStatus() {
+        const now = Date.now();
+        if (!this.lastPosSyncTimestamp || (now - this.lastPosSyncTimestamp > 3000)) {
+            this.lastPosSyncTimestamp = now;
+            try {
+                await this.checkOpenPositions();
+            } catch (e) {}
+        }
+    }
+
+    /**
      * Process Live Candle / Price Tick via MasterSL Engine
      */
     async processTick(tick) {
@@ -541,6 +571,9 @@ class RealTradeEngine {
 
         try {
             this.isProcessingTick = true;
+            // Periodically check if Dhan terminal closed position via Super Order SL/Target leg
+            this.syncPositionStatus().catch(() => {});
+            
             const closedPos = await masterSL.processTick(tick, "REAL_TRADE");
             this.isProcessingTick = false;
             return closedPos;
@@ -555,6 +588,9 @@ class RealTradeEngine {
      * Get Complete State Payload for UI Rendering
      */
     getStatus() {
+        // Trigger non-blocking position sync for UI polling
+        this.syncPositionStatus().catch(() => {});
+
         const masterStatus = masterSL.getStatus();
         return {
             ...masterStatus,
