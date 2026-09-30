@@ -559,8 +559,6 @@ class MasterTrailingEngine {
         }
 
         const livePrice = Number(tick.liveLtp || tick.ltp || tick.price || tick.close);
-        const candleHigh = Number(tick.candleHigh || tick.high || livePrice);
-        const candleLow = Number(tick.candleLow || tick.low || livePrice);
 
         if (livePrice <= 0 || isNaN(livePrice)) return null;
 
@@ -577,8 +575,8 @@ class MasterTrailingEngine {
 
         // Phase A: Before Virtual SL is Hit
         if (!vw.slHit) {
-            // Direct Virtual Target Hit before Virtual SL Hit -> SKIP (No Stop Hunt occurred)
-            const isTargetHit = isBuy ? (candleHigh >= vw.virtualTr) : (candleLow <= vw.virtualTr);
+            // Direct Virtual Target Hit before Virtual SL Hit -> SKIP (evaluated on live LTP ticks)
+            const isTargetHit = isBuy ? (livePrice >= vw.virtualTr) : (livePrice <= vw.virtualTr);
             if (isTargetHit) {
                 logger.logInfo(envName, "VIRTUAL_TARGET_HIT_SKIPPED", `🟡 Direct Virtual Target (₹${vw.virtualTr}) hit without Virtual SL hit for ${vw.symbol}. Real trade skipped.`);
                 this.virtualWatch = null;
@@ -586,7 +584,7 @@ class MasterTrailingEngine {
             }
 
             // Virtual SL Hit (Stop Hunt Sweep Detected)
-            const isSlHit = isBuy ? (candleLow <= vw.virtualSl) : (candleHigh >= vw.virtualSl);
+            const isSlHit = isBuy ? (livePrice <= vw.virtualSl) : (livePrice >= vw.virtualSl);
             if (isSlHit) {
                 vw.slHit = true;
                 vw.status = "VIRTUAL_SL_HIT_WAITING_RECOVERY";
@@ -594,7 +592,7 @@ class MasterTrailingEngine {
             }
         } else {
             // Phase B: Price Recovery Back to Original Entry Price ($E$)
-            const isRecoveredToEntry = isBuy ? (candleHigh >= vw.virtualEntry) : (candleLow <= vw.virtualEntry);
+            const isRecoveredToEntry = isBuy ? (livePrice >= vw.virtualEntry) : (livePrice <= vw.virtualEntry);
             if (isRecoveredToEntry) {
                 logger.logInfo(envName, "VIRTUAL_RECOVERY_DETECTED", `🔄 Price recovered back to Entry Price (₹${vw.virtualEntry}) after Virtual SL hit! Running Consensus Re-Check...`);
 
