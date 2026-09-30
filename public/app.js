@@ -209,6 +209,9 @@ function renderRealDashboard(data, config = {}) {
     if (data.activePosition && data.activePosition.status === "OPEN") {
         activeSymbol.innerText = data.activePosition.symbol;
         activePnl.innerText = `PnL: ₹${data.activePosition.pnl || 0}`;
+    } else if (data.virtualWatch) {
+        activeSymbol.innerText = `⚡ ${data.virtualWatch.symbol || 'VIRTUAL_WATCH'}`;
+        activePnl.innerText = `Virtual SL: ₹${data.virtualWatch.virtualSl ? Number(data.virtualWatch.virtualSl).toFixed(2) : '--'}`;
     } else {
         activeSymbol.innerText = "NONE";
         activePnl.innerText = "PnL: ₹0.00";

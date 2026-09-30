@@ -102,9 +102,15 @@ async function runFiveMinuteEvaluation() {
 
         console.log(`🧠 [CONSENSUS RESULT] Consensus: ${consensusResult.consensus} | Strategy: ${consensusResult.strategyName || 'None'} | Entry: ₹${consensusResult.entry || 0}`);
 
-        // Process Signal in Real Trading Engine if enabled
-        if (cfg.realTradeEnabled && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
+        // Process Signal in Trading Engine whenever BUY or SELL signal occurs
+        if (consensusResult && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
             await realTradeEngine.processSignal(consensusResult, scrip);
+        }
+
+        // Feed evaluated candle tick to masterSL so Virtual Watch tick processing evaluates SL/Target hits
+        const evalCandle = consensusResult?.evaluatedCandle || consensusResult?.lastCandle || consensusResult?.candle;
+        if (evalCandle) {
+            await masterSL.processTick(evalCandle, "PAPER");
         }
     } catch (err) {
         console.error("❌ [CYCLE ERROR]:", err.message);
