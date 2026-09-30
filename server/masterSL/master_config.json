@@ -5,6 +5,8 @@
   "targetMode": "FIXED",
   "useFixedRupeeSL": true,
   "enableAutoTrailing": false,
+  "enableVirtualSignalFilter": true,
+  "virtualMaxWatchMinutes": 20,
   "maxTradesPerDay": 3,
   "autoSquareOffTime": "15:10:00",
   "breathingRoomPoints": 0.5,

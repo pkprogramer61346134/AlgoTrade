@@ -19,6 +19,7 @@ const logger = require('./logger');
 class MasterTrailingEngine {
     constructor() {
         this.activePosition = null;
+        this.virtualWatch = null;
         this.tradeHistory = [];
         this.isOrderInFlight = false;
         this.isModifyInFlight = false;
@@ -249,12 +250,59 @@ class MasterTrailingEngine {
 
     /**
      * Process Trade Signal & Execute Order Flow via Modular Step Functions
+     * @param {Object} signal
+     * @param {Object} environmentHandlers
+     * @param {string} [envName="PAPER"]
+     * @param {boolean} [forceReal=false] - If true, bypasses virtual watch to execute real order directly
      */
-    async processSignal(signal, environmentHandlers, envName = "PAPER") {
+    async processSignal(signal, environmentHandlers, envName = "PAPER", forceReal = false) {
         if (!signal || !environmentHandlers) return null;
         if (signal.consensus !== "BUY" && signal.consensus !== "SELL") return null;
 
         const cfg = masterConfig.getConfig();
+
+        // 0. VIRTUAL SIGNAL FILTER GUARD
+        if (cfg.enableVirtualSignalFilter && !forceReal) {
+            if (this.activePosition || this.isOrderInFlight) return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_IN_FLIGHT" };
+            if (this.virtualWatch) {
+                logger.logInfo(envName, "VIRTUAL_WATCH_BUSY", `Virtual watch already active for ${this.virtualWatch.symbol}. Skipping duplicate signal.`);
+                return { status: "IGNORED", reason: "VIRTUAL_WATCH_ALREADY_ACTIVE" };
+            }
+
+            try {
+                const optionType = signal.consensus === "BUY" ? "CE" : "PE";
+                const entrySpotPrice = Number(signal.entry || 0);
+                const availableBalance = await this.checkAccountBalance(environmentHandlers, envName);
+                const maxBudget = availableBalance * ((cfg.maxBudgetPercent || 100) / 100);
+                const selectedStrikeInfo = await this.selectOptionStrike(environmentHandlers, entrySpotPrice, optionType, maxBudget, envName);
+                const entryPrice = Number(selectedStrikeInfo?.liveLtp || selectedStrikeInfo?.ltp || selectedStrikeInfo?.price || entrySpotPrice);
+                const lotSize = Math.max(1, Number(selectedStrikeInfo?.lotSize || 65));
+                const levels = this.calculateRiskAndLevels(entryPrice, optionType, true, selectedStrikeInfo, signal, cfg, lotSize);
+
+                this.virtualWatch = {
+                    signal,
+                    environmentHandlers,
+                    envName,
+                    optionType,
+                    selectedStrikeInfo,
+                    symbol: selectedStrikeInfo?.symbol || `NIFTY_${optionType}`,
+                    virtualEntry: entryPrice,
+                    virtualSl: levels.initialSl,
+                    virtualTr: levels.tr1,
+                    slHit: false,
+                    startTime: Date.now(),
+                    startDate: signal.date || new Date().toLocaleDateString("en-CA"),
+                    startTimeStr: signal.time || new Date().toLocaleTimeString("en-IN"),
+                    status: "WATCHING_VIRTUAL_SL"
+                };
+
+                logger.logInfo(envName, "VIRTUAL_WATCH_STARTED", `⚡ [VIRTUAL SIGNAL WATCH] Started watch for ${this.virtualWatch.symbol} | Entry: ₹${entryPrice} | Virtual SL: ₹${levels.initialSl} (₹300 Loss) | Virtual Target: ₹${levels.tr1} (₹1000 Profit)`);
+                return { status: "VIRTUAL_WATCHING", virtualWatch: this.virtualWatch };
+            } catch (vErr) {
+                logger.logError(envName, "VIRTUAL_WATCH_INIT_ERROR", vErr);
+                return null;
+            }
+        }
 
         // 1. STEP 1: Check Active Position & Cooldown Guards
         const posCheck = this.checkActivePosition();
@@ -493,9 +541,94 @@ class MasterTrailingEngine {
     }
 
     /**
+     * Process Price/Candle Tick for Active Virtual Watch Position
+     */
+    async processVirtualWatchTick(tick, envName = "PAPER") {
+        if (!this.virtualWatch || this.activePosition) return null;
+        const vw = this.virtualWatch;
+        const cfg = masterConfig.getConfig();
+        const now = Date.now();
+        const maxWatchMs = (cfg.virtualMaxWatchMinutes || 20) * 60 * 1000;
+
+        // Timeout Guard
+        if (now - vw.startTime > maxWatchMs) {
+            logger.logInfo(envName, "VIRTUAL_WATCH_TIMEOUT", `⏳ Virtual watch expired after ${cfg.virtualMaxWatchMinutes || 20} mins for ${vw.symbol}. Real trade skipped.`);
+            this.virtualWatch = null;
+            return null;
+        }
+
+        const livePrice = Number(tick.liveLtp || tick.ltp || tick.price || tick.close);
+        const candleHigh = Number(tick.candleHigh || tick.high || livePrice);
+        const candleLow = Number(tick.candleLow || tick.low || livePrice);
+
+        if (livePrice <= 0 || isNaN(livePrice)) return null;
+
+        const isBuy = vw.optionType === "CE" || vw.signal?.consensus === "BUY";
+
+        // Phase A: Virtual SL Check
+        if (!vw.slHit) {
+            // Direct Virtual Target Hit before Virtual SL Hit -> SKIP
+            const isTargetHit = isBuy ? (candleHigh >= vw.virtualTr) : (candleLow <= vw.virtualTr);
+            if (isTargetHit) {
+                logger.logInfo(envName, "VIRTUAL_TARGET_HIT_SKIPPED", `🟡 Direct Virtual Target (₹${vw.virtualTr}) hit without Virtual SL hit for ${vw.symbol}. Real trade skipped.`);
+                this.virtualWatch = null;
+                return null;
+            }
+
+            // Virtual SL Hit (Stop Hunt)
+            const isSlHit = isBuy ? (candleLow <= vw.virtualSl) : (candleHigh >= vw.virtualSl);
+            if (isSlHit) {
+                vw.slHit = true;
+                vw.status = "VIRTUAL_SL_HIT_WAITING_RECOVERY";
+                logger.logInfo(envName, "VIRTUAL_SL_HIT", `⚡ [STOP HUNT DETECTED] Virtual SL (₹${vw.virtualSl}) hit for ${vw.symbol}! Waiting for price recovery back to Entry Price (₹${vw.virtualEntry})...`);
+            }
+        } else {
+            // Phase B: Price Recovery Back to Entry Price ($E$)
+            const isRecoveredToEntry = isBuy ? (candleHigh >= vw.virtualEntry) : (candleLow <= vw.virtualEntry);
+            if (isRecoveredToEntry) {
+                logger.logInfo(envName, "VIRTUAL_RECOVERY_DETECTED", `🔄 Price recovered back to Entry Price (₹${vw.virtualEntry}) after Virtual SL hit! Running Consensus Re-Check...`);
+
+                const { evaluateConsensusEngine } = require('../../utility/usedfull/Engines/consensusEngine');
+                const nowObj = new Date();
+                const currentDateStr = nowObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+                const currentTimeStr = nowObj.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+
+                const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", interval: "5" };
+                const recheckResult = await evaluateConsensusEngine({
+                    securityId: String(scrip.securityId),
+                    exchangeSegment: scrip.exchangeSegment,
+                    interval: String(scrip.interval || "5"),
+                    date: currentDateStr,
+                    time: currentTimeStr
+                });
+
+                if (recheckResult && recheckResult.consensus === vw.signal.consensus) {
+                    logger.logInfo(envName, "RECHECK_CONFIRMED", `🚀 [DOUBLE CONFIRMATION PASSED] Consensus STILL VALID (${recheckResult.consensus})! Placing REAL Broker Order for ${vw.symbol}...`);
+                    
+                    const savedHandlers = vw.environmentHandlers;
+                    const savedSignal = recheckResult;
+                    this.virtualWatch = null;
+
+                    // Execute REAL Order with forceReal = true
+                    return await this.processSignal(savedSignal, savedHandlers, envName, true);
+                } else {
+                    logger.logInfo(envName, "RECHECK_FAILED", `🛑 [DOUBLE CONFIRMATION FAILED] Recovery occurred but Consensus Signal is no longer valid (${recheckResult?.consensus || 'NONE'}). Real trade skipped.`);
+                    this.virtualWatch = null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Process Price/Candle Tick: Evaluates Trailing SL Rules & Exits
      */
     async processTick(tick, envName = "PAPER") {
+        // If Virtual Watch active and no real position, process virtual watch tick
+        if (!this.activePosition && this.virtualWatch) {
+            return await this.processVirtualWatchTick(tick, envName);
+        }
+
         if (!this.activePosition || (this.activePosition.status !== "OPEN" && this.activePosition.status !== "EXIT_FAILED") || !tick || this.isCloseInFlight) return null;
 
         const pos = this.activePosition;
@@ -623,6 +756,7 @@ class MasterTrailingEngine {
 
         return {
             activePosition: this.activePosition,
+            virtualWatch: this.virtualWatch,
             history: this.tradeHistory,
             totalTrades: this.tradeHistory.length,
             totalPnl: Number(this.tradeHistory.reduce((acc, t) => acc + (t.realizedPnl || 0), 0).toFixed(2)),
