@@ -141,6 +141,10 @@ class DhanOrders {
         return await this.request("/orders", { method: "GET" });
     }
 
+    async getOrders() {
+        return await this.getOrderList();
+    }
+
     async getOrderById(orderId) {
         return await this.request(`/orders/${orderId}`, { method: "GET" });
     }
