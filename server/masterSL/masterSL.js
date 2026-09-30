@@ -261,6 +261,12 @@ class MasterTrailingEngine {
 
         const cfg = masterConfig.getConfig();
 
+        // 0. AFTER TRADING HOURS GUARD (Auto Square-Off Limit Guard)
+        if (this.isAfterTradingHours(signal.time)) {
+            logger.logInfo(envName, "SIGNAL_IGNORED", `Trading hours closed (past ${cfg.autoSquareOffTime || "15:10:00"}). Ignoring signal.`);
+            return { status: "IGNORED", reason: "AFTER_TRADING_HOURS" };
+        }
+
         // 0. VIRTUAL SIGNAL FILTER GUARD
         if (cfg.enableVirtualSignalFilter && !forceReal) {
             if (this.activePosition || this.isOrderInFlight) return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_IN_FLIGHT" };
@@ -554,6 +560,13 @@ class MasterTrailingEngine {
         // 1. Timeout Guard (20 Minutes Max Watch Window)
         if (now - vw.startTime > maxWatchMs) {
             logger.logInfo(envName, "VIRTUAL_WATCH_TIMEOUT", `⏳ Virtual watch expired after ${cfg.virtualMaxWatchMinutes || 20} mins for ${vw.symbol}. Real trade skipped.`);
+            this.virtualWatch = null;
+            return null;
+        }
+
+        // 2. Trading Hours Guard (Auto Square-Off Limit Guard)
+        if (this.isAfterTradingHours()) {
+            logger.logInfo(envName, "VIRTUAL_WATCH_CLOSED", `⏳ Market trading hours closed (past ${cfg.autoSquareOffTime || "15:10:00"}) for ${vw.symbol}. Virtual watch terminated.`);
             this.virtualWatch = null;
             return null;
         }
