@@ -11,7 +11,7 @@
  */
 
 const realConfig = require('./config');
-const masterConfig = require('../masterSL/master_config');
+const masterConfig = require('../masterSL/config');
 const masterSL = require('../masterSL/masterSL');
 
 // Strict allowed modules stack only
