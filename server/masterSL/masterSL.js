@@ -564,6 +564,9 @@ class MasterTrailingEngine {
 
         if (livePrice <= 0 || isNaN(livePrice)) return null;
 
+        vw.liveLtp = livePrice;
+        vw.lastTickTime = tick.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+
         const isBuy = vw.optionType === "CE" || vw.signal?.consensus === "BUY";
 
         // Phase A: Before Virtual SL is Hit
