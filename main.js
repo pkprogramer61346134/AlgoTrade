@@ -11,6 +11,7 @@
  */
 
 const mainConfig = require('./server/config_manager');
+const masterSL = require('./server/masterSL/masterSL');
 const realTradeEngine = require('./server/realtread/realtread');
 const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { createUIServer } = require('./server/ui_server');
