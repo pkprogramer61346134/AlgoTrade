@@ -564,6 +564,12 @@ class MasterTrailingEngine {
 
         if (livePrice <= 0 || isNaN(livePrice)) return null;
 
+        // Spot Index Price vs Option Contract LTP Guard:
+        // If virtual entry is an option price (e.g. < ₹2000) and tick is Index Spot price (e.g. > ₹5000), ignore index tick for option SL/TR
+        if (vw.virtualEntry > 0 && vw.virtualEntry < 2000 && livePrice > 5000) {
+            return null;
+        }
+
         vw.liveLtp = livePrice;
         vw.lastTickTime = tick.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
 

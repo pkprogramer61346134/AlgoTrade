@@ -364,11 +364,18 @@ class RealTradeEngine {
             qty: position.qty
         }, (liveTick) => {
             this.latestOptionTick = liveTick;
+            const optLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || position.entryPrice);
+
             if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
-                masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || position.entryPrice);
+                masterSL.activePosition.liveLtp = optLtp;
                 masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
                 masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
             }
+
+            if (masterSL.virtualWatch) {
+                masterSL.virtualWatch.liveLtp = optLtp;
+            }
+
             this.processTick(liveTick);
         });
     }
@@ -543,6 +550,20 @@ class RealTradeEngine {
                 // STEP 3, 4, 5: Select Strike, Calculate SL, Execute Broker Order / Virtual Watch
                 const envName = isRealEnabled ? "REAL_TRADE" : "PAPER";
                 const orderRes = await masterSL.processSignal(signal, handlers, envName);
+
+                if (orderRes && orderRes.status === "VIRTUAL_WATCHING" && orderRes.virtualWatch) {
+                    const vw = orderRes.virtualWatch;
+                    const strikeInfo = vw.selectedStrikeInfo;
+                    if (strikeInfo && strikeInfo.securityId) {
+                        this.trackActiveOption({
+                            securityId: strikeInfo.securityId,
+                            symbol: vw.symbol,
+                            entryPrice: vw.virtualEntry,
+                            qty: strikeInfo.lotSize || 65
+                        });
+                    }
+                    return orderRes;
+                }
 
                 if (orderRes && orderRes.status === "EXECUTED" && orderRes.position) {
                     // STEP 7: Start Live Option Tracking & Trailing SL if Real Trading is enabled
