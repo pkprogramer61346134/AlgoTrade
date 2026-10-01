@@ -156,7 +156,7 @@ function scheduleClockAlignedFiveMinLoop(intervalMins = 5) {
     runCycleAndScheduleNext();
 }
 
-const DhanLivePrice = require('./utility/dhan-live-price');
+const { DhanLivePrice } = require('./utility/dhan-live-price');
 let livePriceTracker = null;
 
 function startLiveTickStream() {
