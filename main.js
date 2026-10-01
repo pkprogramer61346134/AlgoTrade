@@ -12,6 +12,7 @@
 
 const mainConfig = require('./server/config_manager');
 const realTradeEngine = require('./server/realtread/realtread');
+const reversalFilter = require('./server/reversalTest/reversal');
 const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { createUIServer } = require('./server/ui_server');
 const { ensureValidDhanToken } = require('./utility/token/autoTokenRefresh');
@@ -46,6 +47,7 @@ function getLiveMarketData() {
         livePrice: latestLivePrice,
         tickTime: latestTickTime,
         consensus: latestConsensusResult,
+        reversalStatus: reversalFilter.getStatus(),
         candle: latestConsensusResult?.evaluatedCandle || latestConsensusResult?.candle || null,
         config: mainConfig.getConfig(),
         realStatus: realTradeEngine.getStatus()
@@ -102,9 +104,14 @@ async function runFiveMinuteEvaluation() {
 
         console.log(`🧠 [CONSENSUS RESULT] Consensus: ${consensusResult.consensus} | Strategy: ${consensusResult.strategyName || 'None'} | Entry: ₹${consensusResult.entry || 0}`);
 
-        // Process Signal in Real Trading Engine if enabled
-        if (cfg.realTradeEnabled && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
-            await realTradeEngine.processSignal(consensusResult, scrip);
+        // Filter signal through Reversal Liquidity Sweep & Retest Filter
+        const lastCandle = consensusResult?.lastCandle || consensusResult?.evaluatedCandle || null;
+        const confirmedSignal = reversalFilter.evaluateSignal(consensusResult, lastCandle);
+
+        // Process Confirmed Signal in Real Trading Engine if enabled
+        if (cfg.realTradeEnabled && confirmedSignal && (confirmedSignal.consensus === "BUY" || confirmedSignal.consensus === "SELL")) {
+            console.log(`🚀 [REVERSAL APPROVED] Forwarding confirmed ${confirmedSignal.consensus} signal to Real Trading Engine...`);
+            await realTradeEngine.processSignal(confirmedSignal, scrip);
         }
     } catch (err) {
         console.error("❌ [CYCLE ERROR]:", err.message);
