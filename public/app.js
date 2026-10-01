@@ -206,6 +206,8 @@ function renderRealDashboard(data, config = {}) {
         const watch = rStat.activeWatch;
         const recent = (rStat.recentWatches || []).slice(-1)[0];
 
+        const liveNifty = data.livePrice ? `₹${Number(data.livePrice).toFixed(2)}` : (watch?.livePrice ? `₹${watch.livePrice}` : 'Connecting Live Feed...');
+
         if (watch && watch.status === "ACTIVE_WATCH") {
             const isStage1 = watch.stage === 'STAGE_1_WATCH_REVERSAL';
             const stageBadge = watch.candlesWatched <= 1 
@@ -222,7 +224,6 @@ function renderRealDashboard(data, config = {}) {
                     : `Sweep Detected @ ₹${watch.sweepPrice}. Waiting Close ${watch.type === 'BUY' ? '>=' : '<='} ₹${watch.entryPrice}`
             );
 
-            const liveNifty = data.livePrice ? `₹${Number(data.livePrice).toFixed(2)}` : (watch.livePrice ? `₹${watch.livePrice}` : 'Connecting...');
             const distanceTxt = watch.driftDistancePoints !== undefined 
                 ? `${watch.driftDistancePoints > 0 ? '+' : ''}${watch.driftDistancePoints} Pts` 
                 : '0 Pts';
@@ -230,15 +231,15 @@ function renderRealDashboard(data, config = {}) {
             revContainer.innerHTML = `
                 <div class="reversal-card active-watch-border">
                     <div class="reversal-header">
-                        <span class="reversal-title">🔒 Reversal Liquidity Sweep Filter (LIVE TICK TRACKING ONLINE)</span>
+                        <span class="reversal-title">🔒 Reversal Liquidity Sweep Filter (ACTIVE WATCH LOCKED - LIVE TRACKING)</span>
                         <span class="badge-warning">${stageBadge}</span>
                     </div>
                     <div class="reversal-grid">
                         <div class="reversal-item"><span class="rev-label">Active Signal</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type} @ ₹${watch.entryPrice}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Live Nifty Price</span><span class="rev-val highlight">${liveNifty}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
                         <div class="reversal-item"><span class="rev-label">Live Distance</span><span class="rev-val ${watch.driftDistancePoints > 0 ? 'text-success' : 'text-danger'}">${distanceTxt}</span></div>
                         <div class="reversal-item"><span class="rev-label">Current Stage</span><span class="rev-val text-info">${watch.stage}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val highlight">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching...'}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val highlight">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching Sweep...'}</span></div>
                         <div class="reversal-item"><span class="rev-label">Watch Progress</span><span class="rev-val">${watch.candlesWatched} / ${rStat.maxWatchCandles || 6} Candles (${watch.candlesWatched * 5}m / 30m Max)</span></div>
                         <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastEvent}</span></div>
                     </div>
@@ -249,14 +250,15 @@ function renderRealDashboard(data, config = {}) {
             revContainer.innerHTML = `
                 <div class="reversal-card">
                     <div class="reversal-header">
-                        <span class="reversal-title">👁️ Reversal Liquidity Sweep Filter (SYSTEM READY)</span>
-                        <span class="badge-success">FILTER ACTIVE & ONLINE</span>
+                        <span class="reversal-title">⚡ Reversal Liquidity Sweep Filter (LIVE TICK MONITOR ONLINE)</span>
+                        <span class="badge-success">LIVE TICK FEED STREAMING</span>
                     </div>
                     <div class="reversal-grid">
-                        <div class="reversal-item"><span class="rev-label">Rule 1: Signal Candle Skip</span><span class="rev-val text-success">Enabled (Starts on Candle 2+)</span></div>
-                        <div class="reversal-item"><span class="rev-label">Rule 2: Runaway Drift Limit</span><span class="rev-val text-info">${rStat.maxDriftPoints || 40} Points Max Drift</span></div>
-                        <div class="reversal-item"><span class="rev-label">Rule 3: Timeout Limit</span><span class="rev-val">${rStat.maxWatchCandles || 6} Candles (30 Minutes)</span></div>
-                        <div class="reversal-item"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastStatusText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Rule 1: Candle Skip</span><span class="rev-val text-success">Enabled (Candle 2+)</span></div>
+                        <div class="reversal-item"><span class="rev-label">Rule 2: Drift Limit</span><span class="rev-val text-info">${rStat.maxDriftPoints || 40} Pts Max Limit</span></div>
+                        <div class="reversal-item"><span class="rev-label">Rule 3: Timeout</span><span class="rev-val">${rStat.maxWatchCandles || 6} Candles (30m Max)</span></div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastStatusText}</span></div>
                     </div>
                 </div>
             `;
