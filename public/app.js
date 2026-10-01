@@ -206,10 +206,56 @@ function renderRealDashboard(data, config = {}) {
         const watch = rStat.activeWatch;
         const recent = (rStat.recentWatches || []).slice(-1)[0];
 
-        const liveNifty = data.livePrice ? `₹${Number(data.livePrice).toFixed(2)}` : (watch?.livePrice ? `₹${watch.livePrice}` : 'Connecting Live Feed...');
+        const liveNiftyVal = Number(data.livePrice || watch?.livePrice || data.consensus?.lastCandle?.close || data.candle?.close || 0);
+        const liveNifty = liveNiftyVal > 0 ? `₹${liveNiftyVal.toFixed(2)}` : 'Connecting Live Feed...';
 
         if (watch && watch.status === "ACTIVE_WATCH") {
             const isStage1 = watch.stage === 'STAGE_1_WATCH_REVERSAL';
+            const entry = Number(watch.entryPrice || 0);
+            const liveP = liveNiftyVal || entry;
+            
+            // Calculate "Kitna Chahiye Target" & "Kitna Bacha Points"
+            let targetRequiredText = '';
+            let remainingPtsText = '';
+
+            if (watch.type === 'BUY') {
+                if (isStage1) {
+                    targetRequiredText = `Sweep Dip Below ₹${entry.toFixed(2)}`;
+                    if (liveP >= entry) {
+                        const ptsNeeded = (liveP - entry).toFixed(2);
+                        remainingPtsText = `⏳ ${ptsNeeded} Pts DOWN needed for Sweep`;
+                    } else {
+                        remainingPtsText = `🎯 Dip Achieved! Low: ₹${(watch.sweepPrice || liveP).toFixed(2)}`;
+                    }
+                } else {
+                    targetRequiredText = `Retest Close >= ₹${entry.toFixed(2)}`;
+                    if (liveP < entry) {
+                        const ptsNeeded = (entry - liveP).toFixed(2);
+                        remainingPtsText = `🎯 ${ptsNeeded} Pts UP needed for Retest Close`;
+                    } else {
+                        remainingPtsText = `✅ Retest Level Met! (Close >= ₹${entry.toFixed(2)})`;
+                    }
+                }
+            } else if (watch.type === 'SELL') {
+                if (isStage1) {
+                    targetRequiredText = `Sweep Rally Above ₹${entry.toFixed(2)}`;
+                    if (liveP <= entry) {
+                        const ptsNeeded = (entry - liveP).toFixed(2);
+                        remainingPtsText = `⏳ ${ptsNeeded} Pts UP needed for Sweep`;
+                    } else {
+                        remainingPtsText = `🎯 Rally Achieved! High: ₹${(watch.sweepPrice || liveP).toFixed(2)}`;
+                    }
+                } else {
+                    targetRequiredText = `Retest Close <= ₹${entry.toFixed(2)}`;
+                    if (liveP > entry) {
+                        const ptsNeeded = (liveP - entry).toFixed(2);
+                        remainingPtsText = `🎯 ${ptsNeeded} Pts DOWN needed for Retest Close`;
+                    } else {
+                        remainingPtsText = `✅ Retest Level Met! (Close <= ₹${entry.toFixed(2)})`;
+                    }
+                }
+            }
+
             const stageBadge = watch.candlesWatched <= 1 
                 ? '⏳ CANDLE 1 SKIPPED (Sweep Check Starts Candle 2+)'
                 : isStage1 
@@ -224,10 +270,6 @@ function renderRealDashboard(data, config = {}) {
                     : `Sweep Detected @ ₹${watch.sweepPrice}. Waiting Close ${watch.type === 'BUY' ? '>=' : '<='} ₹${watch.entryPrice}`
             );
 
-            const distanceTxt = watch.driftDistancePoints !== undefined 
-                ? `${watch.driftDistancePoints > 0 ? '+' : ''}${watch.driftDistancePoints} Pts` 
-                : '0 Pts';
-
             revContainer.innerHTML = `
                 <div class="reversal-card active-watch-border">
                     <div class="reversal-header">
@@ -237,9 +279,9 @@ function renderRealDashboard(data, config = {}) {
                     <div class="reversal-grid">
                         <div class="reversal-item"><span class="rev-label">Active Signal</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type} @ ₹${watch.entryPrice}</span></div>
                         <div class="reversal-item"><span class="rev-label">Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Live Distance</span><span class="rev-val ${watch.driftDistancePoints > 0 ? 'text-success' : 'text-danger'}">${distanceTxt}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Current Stage</span><span class="rev-val text-info">${watch.stage}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val highlight">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching Sweep...'}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Kitna Chahiye Target</span><span class="rev-val text-info">${targetRequiredText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Kitna Bacha Pts</span><span class="rev-val highlight">${remainingPtsText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val text-warning">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching...'}</span></div>
                         <div class="reversal-item"><span class="rev-label">Watch Progress</span><span class="rev-val">${watch.candlesWatched} / ${rStat.maxWatchCandles || 6} Candles (${watch.candlesWatched * 5}m / 30m Max)</span></div>
                         <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastEvent}</span></div>
                     </div>

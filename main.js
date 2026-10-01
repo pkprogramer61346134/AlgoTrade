@@ -44,13 +44,16 @@ function startUIServer(port = 3000) {
 }
 
 function getLiveMarketData() {
+    const mainCandle = latestConsensusResult?.evaluatedCandle || latestConsensusResult?.candle || latestConsensusResult?.lastCandle || null;
+    const effectiveLivePrice = latestLivePrice > 0 ? latestLivePrice : Number(mainCandle?.close || 0);
+
     return {
-        livePrice: latestLivePrice,
+        livePrice: effectiveLivePrice,
         tickTime: latestTickTime,
         consensus: latestConsensusResult,
         reversalStatus: reversalFilter.getStatus(),
         masterSLStatus: masterSL.getStatus(),
-        candle: latestConsensusResult?.evaluatedCandle || latestConsensusResult?.candle || null,
+        candle: mainCandle,
         config: mainConfig.getConfig(),
         realStatus: realTradeEngine.getStatus()
     };
