@@ -149,43 +149,20 @@ class MasterTrailingEngine {
     // STEP 4: CALCULATE RISK AND TARGET LEVELS (TR1 - TR5)
     // =========================================================================
     calculateRiskAndLevels(entryPrice, optionType, isOptionTrade, selectedStrikeInfo, signal, cfg, lotSize) {
-        let initialSl;
-        let riskPoints;
+        const maxLossRupees = Number(cfg.maxLossPerTrade || 300);
+        const riskPoints = Number((maxLossRupees / lotSize).toFixed(2));
 
-        if (selectedStrikeInfo?.optionSL && Number(selectedStrikeInfo.optionSL) > 0) {
-            initialSl = Number(selectedStrikeInfo.optionSL);
-            riskPoints = Math.max(0.1, Number(Math.abs(entryPrice - initialSl).toFixed(2)));
-        } else if (cfg.maxLossPerTrade && Number(cfg.maxLossPerTrade) > 0) {
-            const maxLossRupees = Number(cfg.maxLossPerTrade);
-            riskPoints = Number((maxLossRupees / lotSize).toFixed(2));
-            initialSl = isOptionTrade ? Number((entryPrice - riskPoints).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - riskPoints).toFixed(2)) : Number((entryPrice + riskPoints).toFixed(2)));
-        } else {
-            initialSl = Number(signal.sl || (isOptionTrade ? entryPrice - 25 : (optionType === "CE" ? entryPrice - 25 : entryPrice + 25)));
-            riskPoints = Math.abs(entryPrice - initialSl);
-        }
+        const initialSl = isOptionTrade || optionType === "CE" 
+            ? Number((entryPrice - riskPoints).toFixed(2)) 
+            : Number((entryPrice + riskPoints).toFixed(2));
 
-        if (isNaN(initialSl) || initialSl <= 0) {
-            initialSl = isOptionTrade ? Number((entryPrice - 25).toFixed(2)) : (optionType === "CE" ? Number((entryPrice - 25).toFixed(2)) : Number((entryPrice + 25).toFixed(2)));
-            riskPoints = Math.abs(entryPrice - initialSl);
-        }
+        // Big Target Price (₹100,000 profit target) so fixed target is NEVER hit, letting Dynamic Trailing SL capture maximum trend
+        const bigTargetPoints = Number((100000 / lotSize).toFixed(2));
+        const targetPrice = isOptionTrade || optionType === "CE" 
+            ? Number((entryPrice + bigTargetPoints).toFixed(2)) 
+            : Number((entryPrice - bigTargetPoints).toFixed(2));
 
-        let tr1, tr2, tr3, tr4, tr5;
-
-        if (isOptionTrade || optionType === "CE") {
-            tr1 = Number((entryPrice + riskPoints).toFixed(2));
-            tr2 = Number((entryPrice + (riskPoints * 2)).toFixed(2));
-            tr3 = Number((entryPrice + (riskPoints * 3)).toFixed(2));
-            tr4 = Number((entryPrice + (riskPoints * 4)).toFixed(2));
-            tr5 = Number((entryPrice + (riskPoints * 5)).toFixed(2));
-        } else {
-            tr1 = Number((entryPrice - riskPoints).toFixed(2));
-            tr2 = Number((entryPrice - (riskPoints * 2)).toFixed(2));
-            tr3 = Number((entryPrice - (riskPoints * 3)).toFixed(2));
-            tr4 = Number((entryPrice - (riskPoints * 4)).toFixed(2));
-            tr5 = Number((entryPrice - (riskPoints * 5)).toFixed(2));
-        }
-
-        return { initialSl, riskPoints, tr1, tr2, tr3, tr4, tr5 };
+        return { initialSl, riskPoints, targetPrice };
     }
 
     // =========================================================================
@@ -308,15 +285,8 @@ class MasterTrailingEngine {
             // 4. STEP 4: Risk & Targets Calculation
             const levels = this.calculateRiskAndLevels(entryPrice, optionType, isOptionTrade, selectedStrikeInfo, signal, cfg, lotSize);
 
-            const mode = String(cfg.targetMode || "TRAILING").toUpperCase();
-            let targetPrice = levels.tr5;
-            let targetLabel = "TR5 (1:5)";
-
-            if (mode.includes("1:1")) { targetPrice = levels.tr1; targetLabel = "TR1 (1:1)"; }
-            else if (mode.includes("1:2")) { targetPrice = levels.tr2; targetLabel = "TR2 (1:2)"; }
-            else if (mode.includes("1:3")) { targetPrice = levels.tr3; targetLabel = "TR3 (1:3)"; }
-            else if (mode.includes("1:4")) { targetPrice = levels.tr4; targetLabel = "TR4 (1:4)"; }
-            else if (mode.includes("1:5")) { targetPrice = levels.tr5; targetLabel = "TR5 (1:5)"; }
+            const targetPrice = levels.targetPrice;
+            const targetLabel = "DYNAMIC_RUPEE_TRAILING";
 
             const orderPayload = {
                 tradeId: "MASTER_SL_" + Date.now() + "_" + (this.tradeHistory.length + 1),
@@ -524,84 +494,46 @@ class MasterTrailingEngine {
             exitReason = "AUTO_TIME_EXIT_3_10_PM";
         }
 
-        const mode = String(pos.targetMode || cfg.targetMode || "TRAILING").toUpperCase();
-        const isTrailingEnabled = !mode.includes("FIXED") && cfg.disableTrailing !== true && cfg.enableAutoTrailing !== false;
         const isOptionBuying = Boolean(pos.isOptionTrade) || pos.optionType === "CE";
 
-        if (!isTrailingEnabled) {
-            // FIXED TARGET MODE
+        if (!exitTriggered) {
+            // Check Initial / Trailed Stop Loss Hit
             if (isOptionBuying) {
-                if (currentHigh >= pos.targetPrice) {
-                    exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
-                } else if (currentLow <= pos.initialSl) {
-                    exitTriggered = true; exitPrice = pos.initialSl; exitReason = "INITIAL_SL_HIT";
+                if (currentLow <= pos.currentSl) {
+                    exitTriggered = true;
+                    exitPrice = pos.currentSl;
+                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
                 }
             } else {
-                if (currentLow <= pos.targetPrice) {
-                    exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
-                } else if (currentHigh >= pos.initialSl) {
-                    exitTriggered = true; exitPrice = pos.initialSl; exitReason = "INITIAL_SL_HIT";
+                if (currentHigh >= pos.currentSl) {
+                    exitTriggered = true;
+                    exitPrice = pos.currentSl;
+                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
                 }
             }
-        } else {
-            // DYNAMIC 1-R LAG TRAILING SL MODE
-            let newSl = pos.currentSl;
-            let newStage = pos.trailingStage;
+        }
 
-            if (isOptionBuying) {
-                if (currentHigh >= lvls.tr1 && cfg.autoTrailOnTR1 !== false) {
-                    if (pos.entryPrice > newSl) { newSl = pos.entryPrice; newStage = "TRAILED_COST_TO_COST"; }
-                }
-                if (currentHigh >= lvls.tr2 && cfg.autoTrailOnTR2 !== false) {
-                    if (lvls.tr1 > newSl) { newSl = lvls.tr1; newStage = "TRAILED_TR1 (LOCKED)"; }
-                }
-                if (currentHigh >= lvls.tr3 && cfg.autoTrailOnTR3 !== false) {
-                    if (lvls.tr2 > newSl) { newSl = lvls.tr2; newStage = "TRAILED_TR2"; }
-                }
-                if (currentHigh >= lvls.tr4 && cfg.autoTrailOnTR4 !== false) {
-                    if (lvls.tr3 > newSl) { newSl = lvls.tr3; newStage = "TRAILED_TR3"; }
-                }
-                if (currentHigh >= lvls.tr5 && cfg.autoTrailOnTR5 !== false) {
-                    if (lvls.tr4 > newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
-                }
+        // DYNAMIC RUPEE PROFIT TRAILING SL JUMP ENGINE
+        if (!exitTriggered && cfg.enableAutoTrailing !== false) {
+            const firstTrigger = Number(cfg.firstProfitTrigger || 1000); // ₹1000
+            const stepProfit = Number(cfg.trailStepProfit || 500);       // ₹500
+            const lockBuffer = Number(cfg.trailLockBuffer || 100);       // ₹100
+            const qty = Number(pos.qty || pos.lotSize || 65);
 
-                if (newSl !== pos.currentSl) {
-                    await this.modifyTrailingSL(newSl, newStage, envName);
-                }
+            const pnlDiff = isOptionBuying ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice);
+            const currentProfitRupees = pnlDiff * qty;
 
-                if (currentHigh >= pos.targetPrice) {
-                    exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
-                } else if (currentLow <= pos.currentSl) {
-                    exitTriggered = true; exitPrice = pos.currentSl;
-                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
-                }
+            if (currentProfitRupees >= firstTrigger) {
+                const extraSteps = Math.floor((currentProfitRupees - firstTrigger) / stepProfit);
+                const targetProfitLevel = firstTrigger + (extraSteps * stepProfit); // e.g. 1000, 1500, 2000...
+                const lockedProfitAmount = targetProfitLevel - lockBuffer;           // e.g. 900, 1400, 1900...
 
-            } else {
-                if (currentLow <= lvls.tr1 && cfg.autoTrailOnTR1 !== false) {
-                    if (pos.entryPrice < newSl) { newSl = pos.entryPrice; newStage = "TRAILED_COST_TO_COST"; }
-                }
-                if (currentLow <= lvls.tr2 && cfg.autoTrailOnTR2 !== false) {
-                    if (lvls.tr1 < newSl) { newSl = lvls.tr1; newStage = "TRAILED_TR1 (LOCKED)"; }
-                }
-                if (currentLow <= lvls.tr3 && cfg.autoTrailOnTR3 !== false) {
-                    if (lvls.tr2 < newSl) { newSl = lvls.tr2; newStage = "TRAILED_TR2"; }
-                }
-                if (currentLow <= lvls.tr4 && cfg.autoTrailOnTR4 !== false) {
-                    if (lvls.tr3 < newSl) { newSl = lvls.tr3; newStage = "TRAILED_TR3"; }
-                }
-                if (currentLow <= lvls.tr5 && cfg.autoTrailOnTR5 !== false) {
-                    if (lvls.tr4 < newSl) { newSl = lvls.tr4; newStage = "TRAILED_TR4"; }
-                }
+                const lockedPoints = Number((lockedProfitAmount / qty).toFixed(2));
+                const newSlPrice = isOptionBuying ? Number((pos.entryPrice + lockedPoints).toFixed(2)) : Number((pos.entryPrice - lockedPoints).toFixed(2));
 
-                if (newSl !== pos.currentSl) {
-                    await this.modifyTrailingSL(newSl, newStage, envName);
-                }
-
-                if (currentLow <= pos.targetPrice) {
-                    exitTriggered = true; exitPrice = pos.targetPrice; exitReason = `TARGET_HIT (${pos.targetLabel})`;
-                } else if (currentHigh >= pos.currentSl) {
-                    exitTriggered = true; exitPrice = pos.currentSl;
-                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
+                if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
+                    const newStage = `PROFIT_LOCKED_₹${lockedProfitAmount}`;
+                    await this.modifyTrailingSL(newSlPrice, newStage, envName);
                 }
             }
         }

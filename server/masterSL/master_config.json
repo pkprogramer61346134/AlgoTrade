@@ -1,13 +1,12 @@
 {
   "maxBudgetPercent": 100,
-  "maxLossPerTrade": 500,
-  "breathingRoomPoints": 0.5,
-  "targetMode": "TRAILING",
+  "maxLossPerTrade": 300,
+  "firstProfitTrigger": 1000,
+  "trailStepProfit": 500,
+  "trailLockBuffer": 100,
+  "targetMode": "DYNAMIC_RUPEE_TRAILING",
   "maxTradesPerDay": 3,
   "autoSquareOffTime": "15:10:00",
-  "autoTrailOnTR1": true,
-  "autoTrailOnTR2": true,
-  "autoTrailOnTR3": true,
   "maxRetriesPerStep": 5,
   "retryDelayMs": 1000,
   "selectedStock": {
@@ -18,7 +17,5 @@
     "instrument": "INDEX"
   },
   "minRequiredBalance": 1000,
-  "enableAutoTrailing": true,
-  "autoTrailOnTR4": true,
-  "autoTrailOnTR5": true
+  "enableAutoTrailing": true
 }
