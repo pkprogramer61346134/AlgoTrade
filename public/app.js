@@ -297,6 +297,8 @@ function renderRealDashboard(data, config = {}) {
                     </div>
                     <div class="reversal-grid">
                         <div class="reversal-item"><span class="rev-label">Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Kitna Chahiye Target</span><span class="rev-val text-info">Waiting for Signal...</span></div>
+                        <div class="reversal-item"><span class="rev-label">Kitna Bacha Pts</span><span class="rev-val highlight">Waiting for Signal...</span></div>
                         <div class="reversal-item"><span class="rev-label">Rule 1: Candle Skip</span><span class="rev-val text-success">Enabled (Candle 2+)</span></div>
                         <div class="reversal-item"><span class="rev-label">Rule 2: Drift Limit</span><span class="rev-val text-info">${rStat.maxDriftPoints || 40} Pts Max Limit</span></div>
                         <div class="reversal-item"><span class="rev-label">Rule 3: Timeout</span><span class="rev-val">${rStat.maxWatchCandles || 6} Candles (30m Max)</span></div>
