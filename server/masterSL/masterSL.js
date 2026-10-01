@@ -157,13 +157,14 @@ class MasterTrailingEngine {
             ? Number((entryPrice - riskPoints).toFixed(2)) 
             : Number((entryPrice + riskPoints).toFixed(2));
 
-        // Big Target Price (₹100,000 profit target) so fixed target is NEVER hit, letting Dynamic Trailing SL capture maximum trend
-        const bigTargetPoints = Number((100000 / lotSize).toFixed(2));
+        // Target Points based on maxTargetPerTrade (default ₹5,000 profit target)
+        const maxTargetRupees = Number(cfg.maxTargetPerTrade || 5000);
+        const targetPoints = Number((maxTargetRupees / lotSize).toFixed(2));
         const targetPrice = isOptionTrade || optionType === "CE" 
-            ? Number((entryPrice + bigTargetPoints).toFixed(2)) 
-            : Number((entryPrice - bigTargetPoints).toFixed(2));
+            ? Number((entryPrice + targetPoints).toFixed(2)) 
+            : Number((entryPrice - targetPoints).toFixed(2));
 
-        return { initialSl, riskPoints, targetPrice };
+        return { initialSl, riskPoints, targetPrice, targetPoints };
     }
 
     // =========================================================================
@@ -318,8 +319,9 @@ class MasterTrailingEngine {
                 initialSl: levels.initialSl,
                 currentSl: levels.initialSl,
                 targetPrice: targetPrice,
-                targetLabel: targetLabel,
-                targetMode: cfg.targetMode || "DYNAMIC_RUPEE_TRAILING",
+                targetPoints: levels.targetPoints,
+                targetLabel: "PERCENT_TRAILING",
+                targetMode: "PERCENT_TRAILING",
                 qty: totalQty,
                 lotSize: lotSize,
                 strikeInfo: selectedStrikeInfo,
@@ -532,27 +534,56 @@ class MasterTrailingEngine {
 
         const isOptionBuying = Boolean(pos.isOptionTrade) || pos.optionType === "CE";
 
-        // 1. DYNAMIC RUPEE PROFIT TRAILING SL JUMP ENGINE
+        // 1. DYNAMIC PERCENTAGE & RUPEE PROFIT TRAILING SL JUMP ENGINE
         if (!exitTriggered && cfg.enableAutoTrailing !== false) {
-            const firstTrigger = Number(cfg.firstProfitTrigger || 1000); // ₹1000
-            const stepProfit = Number(cfg.trailStepProfit || 500);       // ₹500
-            const lockBuffer = Number(cfg.trailLockBuffer || 100);       // ₹100
             const qty = Number(pos.qty || pos.lotSize || 65);
-
             const pnlDiff = isOptionBuying ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice);
             const currentProfitRupees = Math.round(pnlDiff * qty);
 
-            if (currentProfitRupees >= firstTrigger) {
-                const extraSteps = Math.floor((currentProfitRupees - firstTrigger) / stepProfit);
-                const targetProfitLevel = firstTrigger + (extraSteps * stepProfit); // e.g. 1000, 1500, 2000...
-                const lockedProfitAmount = targetProfitLevel - lockBuffer;           // e.g. 900, 1400, 1900...
+            // PERCENTAGE-BASED TRAILING RULES (Target % Hit -> SL Lock %)
+            const percentRules = Array.isArray(cfg.percentTrailingRules) ? cfg.percentTrailingRules : [];
+            if (percentRules.length > 0) {
+                // Calculate target points (e.g. from optionTR5, targetPoints, or 3x risk)
+                const targetPoints = Number(
+                    pos.targetPoints || 
+                    (pos.strikeInfo?.optionTR5 ? Math.abs(pos.strikeInfo.optionTR5 - pos.entryPrice) : 0) ||
+                    (pos.levels?.riskPoints ? (pos.levels.riskPoints * 3) : 50)
+                );
 
-                const lockedPoints = Number((lockedProfitAmount / qty).toFixed(2));
-                const newSlPrice = isOptionBuying ? Number((pos.entryPrice + lockedPoints).toFixed(2)) : Number((pos.entryPrice - lockedPoints).toFixed(2));
+                const sortedRules = [...percentRules].sort((a, b) => a.targetPercent - b.targetPercent);
 
-                if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
-                    const newStage = `PROFIT_LOCKED_₹${lockedProfitAmount}`;
-                    await this.modifyTrailingSL(newSlPrice, newStage, envName);
+                for (const rule of sortedRules) {
+                    const reqTargetPts = (targetPoints * rule.targetPercent) / 100;
+                    if (pnlDiff >= reqTargetPts) {
+                        const lockPts = Number(((targetPoints * rule.lockPercent) / 100).toFixed(2));
+                        const newSlPrice = isOptionBuying 
+                            ? Number((pos.entryPrice + lockPts).toFixed(2)) 
+                            : Number((pos.entryPrice - lockPts).toFixed(2));
+
+                        if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
+                            const newStage = `TARGET_${rule.targetPercent}%_LOCK_${rule.lockPercent}%`;
+                            await this.modifyTrailingSL(newSlPrice, newStage, envName);
+                        }
+                    }
+                }
+            } else {
+                // FALLBACK: Rupee Profit Trailing SL Jump
+                const firstTrigger = Number(cfg.firstProfitTrigger || 1000); // ₹1000
+                const stepProfit = Number(cfg.trailStepProfit || 500);       // ₹500
+                const lockBuffer = Number(cfg.trailLockBuffer || 100);       // ₹100
+
+                if (currentProfitRupees >= firstTrigger) {
+                    const extraSteps = Math.floor((currentProfitRupees - firstTrigger) / stepProfit);
+                    const targetProfitLevel = firstTrigger + (extraSteps * stepProfit);
+                    const lockedProfitAmount = targetProfitLevel - lockBuffer;
+
+                    const lockedPoints = Number((lockedProfitAmount / qty).toFixed(2));
+                    const newSlPrice = isOptionBuying ? Number((pos.entryPrice + lockedPoints).toFixed(2)) : Number((pos.entryPrice - lockedPoints).toFixed(2));
+
+                    if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
+                        const newStage = `PROFIT_LOCKED_₹${lockedProfitAmount}`;
+                        await this.modifyTrailingSL(newSlPrice, newStage, envName);
+                    }
                 }
             }
         }

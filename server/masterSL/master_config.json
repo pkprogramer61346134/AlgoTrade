@@ -1,10 +1,12 @@
 {
   "maxBudgetPercent": 100,
+  "maxTargetPerTrade": 5000,
   "maxLossPerTrade": 300,
-  "firstProfitTrigger": 1000,
-  "trailStepProfit": 500,
-  "trailLockBuffer": 100,
-  "targetMode": "DYNAMIC_RUPEE_TRAILING",
+  "percentTrailingRules": [
+    { "targetPercent": 40, "lockPercent": 20 },
+    { "targetPercent": 60, "lockPercent": 45 },
+    { "targetPercent": 90, "lockPercent": 80 }
+  ],
   "maxTradesPerDay": 3,
   "slCooldownMinutes": 15,
   "autoSquareOffTime": "15:10:00",
