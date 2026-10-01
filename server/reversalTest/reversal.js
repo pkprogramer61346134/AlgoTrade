@@ -90,6 +90,12 @@ class ReversalSignalFilter {
 
         const watch = this.activeWatch;
         watch.candlesWatched += 1;
+        watch.livePrice = candleClose;
+        if (!watch.liveLow || candleLow < watch.liveLow) watch.liveLow = candleLow;
+        if (!watch.liveHigh || candleHigh > watch.liveHigh) watch.liveHigh = candleHigh;
+        watch.driftDistancePoints = watch.type === "BUY" 
+            ? Number((candleClose - watch.entryPrice).toFixed(2))
+            : Number((watch.entryPrice - candleClose).toFixed(2));
 
         console.log(`🔍 [REVERSAL TICK] Watch ID: ${watch.watchId} | Type: ${watch.type} | Stage: ${watch.stage} | Candle Close: ₹${candleClose} (High: ₹${candleHigh}, Low: ₹${candleLow}) | Watch Count: ${watch.candlesWatched}/${this.maxWatchCandles}`);
 
@@ -226,6 +232,45 @@ class ReversalSignalFilter {
     }
 
     /**
+     * Live Tick Tracker: Receives live market ticks every second during active watch
+     * @param {number|string} livePrice Live Nifty Spot Price
+     */
+    updateLiveTick(livePrice) {
+        if (!this.activeWatch || this.activeWatch.status !== "ACTIVE_WATCH") return;
+        const p = Number(livePrice);
+        if (!p || isNaN(p) || p <= 0) return;
+
+        const watch = this.activeWatch;
+        watch.livePrice = p;
+        if (!watch.liveLow || p < watch.liveLow) watch.liveLow = p;
+        if (!watch.liveHigh || p > watch.liveHigh) watch.liveHigh = p;
+
+        if (watch.type === "BUY") {
+            watch.driftDistancePoints = Number((p - watch.entryPrice).toFixed(2));
+            if (watch.stage === "STAGE_1_WATCH_REVERSAL" && watch.candlesWatched >= 2) {
+                if (p < watch.entryPrice) {
+                    watch.stage = "STAGE_2_SWEEP_DETECTED";
+                    watch.sweepDetected = true;
+                    watch.sweepPrice = Math.min(p, watch.sweepPrice || p);
+                    this.lastFilterEvent = `🎯 LIVE STAGE 2: BUY Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Candle Retest Close >= ₹${watch.entryPrice}`;
+                    console.log(`🎯 [LIVE DIP DETECTED] BUY Liquidity Sweep found live @ ₹${watch.sweepPrice} < Entry ₹${watch.entryPrice}`);
+                }
+            }
+        } else if (watch.type === "SELL") {
+            watch.driftDistancePoints = Number((watch.entryPrice - p).toFixed(2));
+            if (watch.stage === "STAGE_1_WATCH_REVERSAL" && watch.candlesWatched >= 2) {
+                if (p > watch.entryPrice) {
+                    watch.stage = "STAGE_2_SWEEP_DETECTED";
+                    watch.sweepDetected = true;
+                    watch.sweepPrice = Math.max(p, watch.sweepPrice || p);
+                    this.lastFilterEvent = `🎯 LIVE STAGE 2: SELL Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Candle Retest Close <= ₹${watch.entryPrice}`;
+                    console.log(`🎯 [LIVE RALLY DETECTED] SELL Liquidity Sweep found live @ ₹${watch.sweepPrice} > Entry ₹${watch.entryPrice}`);
+                }
+            }
+        }
+    }
+
+    /**
      * Get Current Filter Status for UI Dashboard
      */
     getStatus() {
@@ -237,7 +282,6 @@ class ReversalSignalFilter {
             maxDriftPoints: this.maxDriftPoints,
             lastFilterEvent: this.lastFilterEvent || (this.activeWatch ? `Locked: Watching ${this.activeWatch.type} @ ₹${this.activeWatch.entryPrice}` : "System Listening for Consensus Signals"),
             totalHistory: this.watchHistory.length,
-            recentWatches: this.watchHistory.slice(-5)
         };
     }
 }
