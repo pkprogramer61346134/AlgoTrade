@@ -32,9 +32,7 @@ async function updateDashboard() {
             renderLiveConsensus(data);
 
             // 2. Real Account Dashboard
-            if (data.realStatus) {
-                renderRealDashboard(data.realStatus, data.config);
-            }
+            renderRealDashboard(data, data.config);
         }
     } catch (e) {
         console.warn("API poll notice:", e.message);
@@ -207,6 +205,11 @@ function renderRealDashboard(data, config = {}) {
         const recent = (rStat.recentWatches || []).slice(-1)[0];
         const liveNiftyVal = Number(data.livePrice || watch?.livePrice || data.consensus?.evaluatedCandle?.close || data.consensus?.lastCandle?.close || data.candle?.close || 0);
         const liveNifty = liveNiftyVal > 0 ? `₹${liveNiftyVal.toFixed(2)}` : 'Connecting Live Feed...';
+        
+        const candleData = data.consensus?.evaluatedCandle || data.consensus?.lastCandle || data.candle || {};
+        const liveCandleText = (candleData.open !== undefined) 
+            ? `O: ₹${candleData.open} | H: ₹${candleData.high} | L: ₹${candleData.low} | C: ₹${candleData.close}` 
+            : 'Evaluating Ticks...';
 
         if (watch && watch.status === "ACTIVE_WATCH") {
             const isStage1 = watch.stage === 'STAGE_1_WATCH_REVERSAL';
@@ -280,12 +283,13 @@ function renderRealDashboard(data, config = {}) {
                     </div>
                     <div class="reversal-grid">
                         <div class="reversal-item"><span class="rev-label">1. Signal Entry Price</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type} @ ₹${watch.entryPrice}</span></div>
-                        <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
-                        <div class="reversal-item"><span class="rev-label">3. Real Trade Trigger Price</span><span class="rev-val text-info">${realTradeTriggerPrice}</span></div>
-                        <div class="reversal-item"><span class="rev-label">4. Real Trade Signal Status</span><span class="rev-val highlight" style="font-size:0.85rem;">${realTradeTriggerStatus}</span></div>
-                        <div class="reversal-item"><span class="rev-label">5. Kitna Bacha Pts</span><span class="rev-val text-warning">${remainingPtsText}</span></div>
-                        <div class="reversal-item"><span class="rev-label">6. Sweep Price</span><span class="rev-val text-info">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching Low/High...'}</span></div>
-                        <div class="reversal-item"><span class="rev-label">7. Watch Progress</span><span class="rev-val">${watch.candlesWatched} / ${rStat.maxWatchCandles || 6} Candles (${watch.candlesWatched * 5}m / 30m Max)</span></div>
+                        <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">🟢 ${liveNifty}</span></div>
+                        <div class="reversal-item"><span class="rev-label">3. Live 5m Candle OHLC</span><span class="rev-val text-info">${liveCandleText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Real Trade Trigger Price</span><span class="rev-val text-info">${realTradeTriggerPrice}</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. Real Trade Signal Status</span><span class="rev-val highlight" style="font-size:0.85rem;">${realTradeTriggerStatus}</span></div>
+                        <div class="reversal-item"><span class="rev-label">6. Kitna Bacha Pts</span><span class="rev-val text-warning">${remainingPtsText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">7. Sweep Price</span><span class="rev-val text-info">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching Low/High...'}</span></div>
+                        <div class="reversal-item"><span class="rev-label">8. Watch Progress</span><span class="rev-val">${watch.candlesWatched} / ${rStat.maxWatchCandles || 6} Candles (${watch.candlesWatched * 5}m / 30m Max)</span></div>
                         <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastEvent}</span></div>
                     </div>
                 </div>
@@ -296,15 +300,16 @@ function renderRealDashboard(data, config = {}) {
                 <div class="reversal-card">
                     <div class="reversal-header">
                         <span class="reversal-title">⚡ Reversal Liquidity Sweep Filter (LIVE TICK MONITOR ONLINE)</span>
-                        <span class="badge-success">LIVE TICK FEED STREAMING</span>
+                        <span class="badge-success">🟢 LIVE TICK FEED STREAMING</span>
                     </div>
                     <div class="reversal-grid">
                         <div class="reversal-item"><span class="rev-label">1. Signal Entry Price</span><span class="rev-val text-muted">Waiting for Consensus Signal...</span></div>
-                        <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
-                        <div class="reversal-item"><span class="rev-label">3. Real Trade Trigger Price</span><span class="rev-val text-info">Close >= Entry Price (BUY) / <= Entry (SELL)</span></div>
-                        <div class="reversal-item"><span class="rev-label">4. Real Trade Signal Status</span><span class="rev-val text-warning">Waiting for Consensus Signal to start Reversal Filter</span></div>
-                        <div class="reversal-item"><span class="rev-label">5. Kitna Bacha Pts</span><span class="rev-val text-muted">Waiting for Signal...</span></div>
-                        <div class="reversal-item"><span class="rev-label">Rule Config</span><span class="rev-val text-success">Candle 2+ Skip | 40 Pts Drift | 6 Candles (30m Max)</span></div>
+                        <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">🟢 ${liveNifty}</span></div>
+                        <div class="reversal-item"><span class="rev-label">3. Live 5m Candle OHLC</span><span class="rev-val text-info">${liveCandleText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Real Trade Trigger Price</span><span class="rev-val text-info">Close >= Entry Price (BUY) / <= Entry (SELL)</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. Real Trade Signal Status</span><span class="rev-val text-warning">Waiting for Consensus Signal to start Reversal Filter</span></div>
+                        <div class="reversal-item"><span class="rev-label">6. Kitna Bacha Pts</span><span class="rev-val text-muted">Waiting for Signal...</span></div>
+                        <div class="reversal-item"><span class="rev-label">7. Rule Config</span><span class="rev-val text-success">Candle 2+ Skip | 40 Pts Drift | 6 Candles (30m Max)</span></div>
                         <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastStatusText}</span></div>
                     </div>
                 </div>
