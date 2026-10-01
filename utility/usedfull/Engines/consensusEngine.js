@@ -449,7 +449,7 @@ function getStrategyLiveBias(c, i, candles, strat, computed) {
  * @param {Array} signals - Array of triggered strategy signal objects
  * @param {number} [minVotes=2] - Minimum number of strategy votes required for consensus (configurable)
  */
-function consolidateSignals(signals, minVotes = 2) {
+function consolidateSignals(signals, minVotes = 1) {
     let buyCount = 0;
     let sellCount = 0;
     let topBuySignal = null;
@@ -471,7 +471,7 @@ function consolidateSignals(signals, minVotes = 2) {
 
     let finalConsensus = "NO_SIGNAL";
     let chosenSignal = null;
-    const reqMinVotes = Number(minVotes || 2);
+    const reqMinVotes = Number(minVotes !== undefined ? minVotes : 1);
 
     if (buyCount >= reqMinVotes && buyCount > sellCount && topBuySignal) {
         finalConsensus = "BUY";
