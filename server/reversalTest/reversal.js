@@ -80,6 +80,12 @@ class ReversalSignalFilter {
 
         console.log(`🔍 [REVERSAL TICK] Watch ID: ${watch.watchId} | Type: ${watch.type} | Stage: ${watch.stage} | Candle Close: ₹${candleClose} (High: ₹${candleHigh}, Low: ₹${candleLow}) | Watch Count: ${watch.candlesWatched}/${this.maxWatchCandles}`);
 
+        // Skip signal candle itself (Candle 1): Reversal sweep evaluation begins on NEXT candle (Candle 2+)
+        if (watch.candlesWatched === 1) {
+            console.log(`⏳ [SIGNAL CANDLE SKIPPED] Watch initialized on signal candle. Reversal sweep evaluation will begin on next candle (Candle 2+)...`);
+            return null;
+        }
+
         // 2.5 RUNAWAY DRIFT GUARD (40 Points Max Drift Check)
         // If price has already moved 40+ points away from entry, ignore & cancel watch to prevent chasing runaway market
         const maxDrift = this.maxDriftPoints || 40;
