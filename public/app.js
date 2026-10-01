@@ -205,8 +205,7 @@ function renderRealDashboard(data, config = {}) {
         const rStat = data.reversalStatus || {};
         const watch = rStat.activeWatch;
         const recent = (rStat.recentWatches || []).slice(-1)[0];
-
-        const liveNiftyVal = Number(data.livePrice || watch?.livePrice || data.consensus?.lastCandle?.close || data.candle?.close || 0);
+        const liveNiftyVal = Number(data.livePrice || watch?.livePrice || data.consensus?.evaluatedCandle?.close || data.consensus?.lastCandle?.close || data.candle?.close || 0);
         const liveNifty = liveNiftyVal > 0 ? `₹${liveNiftyVal.toFixed(2)}` : 'Connecting Live Feed...';
 
         if (watch && watch.status === "ACTIVE_WATCH") {
@@ -214,45 +213,48 @@ function renderRealDashboard(data, config = {}) {
             const entry = Number(watch.entryPrice || 0);
             const liveP = liveNiftyVal || entry;
             
-            // Calculate "Kitna Chahiye Target" & "Kitna Bacha Points"
-            let targetRequiredText = '';
+            // Real Trade Trigger Condition & Price Details
+            let realTradeTriggerPrice = '';
+            let realTradeTriggerStatus = '';
             let remainingPtsText = '';
 
             if (watch.type === 'BUY') {
+                realTradeTriggerPrice = `5m Candle Close >= ₹${entry.toFixed(2)}`;
                 if (isStage1) {
-                    targetRequiredText = `Sweep Dip Below ₹${entry.toFixed(2)}`;
                     if (liveP >= entry) {
                         const ptsNeeded = (liveP - entry).toFixed(2);
-                        remainingPtsText = `⏳ ${ptsNeeded} Pts DOWN needed for Sweep`;
+                        remainingPtsText = `⏳ ${ptsNeeded} Pts DOWN needed for Dip Below ₹${entry.toFixed(2)}`;
                     } else {
                         remainingPtsText = `🎯 Dip Achieved! Low: ₹${(watch.sweepPrice || liveP).toFixed(2)}`;
                     }
+                    realTradeTriggerStatus = `⏳ Stage 1: Waiting Nifty to Dip Below ₹${entry.toFixed(2)}, then Close >= ₹${entry.toFixed(2)}`;
                 } else {
-                    targetRequiredText = `Retest Close >= ₹${entry.toFixed(2)}`;
                     if (liveP < entry) {
                         const ptsNeeded = (entry - liveP).toFixed(2);
-                        remainingPtsText = `🎯 ${ptsNeeded} Pts UP needed for Retest Close`;
+                        remainingPtsText = `🎯 ${ptsNeeded} Pts UP needed for Retest Close >= ₹${entry.toFixed(2)}`;
                     } else {
-                        remainingPtsText = `✅ Retest Level Met! (Close >= ₹${entry.toFixed(2)})`;
+                        remainingPtsText = `✅ Retest Level Met! Candle Close >= ₹${entry.toFixed(2)}`;
                     }
+                    realTradeTriggerStatus = `🎯 Stage 2: Sweep Found @ ₹${(watch.sweepPrice || entry).toFixed(2)}! Real Trade triggers when 5m Candle Closes >= ₹${entry.toFixed(2)}`;
                 }
             } else if (watch.type === 'SELL') {
+                realTradeTriggerPrice = `5m Candle Close <= ₹${entry.toFixed(2)}`;
                 if (isStage1) {
-                    targetRequiredText = `Sweep Rally Above ₹${entry.toFixed(2)}`;
                     if (liveP <= entry) {
                         const ptsNeeded = (entry - liveP).toFixed(2);
-                        remainingPtsText = `⏳ ${ptsNeeded} Pts UP needed for Sweep`;
+                        remainingPtsText = `⏳ ${ptsNeeded} Pts UP needed for Rally Above ₹${entry.toFixed(2)}`;
                     } else {
                         remainingPtsText = `🎯 Rally Achieved! High: ₹${(watch.sweepPrice || liveP).toFixed(2)}`;
                     }
+                    realTradeTriggerStatus = `⏳ Stage 1: Waiting Nifty to Rally Above ₹${entry.toFixed(2)}, then Close <= ₹${entry.toFixed(2)}`;
                 } else {
-                    targetRequiredText = `Retest Close <= ₹${entry.toFixed(2)}`;
                     if (liveP > entry) {
-                        const ptsNeeded = (liveP - entry).toFixed(2);
-                        remainingPtsText = `🎯 ${ptsNeeded} Pts DOWN needed for Retest Close`;
+                        const ptsNeeded = (liveP - liveP).toFixed(2);
+                        remainingPtsText = `🎯 ${ptsNeeded} Pts DOWN needed for Retest Close <= ₹${entry.toFixed(2)}`;
                     } else {
-                        remainingPtsText = `✅ Retest Level Met! (Close <= ₹${entry.toFixed(2)})`;
+                        remainingPtsText = `✅ Retest Level Met! Candle Close <= ₹${entry.toFixed(2)}`;
                     }
+                    realTradeTriggerStatus = `🎯 Stage 2: Sweep Found @ ₹${(watch.sweepPrice || entry).toFixed(2)}! Real Trade triggers when 5m Candle Closes <= ₹${entry.toFixed(2)}`;
                 }
             }
 
@@ -277,12 +279,13 @@ function renderRealDashboard(data, config = {}) {
                         <span class="badge-warning">${stageBadge}</span>
                     </div>
                     <div class="reversal-grid">
-                        <div class="reversal-item"><span class="rev-label">Active Signal</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type} @ ₹${watch.entryPrice}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Kitna Chahiye Target</span><span class="rev-val text-info">${targetRequiredText}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Kitna Bacha Pts</span><span class="rev-val highlight">${remainingPtsText}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val text-warning">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching...'}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Watch Progress</span><span class="rev-val">${watch.candlesWatched} / ${rStat.maxWatchCandles || 6} Candles (${watch.candlesWatched * 5}m / 30m Max)</span></div>
+                        <div class="reversal-item"><span class="rev-label">1. Signal Entry Price</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type} @ ₹${watch.entryPrice}</span></div>
+                        <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
+                        <div class="reversal-item"><span class="rev-label">3. Real Trade Trigger Price</span><span class="rev-val text-info">${realTradeTriggerPrice}</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Real Trade Signal Status</span><span class="rev-val highlight" style="font-size:0.85rem;">${realTradeTriggerStatus}</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. Kitna Bacha Pts</span><span class="rev-val text-warning">${remainingPtsText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">6. Sweep Price</span><span class="rev-val text-info">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching Low/High...'}</span></div>
+                        <div class="reversal-item"><span class="rev-label">7. Watch Progress</span><span class="rev-val">${watch.candlesWatched} / ${rStat.maxWatchCandles || 6} Candles (${watch.candlesWatched * 5}m / 30m Max)</span></div>
                         <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastEvent}</span></div>
                     </div>
                 </div>
@@ -296,12 +299,12 @@ function renderRealDashboard(data, config = {}) {
                         <span class="badge-success">LIVE TICK FEED STREAMING</span>
                     </div>
                     <div class="reversal-grid">
-                        <div class="reversal-item"><span class="rev-label">Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Kitna Chahiye Target</span><span class="rev-val text-info">Waiting for Signal...</span></div>
-                        <div class="reversal-item"><span class="rev-label">Kitna Bacha Pts</span><span class="rev-val highlight">Waiting for Signal...</span></div>
-                        <div class="reversal-item"><span class="rev-label">Rule 1: Candle Skip</span><span class="rev-val text-success">Enabled (Candle 2+)</span></div>
-                        <div class="reversal-item"><span class="rev-label">Rule 2: Drift Limit</span><span class="rev-val text-info">${rStat.maxDriftPoints || 40} Pts Max Limit</span></div>
-                        <div class="reversal-item"><span class="rev-label">Rule 3: Timeout</span><span class="rev-val">${rStat.maxWatchCandles || 6} Candles (30m Max)</span></div>
+                        <div class="reversal-item"><span class="rev-label">1. Signal Entry Price</span><span class="rev-val text-muted">Waiting for Consensus Signal...</span></div>
+                        <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">${liveNifty}</span></div>
+                        <div class="reversal-item"><span class="rev-label">3. Real Trade Trigger Price</span><span class="rev-val text-info">Close >= Entry Price (BUY) / <= Entry (SELL)</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Real Trade Signal Status</span><span class="rev-val text-warning">Waiting for Consensus Signal to start Reversal Filter</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. Kitna Bacha Pts</span><span class="rev-val text-muted">Waiting for Signal...</span></div>
+                        <div class="reversal-item"><span class="rev-label">Rule Config</span><span class="rev-val text-success">Candle 2+ Skip | 40 Pts Drift | 6 Candles (30m Max)</span></div>
                         <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastStatusText}</span></div>
                     </div>
                 </div>
