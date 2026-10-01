@@ -237,6 +237,12 @@ class MasterTrailingEngine {
             return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_ORDER_IN_FLIGHT" };
         }
 
+        // Trading Cutoff Guard (3:10 PM)
+        if (this.isAfterTradingHours(signal.time)) {
+            logger.logInfo(envName, "SIGNAL_IGNORED", `Trading cutoff time reached (3:10 PM). Ignoring new signal.`);
+            return { status: "IGNORED", reason: "AFTER_TRADING_HOURS_3_10_PM" };
+        }
+
         const ORDER_COOLDOWN_MS = 30000;
         const timeSinceLastOrder = Date.now() - (this.lastOrderTimestamp || 0);
         if (timeSinceLastOrder < ORDER_COOLDOWN_MS) {
@@ -300,7 +306,7 @@ class MasterTrailingEngine {
                 currentSl: levels.initialSl,
                 targetPrice: targetPrice,
                 targetLabel: targetLabel,
-                targetMode: mode,
+                targetMode: cfg.targetMode || "DYNAMIC_RUPEE_TRAILING",
                 qty: totalQty,
                 lotSize: lotSize,
                 strikeInfo: selectedStrikeInfo,
@@ -496,24 +502,7 @@ class MasterTrailingEngine {
 
         const isOptionBuying = Boolean(pos.isOptionTrade) || pos.optionType === "CE";
 
-        if (!exitTriggered) {
-            // Check Initial / Trailed Stop Loss Hit
-            if (isOptionBuying) {
-                if (currentLow <= pos.currentSl) {
-                    exitTriggered = true;
-                    exitPrice = pos.currentSl;
-                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
-                }
-            } else {
-                if (currentHigh >= pos.currentSl) {
-                    exitTriggered = true;
-                    exitPrice = pos.currentSl;
-                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
-                }
-            }
-        }
-
-        // DYNAMIC RUPEE PROFIT TRAILING SL JUMP ENGINE
+        // 1. DYNAMIC RUPEE PROFIT TRAILING SL JUMP ENGINE
         if (!exitTriggered && cfg.enableAutoTrailing !== false) {
             const firstTrigger = Number(cfg.firstProfitTrigger || 1000); // ₹1000
             const stepProfit = Number(cfg.trailStepProfit || 500);       // ₹500
@@ -521,7 +510,7 @@ class MasterTrailingEngine {
             const qty = Number(pos.qty || pos.lotSize || 65);
 
             const pnlDiff = isOptionBuying ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice);
-            const currentProfitRupees = pnlDiff * qty;
+            const currentProfitRupees = Math.round(pnlDiff * qty);
 
             if (currentProfitRupees >= firstTrigger) {
                 const extraSteps = Math.floor((currentProfitRupees - firstTrigger) / stepProfit);
@@ -534,6 +523,31 @@ class MasterTrailingEngine {
                 if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
                     const newStage = `PROFIT_LOCKED_₹${lockedProfitAmount}`;
                     await this.modifyTrailingSL(newSlPrice, newStage, envName);
+                }
+            }
+        }
+
+        // 2. Check Initial / Trailed Stop Loss Hit & Big Target Hit
+        if (!exitTriggered) {
+            if (isOptionBuying) {
+                if (currentLow <= pos.currentSl) {
+                    exitTriggered = true;
+                    exitPrice = pos.currentSl;
+                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
+                } else if (currentHigh >= pos.targetPrice) {
+                    exitTriggered = true;
+                    exitPrice = pos.targetPrice;
+                    exitReason = `TARGET_HIT (${pos.targetLabel})`;
+                }
+            } else {
+                if (currentHigh >= pos.currentSl) {
+                    exitTriggered = true;
+                    exitPrice = pos.currentSl;
+                    exitReason = pos.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${pos.trailingStage})`;
+                } else if (currentLow <= pos.targetPrice) {
+                    exitTriggered = true;
+                    exitPrice = pos.targetPrice;
+                    exitReason = `TARGET_HIT (${pos.targetLabel})`;
                 }
             }
         }
