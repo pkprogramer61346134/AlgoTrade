@@ -68,9 +68,19 @@ class MasterTrailingEngine {
 
         const parseMinutes = (tStr) => {
             if (!tStr) return 0;
-            const isPm = /pm/i.test(tStr);
-            const isAm = /am/i.test(tStr);
-            const cleanStr = String(tStr).replace(/(am|pm)/i, "").trim();
+            let str = String(tStr).trim();
+            if (str.includes(" ")) {
+                const spaceParts = str.split(" ").filter(Boolean);
+                const timePart = spaceParts.find(p => p.includes(":")) || str;
+                const amPmPart = spaceParts.find(p => /am|pm/i.test(p)) || "";
+                str = `${timePart} ${amPmPart}`.trim();
+            } else if (str.includes("T")) {
+                str = str.split("T")[1] || str;
+            }
+
+            const isPm = /pm/i.test(str);
+            const isAm = /am/i.test(str);
+            const cleanStr = str.replace(/(am|pm)/i, "").trim();
             const parts = cleanStr.split(":");
             if (parts.length < 2) return 0;
             let hrs = parseInt(parts[0], 10) || 0;
@@ -585,6 +595,7 @@ class MasterTrailingEngine {
         vw.lastTickTime = tick.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
 
         const isOptionContract = Boolean(vw.selectedStrikeInfo || vw.optionType || vw.symbol?.includes("_"));
+        const isBuy = vw.signal?.consensus === "BUY";
 
         // Phase A: Before Virtual SL is Hit
         if (!vw.slHit) {
@@ -780,6 +791,9 @@ class MasterTrailingEngine {
         if (this.activePosition && (!this.activePosition.entryPrice || isNaN(this.activePosition.entryPrice) || Number(this.activePosition.entryPrice) <= 0)) {
             console.warn(`⚠️ [MASTER SL GUARD] Cleaning up invalid ghost position (${this.activePosition.symbol || 'UNKNOWN'}). Invalid entryPrice: ${this.activePosition.entryPrice}`);
             this.activePosition = null;
+            this.isOrderInFlight = false;
+            this.isModifyInFlight = false;
+            this.isCloseInFlight = false;
         }
 
         return {
