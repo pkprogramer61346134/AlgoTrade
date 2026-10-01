@@ -247,25 +247,25 @@ class ReversalSignalFilter {
 
         if (watch.type === "BUY") {
             watch.driftDistancePoints = Number((p - watch.entryPrice).toFixed(2));
-            if (watch.stage === "STAGE_1_WATCH_REVERSAL" && watch.candlesWatched >= 2) {
-                if (p < watch.entryPrice) {
+            if (p < watch.entryPrice && watch.candlesWatched >= 2) {
+                if (watch.stage === "STAGE_1_WATCH_REVERSAL") {
                     watch.stage = "STAGE_2_SWEEP_DETECTED";
                     watch.sweepDetected = true;
-                    watch.sweepPrice = Math.min(p, watch.sweepPrice || p);
-                    this.lastFilterEvent = `🎯 LIVE STAGE 2: BUY Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Candle Retest Close >= ₹${watch.entryPrice}`;
-                    console.log(`🎯 [LIVE DIP DETECTED] BUY Liquidity Sweep found live @ ₹${watch.sweepPrice} < Entry ₹${watch.entryPrice}`);
+                    console.log(`🎯 [LIVE DIP DETECTED] BUY Liquidity Sweep found live @ ₹${p} < Entry ₹${watch.entryPrice}`);
                 }
+                watch.sweepPrice = watch.sweepPrice ? Math.min(p, watch.sweepPrice) : p;
+                this.lastFilterEvent = `🎯 LIVE STAGE 2: BUY Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Candle Retest Close >= ₹${watch.entryPrice}`;
             }
         } else if (watch.type === "SELL") {
             watch.driftDistancePoints = Number((watch.entryPrice - p).toFixed(2));
-            if (watch.stage === "STAGE_1_WATCH_REVERSAL" && watch.candlesWatched >= 2) {
-                if (p > watch.entryPrice) {
+            if (p > watch.entryPrice && watch.candlesWatched >= 2) {
+                if (watch.stage === "STAGE_1_WATCH_REVERSAL") {
                     watch.stage = "STAGE_2_SWEEP_DETECTED";
                     watch.sweepDetected = true;
-                    watch.sweepPrice = Math.max(p, watch.sweepPrice || p);
-                    this.lastFilterEvent = `🎯 LIVE STAGE 2: SELL Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Candle Retest Close <= ₹${watch.entryPrice}`;
-                    console.log(`🎯 [LIVE RALLY DETECTED] SELL Liquidity Sweep found live @ ₹${watch.sweepPrice} > Entry ₹${watch.entryPrice}`);
+                    console.log(`🎯 [LIVE RALLY DETECTED] SELL Liquidity Sweep found live @ ₹${p} > Entry ₹${watch.entryPrice}`);
                 }
+                watch.sweepPrice = watch.sweepPrice ? Math.max(p, watch.sweepPrice) : p;
+                this.lastFilterEvent = `🎯 LIVE STAGE 2: SELL Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Candle Retest Close <= ₹${watch.entryPrice}`;
             }
         }
     }
