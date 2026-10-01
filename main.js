@@ -156,6 +156,35 @@ function scheduleClockAlignedFiveMinLoop(intervalMins = 5) {
     runCycleAndScheduleNext();
 }
 
+const DhanLivePrice = require('./utility/dhan-live-price');
+let livePriceTracker = null;
+
+function startLiveTickStream() {
+    try {
+        const cfg = mainConfig.getConfig();
+        const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
+        
+        livePriceTracker = new DhanLivePrice();
+        livePriceTracker.getLivePrice(
+            String(scrip.securityId || "13"),
+            scrip.exchangeSegment || "IDX_I",
+            Number(scrip.interval || 5),
+            (tickData) => {
+                if (tickData && tickData.price > 0) {
+                    latestLivePrice = Number(tickData.price);
+                    latestTickTime = `${tickData.date || ''} ${tickData.time || ''}`.trim();
+                    // Update Reversal Filter with live Nifty spot ticks!
+                    reversalFilter.updateLiveTick(latestLivePrice);
+                }
+            },
+            scrip.instrument || "INDEX"
+        );
+        console.log(`📡 [LIVE TICK STREAM ONLINE] Dhan WebSocket streaming live price ticks for ${scrip.symbol} (${scrip.securityId}) into Reversal Engine.`);
+    } catch (err) {
+        console.warn(`⚠️ [LIVE TICK STREAM NOTICE]: ${err.message}`);
+    }
+}
+
 async function startMasterSystem() {
     console.log("==========================================================================");
     console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (REALTIME CLOCK-ALIGNED LOOP)");
@@ -167,6 +196,9 @@ async function startMasterSystem() {
     } catch (authErr) {
         console.warn(`⚠️ [DHAN AUTH WARN] Token refresh notice: ${authErr.message}`);
     }
+
+    // Start Realtime Live Tick Stream into Reversal Filter via DhanLivePrice
+    startLiveTickStream();
 
     const cfg = mainConfig.getConfig();
     const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
