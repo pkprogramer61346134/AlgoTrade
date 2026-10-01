@@ -23,6 +23,7 @@ class ReversalSignalFilter {
         this.maxWatchCandles = 6; // Default 6 candles (30 minutes in 5-min timeframe)
         this.maxDriftPoints = 40; // Default 40 points runaway drift limit
         this.watchHistory = [];
+        this.lastFilterEvent = "System Listening for Consensus Signals";
     }
 
     /**
@@ -44,13 +45,24 @@ class ReversalSignalFilter {
         const candleLow = Number(lastCandle?.low || candleClose);
         const candleHigh = Number(lastCandle?.high || candleClose);
 
-        // 1. IF NEW SIGNAL ARRIVES FROM CONSENSUS ENGINE:
-        if (consensusResult && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
-            const newType = consensusResult.consensus;
-            const newEntry = Number(consensusResult.entry || candleClose);
+        // 1. CHECK IF AN ACTIVE WATCH IS CURRENTLY LOCKED
+        if (this.activeWatch && this.activeWatch.status === "ACTIVE_WATCH") {
+            // If a new signal arrives while a watch is active, LOCK & BLOCK the new signal!
+            if (consensusResult && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
+                const incomingType = consensusResult.consensus;
+                const incomingEntry = Number(consensusResult.entry || candleClose);
 
-            // Check if this is a new signal or updating existing watch
-            if (!this.activeWatch || this.activeWatch.entryPrice !== newEntry || this.activeWatch.type !== newType) {
+                if (incomingEntry !== this.activeWatch.entryPrice || incomingType !== this.activeWatch.type) {
+                    console.log(`🔒 [ACTIVE WATCH LOCKED] Reversal Filter is currently watching ${this.activeWatch.type} @ ₹${this.activeWatch.entryPrice} (Watch ID: ${this.activeWatch.watchId}, Candle ${this.activeWatch.candlesWatched}/${this.maxWatchCandles}). Incoming ${incomingType} @ ₹${incomingEntry} signal BLOCKED & IGNORED until active watch completes.`);
+                    this.lastFilterEvent = `🔒 Active Watch Locked (${this.activeWatch.type} @ ₹${this.activeWatch.entryPrice}). Incoming ${incomingType} signal blocked.`;
+                }
+            }
+        } else {
+            // 2. NO ACTIVE WATCH EXISTS: START NEW WATCH IF SIGNAL ARRIVES
+            if (consensusResult && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
+                const newType = consensusResult.consensus;
+                const newEntry = Number(consensusResult.entry || candleClose);
+
                 this.activeWatch = {
                     watchId: "REV_WATCH_" + Date.now(),
                     type: newType,
@@ -65,12 +77,13 @@ class ReversalSignalFilter {
                     status: "ACTIVE_WATCH"
                 };
 
-                console.log(`\n👁️ [REVERSAL WATCH STARTED] ${newType} Consensus Signal received @ Entry ₹${newEntry}`);
-                console.log(`⏳ Stage 1: Watching for ${newType === "BUY" ? "dip/sweep below" : "rally/sweep above"} ₹${newEntry}...`);
+                this.lastFilterEvent = `🔒 ACTIVE WATCH LOCKED: ${newType} @ ₹${newEntry} (Waiting for ${newType === "BUY" ? "Dip Below" : "Rally Above"} Entry)`;
+                console.log(`\n👁️ [REVERSAL WATCH STARTED & LOCKED] ${newType} Consensus Signal received @ Entry ₹${newEntry}`);
+                console.log(`⏳ Stage 1: Watching for ${newType === "BUY" ? "dip/sweep below" : "rally/sweep above"} ₹${newEntry}... (New signals locked out)`);
             }
         }
 
-        // 2. IF NO ACTIVE WATCH EXISTS, RETURN NULL
+        // 3. IF NO ACTIVE WATCH EXISTS, RETURN NULL
         if (!this.activeWatch || this.activeWatch.status !== "ACTIVE_WATCH") {
             return null;
         }
@@ -82,17 +95,19 @@ class ReversalSignalFilter {
 
         // Skip signal candle itself (Candle 1): Reversal sweep evaluation begins on NEXT candle (Candle 2+)
         if (watch.candlesWatched === 1) {
-            console.log(`⏳ [SIGNAL CANDLE SKIPPED] Watch initialized on signal candle. Reversal sweep evaluation will begin on next candle (Candle 2+)...`);
+            console.log(`⏳ [SIGNAL CANDLE SKIPPED] Watch initialized on signal candle (Candle 1). Reversal sweep evaluation will begin on next candle (Candle 2+)...`);
+            this.lastFilterEvent = `🔒 ACTIVE WATCH LOCKED: Candle 1/6 Skipped (Sweep evaluation starts on Candle 2+)`;
             return null;
         }
 
-        // 2.5 RUNAWAY DRIFT GUARD (40 Points Max Drift Check)
+        // 3.5 RUNAWAY DRIFT GUARD (40 Points Max Drift Check)
         // If price has already moved 40+ points away from entry, ignore & cancel watch to prevent chasing runaway market
         const maxDrift = this.maxDriftPoints || 40;
         if (watch.type === "BUY" && candleClose > (watch.entryPrice + maxDrift)) {
             const driftPts = Number((candleClose - watch.entryPrice).toFixed(2));
             console.warn(`⚠️ [RUNAWAY DRIFT GUARD] BUY Signal entry ₹${watch.entryPrice} already moved +${driftPts} pts to ₹${candleClose} (> ${maxDrift} pts max limit). Ignoring & cancelling signal.`);
             watch.status = "EXPIRED_RUNAWAY_DRIFT";
+            this.lastFilterEvent = `⚠️ Watch Cancelled: Runaway Drift (+${driftPts} pts > ${maxDrift} limit)`;
             this.watchHistory.push({ ...watch });
             this.activeWatch = null;
             return null;
@@ -102,6 +117,7 @@ class ReversalSignalFilter {
             const driftPts = Number((watch.entryPrice - candleClose).toFixed(2));
             console.warn(`⚠️ [RUNAWAY DRIFT GUARD] SELL Signal entry ₹${watch.entryPrice} already moved -${driftPts} pts to ₹${candleClose} (> ${maxDrift} pts max limit). Ignoring & cancelling signal.`);
             watch.status = "EXPIRED_RUNAWAY_DRIFT";
+            this.lastFilterEvent = `⚠️ Watch Cancelled: Runaway Drift (-${driftPts} pts > ${maxDrift} limit)`;
             this.watchHistory.push({ ...watch });
             this.activeWatch = null;
             return null;
@@ -117,8 +133,11 @@ class ReversalSignalFilter {
                     watch.stage = "STAGE_2_SWEEP_DETECTED";
                     watch.sweepDetected = true;
                     watch.sweepPrice = Math.min(candleLow, candleClose);
+                    this.lastFilterEvent = `🎯 STAGE 2: BUY Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Retest Close >= ₹${watch.entryPrice}`;
                     console.log(`🎯 [REVERSAL DIP DETECTED] BUY Liquidity Sweep found! Low: ₹${watch.sweepPrice} < Entry ₹${watch.entryPrice}`);
                     console.log(`⏳ Stage 2: Waiting for candle to CLOSE AT or ABOVE ₹${watch.entryPrice} to confirm re-entry...`);
+                } else {
+                    this.lastFilterEvent = `🔒 STAGE 1: Watching BUY Dip Below ₹${watch.entryPrice} (Candle ${watch.candlesWatched}/${this.maxWatchCandles})`;
                 }
             }
 
@@ -138,10 +157,13 @@ class ReversalSignalFilter {
                     };
 
                     watch.status = "CONFIRMED";
+                    this.lastFilterEvent = `✅ BUY Signal CONFIRMED & APPROVED @ Re-entry ₹${candleClose} (Sweep: ₹${watch.sweepPrice})`;
                     this.watchHistory.push({ ...watch });
                     this.activeWatch = null;
 
                     return confirmedSignal;
+                } else {
+                    this.lastFilterEvent = `🎯 STAGE 2: Sweep Found @ ₹${watch.sweepPrice}. Waiting Close >= ₹${watch.entryPrice} (Candle ${watch.candlesWatched}/${this.maxWatchCandles})`;
                 }
             }
         }
@@ -156,8 +178,11 @@ class ReversalSignalFilter {
                     watch.stage = "STAGE_2_SWEEP_DETECTED";
                     watch.sweepDetected = true;
                     watch.sweepPrice = Math.max(candleHigh, candleClose);
+                    this.lastFilterEvent = `🎯 STAGE 2: SELL Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Retest Close <= ₹${watch.entryPrice}`;
                     console.log(`🎯 [REVERSAL RALLY DETECTED] SELL Liquidity Sweep found! High: ₹${watch.sweepPrice} > Entry ₹${watch.entryPrice}`);
                     console.log(`⏳ Stage 2: Waiting for candle to CLOSE AT or BELOW ₹${watch.entryPrice} to confirm re-entry...`);
+                } else {
+                    this.lastFilterEvent = `🔒 STAGE 1: Watching SELL Rally Above ₹${watch.entryPrice} (Candle ${watch.candlesWatched}/${this.maxWatchCandles})`;
                 }
             }
 
@@ -177,18 +202,22 @@ class ReversalSignalFilter {
                     };
 
                     watch.status = "CONFIRMED";
+                    this.lastFilterEvent = `✅ SELL Signal CONFIRMED & APPROVED @ Re-entry ₹${candleClose} (Sweep: ₹${watch.sweepPrice})`;
                     this.watchHistory.push({ ...watch });
                     this.activeWatch = null;
 
                     return confirmedSignal;
+                } else {
+                    this.lastFilterEvent = `🎯 STAGE 2: Sweep Found @ ₹${watch.sweepPrice}. Waiting Close <= ₹${watch.entryPrice} (Candle ${watch.candlesWatched}/${this.maxWatchCandles})`;
                 }
             }
         }
 
-        // 3. CHECK TIMEOUT / EXPIRY GUARD
+        // 4. CHECK TIMEOUT / EXPIRY GUARD
         if (watch.candlesWatched >= this.maxWatchCandles) {
             console.warn(`⏰ [REVERSAL WATCH EXPIRED] Watch ID ${watch.watchId} expired after ${watch.candlesWatched} candles without complete reversal retest.`);
             watch.status = "EXPIRED";
+            this.lastFilterEvent = `⏰ Watch EXPIRED: ${watch.type} @ ₹${watch.entryPrice} (6 Candles / 30m Limit Reached without Retest)`;
             this.watchHistory.push({ ...watch });
             this.activeWatch = null;
         }
@@ -203,6 +232,10 @@ class ReversalSignalFilter {
         return {
             enabled: this.enabled,
             activeWatch: this.activeWatch,
+            isLocked: !!(this.activeWatch && this.activeWatch.status === "ACTIVE_WATCH"),
+            maxWatchCandles: this.maxWatchCandles,
+            maxDriftPoints: this.maxDriftPoints,
+            lastFilterEvent: this.lastFilterEvent || (this.activeWatch ? `Locked: Watching ${this.activeWatch.type} @ ₹${this.activeWatch.entryPrice}` : "System Listening for Consensus Signals"),
             totalHistory: this.watchHistory.length,
             recentWatches: this.watchHistory.slice(-5)
         };

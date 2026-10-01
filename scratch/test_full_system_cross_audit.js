@@ -154,6 +154,21 @@ async function runFullSystemCrossAudit() {
         recordFail("Reversal Filter Runaway Drift Guard", "Failed to cancel runaway signal drifting 40+ points");
     }
 
+    // 2E: Active Watch Signal Lock Guard Test (New signals blocked during active watch)
+    reversalFilter.activeWatch = null;
+    reversalFilter.evaluateSignal(simulatedBuySignal, { close: 22500, low: 22500, high: 22505 }); // Watch ID 1 created, candlesWatched = 1
+    const originalWatchId = reversalFilter.activeWatch.watchId;
+
+    // Next candle tick sends a NEW signal @ 22510
+    const newIncomingSignal = { consensus: "SELL", entry: 22510, time: "10:20:00", date: "2026-10-01", strategyName: "QuantumConsensus" };
+    reversalFilter.evaluateSignal(newIncomingSignal, { close: 22510, low: 22500, high: 22515 }); // candlesWatched = 2
+
+    if (reversalFilter.activeWatch && reversalFilter.activeWatch.watchId === originalWatchId && reversalFilter.activeWatch.type === "BUY" && reversalFilter.activeWatch.candlesWatched === 2) {
+        recordPass("Reversal Filter Active Watch Lock Guard", "Incoming SELL signal during active BUY watch was successfully BLOCKED & LOCKED out");
+    } else {
+        recordFail("Reversal Filter Active Watch Lock Guard", "Failed to block incoming signal during active watch");
+    }
+
     // --------------------------------------------------------------------------
     // TEST MODULE 3: MasterSL Dynamic Rupee Trailing SL Engine Audit
     // --------------------------------------------------------------------------
