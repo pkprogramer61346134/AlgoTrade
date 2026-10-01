@@ -661,6 +661,13 @@ class MasterTrailingEngine {
         const isLiveTick = tick.status === "live" || Boolean(tick.liveLtp) || pos.envName === "REAL_TRADE";
         const livePrice = Number(tick.liveLtp || tick.ltp || tick.price || tick.close);
 
+        // Spot Index Price vs Option Contract LTP Guard:
+        // If active position is an option contract (entry < ₹2000) and tick is Index Spot price (livePrice > ₹5000), ignore index tick
+        const isOptionContract = Boolean(pos.isOptionTrade || (pos.securityId && String(pos.securityId) !== "13") || pos.symbol?.includes("_"));
+        if (isOptionContract && pos.entryPrice > 0 && pos.entryPrice < 2000 && livePrice > 5000) {
+            return null;
+        }
+
         const currentHigh = isLiveTick ? livePrice : Number(tick.candleHigh || tick.high || livePrice);
         const currentLow = isLiveTick ? livePrice : Number(tick.candleLow || tick.low || livePrice);
 
