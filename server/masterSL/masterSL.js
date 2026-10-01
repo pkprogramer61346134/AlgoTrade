@@ -281,8 +281,14 @@ class MasterTrailingEngine {
         if (cfg.enableVirtualSignalFilter && !forceReal) {
             if (this.activePosition || this.isOrderInFlight) return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN_OR_IN_FLIGHT" };
             if (this.virtualWatch) {
-                logger.logInfo(envName, "VIRTUAL_WATCH_BUSY", `Virtual watch already active for ${this.virtualWatch.symbol}. Skipping duplicate signal.`);
-                return { status: "IGNORED", reason: "VIRTUAL_WATCH_ALREADY_ACTIVE" };
+                // If new signal is in OPPOSITE direction (Reversal Signal), cancel current watch and switch to new reversal watch
+                if (this.virtualWatch.signal?.consensus !== signal.consensus) {
+                    logger.logInfo(envName, "VIRTUAL_WATCH_REVERSAL_SWITCH", `🔄 [VIRTUAL WATCH REVERSAL] Consensus signal flipped from ${this.virtualWatch.signal?.consensus} to ${signal.consensus}! Cancelling active watch for ${this.virtualWatch.symbol} and switching to new ${signal.consensus} reversal watch.`);
+                    this.virtualWatch = null;
+                } else {
+                    logger.logInfo(envName, "VIRTUAL_WATCH_BUSY", `Virtual watch already active for ${this.virtualWatch.symbol} (${signal.consensus}). Skipping duplicate signal.`);
+                    return { status: "IGNORED", reason: "VIRTUAL_WATCH_ALREADY_ACTIVE" };
+                }
             }
 
             try {
@@ -307,6 +313,7 @@ class MasterTrailingEngine {
                     virtualSl: levels.initialSl,
                     virtualTr: levels.tr1,
                     slHit: false,
+                    midCheckDone: false,
                     startTime: Date.now(),
                     startDate: signal.date || new Date().toLocaleDateString("en-CA"),
                     startTimeStr: signal.time || new Date().toLocaleTimeString("en-IN"),
@@ -617,6 +624,7 @@ class MasterTrailingEngine {
         } else {
             // Phase B: Price Recovery Back to Original Entry Price ($E$)
             const isRecoveredToEntry = isOptionContract ? (livePrice >= vw.virtualEntry) : (isBuy ? livePrice >= vw.virtualEntry : livePrice <= vw.virtualEntry);
+
             if (isRecoveredToEntry) {
                 logger.logInfo(envName, "VIRTUAL_RECOVERY_DETECTED", `🔄 Price recovered back to Entry Price (₹${vw.virtualEntry}) after Virtual SL hit! Running Consensus Re-Check...`);
 
