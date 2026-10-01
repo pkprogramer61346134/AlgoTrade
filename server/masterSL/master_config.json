@@ -1,18 +1,13 @@
 {
   "maxBudgetPercent": 100,
-  "maxLossPerTrade": 300,
-  "maxProfitPerTrade": 1000,
-  "targetMode": "FIXED",
-  "useFixedRupeeSL": true,
-  "enableAutoTrailing": false,
-  "enableVirtualSignalFilter": true,
-  "virtualMaxWatchMinutes": 20,
+  "maxLossPerTrade": 500,
+  "breathingRoomPoints": 0.5,
+  "targetMode": "TRAILING",
   "maxTradesPerDay": 3,
   "autoSquareOffTime": "15:10:00",
-  "breathingRoomPoints": 0.5,
-  "autoTrailOnTR1": false,
-  "autoTrailOnTR2": false,
-  "autoTrailOnTR3": false,
+  "autoTrailOnTR1": true,
+  "autoTrailOnTR2": true,
+  "autoTrailOnTR3": true,
   "maxRetriesPerStep": 5,
   "retryDelayMs": 1000,
   "selectedStock": {
@@ -23,6 +18,7 @@
     "instrument": "INDEX"
   },
   "minRequiredBalance": 1000,
-  "autoTrailOnTR4": false,
-  "autoTrailOnTR5": false
+  "enableAutoTrailing": true,
+  "autoTrailOnTR4": true,
+  "autoTrailOnTR5": true
 }

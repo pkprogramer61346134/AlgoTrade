@@ -11,7 +11,6 @@
  */
 
 const realConfig = require('./config');
-const masterConfig = require('../masterSL/config');
 const masterSL = require('../masterSL/masterSL');
 
 // Strict allowed modules stack only
@@ -364,18 +363,11 @@ class RealTradeEngine {
             qty: position.qty
         }, (liveTick) => {
             this.latestOptionTick = liveTick;
-            const optLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || position.entryPrice);
-
             if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
-                masterSL.activePosition.liveLtp = optLtp;
+                masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || position.entryPrice);
                 masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
                 masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
             }
-
-            if (masterSL.virtualWatch) {
-                masterSL.virtualWatch.liveLtp = optLtp;
-            }
-
             this.processTick(liveTick);
         });
     }
@@ -516,13 +508,7 @@ class RealTradeEngine {
      * Executes Step 1 -> Step 2 -> Step 3 -> Step 4 -> Step 5 -> Step 6 -> Step 7 Flow
      */
     async processSignal(signal, stockInfo = null) {
-        if (!signal) return null;
-
-        const masterCfg = masterConfig.getConfig();
-        const isRealEnabled = realConfig.getConfig().realTradeEnabled;
-
-        // Allow processing if Real Trading is enabled OR Virtual Signal Filter is active
-        if (!isRealEnabled && !masterCfg.enableVirtualSignalFilter) return null;
+        if (!realConfig.getConfig().realTradeEnabled || !signal) return null;
 
         // STEP 1: Check Open Positions (Single time from Dhan API)
         const posCheck = await this.checkOpenPositions();
@@ -532,44 +518,25 @@ class RealTradeEngine {
             return { status: "IGNORED", reason: "POSITION_ALREADY_OPEN", position: posCheck.position };
         }
 
-        // STEP 2: Check Account Balance (if real trading is enabled)
-        if (isRealEnabled) {
-            const balCheck = await this.checkAccountBalance();
-            if (!balCheck.isSufficient) {
-                console.log(`⚠️ [SIGNAL IGNORED] Available balance (₹${balCheck.availableBalance}) is below minimum threshold ₹1000.`);
-                return { status: "IGNORED", reason: "INSUFFICIENT_BALANCE", balance: balCheck.availableBalance };
-            }
+        // STEP 2: Check Account Balance
+        const balCheck = await this.checkAccountBalance();
+        if (!balCheck.isSufficient) {
+            console.log(`⚠️ [SIGNAL IGNORED] Available balance (₹${balCheck.availableBalance}) is below minimum threshold ₹1000.`);
+            return { status: "IGNORED", reason: "INSUFFICIENT_BALANCE", balance: balCheck.availableBalance };
         }
 
         if (signal.consensus === "BUY" || signal.consensus === "SELL") {
             this.isOrderPlacing = true;
             try {
-                console.log(`\n🎯 [SIGNAL DETECTED] Signal: ${signal.consensus} | Entry Spot: ₹${signal.entry}`);
+                console.log(`\n🎯 [REAL SIGNAL DETECTED] Signal: ${signal.consensus} | Entry Spot: ₹${signal.entry}`);
                 const handlers = this.getRealHandlers();
 
-                // STEP 3, 4, 5: Select Strike, Calculate SL, Execute Broker Order / Virtual Watch
-                const envName = isRealEnabled ? "REAL_TRADE" : "PAPER";
-                const orderRes = await masterSL.processSignal(signal, handlers, envName);
-
-                if (orderRes && orderRes.status === "VIRTUAL_WATCHING" && orderRes.virtualWatch) {
-                    const vw = orderRes.virtualWatch;
-                    const strikeInfo = vw.selectedStrikeInfo;
-                    if (strikeInfo && strikeInfo.securityId) {
-                        this.trackActiveOption({
-                            securityId: strikeInfo.securityId,
-                            symbol: vw.symbol,
-                            entryPrice: vw.virtualEntry,
-                            qty: strikeInfo.lotSize || 65
-                        });
-                    }
-                    return orderRes;
-                }
+                // STEP 3, 4, 5: Select Strike, Calculate SL, Execute Broker Order
+                const orderRes = await masterSL.processSignal(signal, handlers, "REAL_TRADE");
 
                 if (orderRes && orderRes.status === "EXECUTED" && orderRes.position) {
-                    // STEP 7: Start Live Option Tracking & Trailing SL if Real Trading is enabled
-                    if (isRealEnabled) {
-                        this.trackActiveOption(orderRes.position);
-                    }
+                    // STEP 7: Start Live Option Tracking & Trailing SL
+                    this.trackActiveOption(orderRes.position);
                     return { status: "EXECUTED", position: orderRes.position, confirmed: true };
                 }
 

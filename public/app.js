@@ -209,9 +209,6 @@ function renderRealDashboard(data, config = {}) {
     if (data.activePosition && data.activePosition.status === "OPEN") {
         activeSymbol.innerText = data.activePosition.symbol;
         activePnl.innerText = `PnL: ₹${data.activePosition.pnl || 0}`;
-    } else if (data.virtualWatch) {
-        activeSymbol.innerText = `⚡ ${data.virtualWatch.symbol || 'VIRTUAL_WATCH'}`;
-        activePnl.innerText = `Virtual SL: ₹${data.virtualWatch.virtualSl ? Number(data.virtualWatch.virtualSl).toFixed(2) : '--'}`;
     } else {
         activeSymbol.innerText = "NONE";
         activePnl.innerText = "PnL: ₹0.00";
@@ -287,84 +284,6 @@ function renderRealDashboard(data, config = {}) {
                         <span>TR2: ₹${tr2}</span>
                         <span>TR3: ₹${tr3}</span>
                         <span>TR4: ₹${tr4}</span>
-                    </div>
-                </div>
-            `;
-        } else if (data.virtualWatch) {
-            const vw = data.virtualWatch;
-            const entryVal = Number(vw.virtualEntry || 0);
-            const slVal = Number(vw.virtualSl || 0);
-            const targetVal = Number(vw.virtualTr || 0);
-            const liveLtpVal = Number(vw.liveLtp || data.latestOptionTick?.liveLtp || entryVal);
-
-            const displayEntry = entryVal > 0 ? entryVal.toFixed(2) : '--';
-            const displaySl = slVal > 0 ? slVal.toFixed(2) : '--';
-            const displayTarget = targetVal > 0 ? targetVal.toFixed(2) : '--';
-            const displayLive = liveLtpVal > 0 ? liveLtpVal.toFixed(2) : displayEntry;
-
-            // Calculate Progress Percentage between SL and Target
-            let progressPct = "0.0";
-            if (targetVal > slVal && liveLtpVal > 0) {
-                const range = Math.max(0.1, targetVal - slVal);
-                const rawPct = (((liveLtpVal - slVal) / range) * 100);
-                progressPct = Math.min(100, Math.max(0, rawPct)).toFixed(1);
-            }
-
-            const statusText = vw.slHit 
-                ? `⚡ STOP HUNT SWEEP DETECTED | WAITING RECOVERY TO ENTRY (₹${displayEntry})`
-                : `🎯 WATCHING VIRTUAL SL (₹${displaySl}) & TARGET (₹${displayTarget})`;
-
-            posCard.className = "active-trade-card glass-card virtual-watch-card";
-            posCard.innerHTML = `
-                <div style="background: rgba(255,193,7,0.15); border: 1px solid rgba(255,193,7,0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;">
-                    <div style="font-weight: 700; color: #ffc107; display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
-                        <span>⚡ VIRTUAL WATCH ACTIVE (Liquidity Sweep Filter)</span>
-                        <span class="badge badge-warning" style="background:#ffc107; color:#000; padding:4px 8px; border-radius:4px; font-weight:700;">${statusText}</span>
-                    </div>
-                </div>
-                
-                <div class="trade-details-grid">
-                    <div class="trade-item-box">
-                        <div class="item-label">Contract Symbol</div>
-                        <div class="item-val">${vw.symbol || 'NIFTY_OPTION'}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Virtual Entry LTP</div>
-                        <div class="item-val">₹${displayEntry}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Option Live LTP</div>
-                        <div class="item-val highlight" style="color:#00e5ff; font-weight:bold;">₹${displayLive}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Virtual SL (Fixed ₹300 Loss)</div>
-                        <div class="item-val text-danger" style="font-weight:bold;">₹${displaySl}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Virtual Target (Fixed ₹1000 Profit)</div>
-                        <div class="item-val text-success" style="font-weight:bold;">₹${displayTarget}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Sweep & Recovery Status</div>
-                        <div class="item-val ${vw.slHit ? 'text-warning' : 'text-info'}" style="font-weight:bold;">
-                            ${vw.slHit ? '⚡ SL HIT (Waiting Bounce to Entry)' : '🎯 Watching for SL Hit'}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="progress-container" style="margin-top: 14px;">
-                    <div class="progress-header">
-                        <span>Liquidity Sweep Range (Live LTP: ₹${displayLive})</span>
-                        <span style="color:#ffc107; font-weight:700;">${progressPct}% to Target</span>
-                    </div>
-                    <div class="progress-bar-bg" style="background: rgba(255,255,255,0.1); height: 10px; border-radius: 5px; overflow: hidden; margin: 6px 0;">
-                        <div class="progress-bar-fill" style="width: ${progressPct}%; background: linear-gradient(90deg, #ff4d4d 0%, #ffc107 50%, #00e676 100%); height: 100%; border-radius: 5px; transition: width 0.4s ease;"></div>
-                    </div>
-                    <div class="targets-milestones-row" style="display: flex; justify-content: space-between; font-size: 11px; opacity: 0.9; margin-top: 4px;">
-                        <span style="color:#ff4d4d; font-weight:600;">🔴 Virtual SL: ₹${displaySl}</span>
-                        <span style="color:#ffffff; font-weight:600;">📌 Virtual Entry: ₹${displayEntry}</span>
-                        <span style="color:#00e5ff; font-weight:700;">⚡ Live: ₹${displayLive}</span>
-                        <span style="color:#00e676; font-weight:600;">🟢 Target: ₹${displayTarget}</span>
                     </div>
                 </div>
             `;
