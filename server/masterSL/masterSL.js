@@ -537,7 +537,7 @@ class MasterTrailingEngine {
         // 1. DYNAMIC PERCENTAGE & RUPEE PROFIT TRAILING SL JUMP ENGINE
         if (!exitTriggered && cfg.enableAutoTrailing !== false) {
             const qty = Number(pos.qty || pos.lotSize || 65);
-            const pnlDiff = isOptionBuying ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice);
+            const pnlDiff = Number((isOptionBuying ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice)).toFixed(2));
             const currentProfitRupees = Math.round(pnlDiff * qty);
 
             // PERCENTAGE-BASED TRAILING RULES (Target % Hit -> SL Lock %)
@@ -550,7 +550,7 @@ class MasterTrailingEngine {
                     (pos.levels?.riskPoints ? (pos.levels.riskPoints * 3) : 50)
                 );
 
-                const sortedRules = [...percentRules].sort((a, b) => a.targetPercent - b.targetPercent);
+                const sortedRules = [...percentRules].sort((a, b) => b.targetPercent - a.targetPercent);
 
                 for (const rule of sortedRules) {
                     const reqTargetPts = (targetPoints * rule.targetPercent) / 100;
@@ -563,6 +563,7 @@ class MasterTrailingEngine {
                         if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
                             const newStage = `TARGET_${rule.targetPercent}%_LOCK_${rule.lockPercent}%`;
                             await this.modifyTrailingSL(newSlPrice, newStage, envName);
+                            break;
                         }
                     }
                 }

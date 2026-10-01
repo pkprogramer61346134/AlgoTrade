@@ -3,9 +3,11 @@
   "maxTargetPerTrade": 5000,
   "maxLossPerTrade": 300,
   "percentTrailingRules": [
-    { "targetPercent": 40, "lockPercent": 20 },
+    { "targetPercent": 20, "lockPercent": 10 },
+    { "targetPercent": 40, "lockPercent": 25 },
     { "targetPercent": 60, "lockPercent": 45 },
-    { "targetPercent": 90, "lockPercent": 80 }
+    { "targetPercent": 75, "lockPercent": 65 },
+    { "targetPercent": 90, "lockPercent": 85 }
   ],
   "maxTradesPerDay": 3,
   "autoSquareOffTime": "15:10:00",

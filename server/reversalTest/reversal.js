@@ -16,6 +16,8 @@
  * 5. Expiry Guard: If reversal sweep + re-entry isn't completed within maxWatchCandles (default 6 candles / 30 mins), signal expires.
  */
 
+const logger = require('./logger');
+
 class ReversalSignalFilter {
     constructor() {
         this.activeWatch = null;
@@ -55,6 +57,7 @@ class ReversalSignalFilter {
                 if (incomingEntry !== this.activeWatch.entryPrice || incomingType !== this.activeWatch.type) {
                     console.log(`🔒 [ACTIVE WATCH LOCKED] Reversal Filter is currently watching ${this.activeWatch.type} @ ₹${this.activeWatch.entryPrice} (Watch ID: ${this.activeWatch.watchId}, Candle ${this.activeWatch.candlesWatched}/${this.maxWatchCandles}). Incoming ${incomingType} @ ₹${incomingEntry} signal BLOCKED & IGNORED until active watch completes.`);
                     this.lastFilterEvent = `🔒 Active Watch Locked (${this.activeWatch.type} @ ₹${this.activeWatch.entryPrice}). Incoming ${incomingType} signal blocked.`;
+                    logger.logInfo("ACTIVE_WATCH_LOCKED", `Blocked incoming ${incomingType} signal @ ₹${incomingEntry} while watching ${this.activeWatch.type} @ ₹${this.activeWatch.entryPrice}`, { activeWatch: this.activeWatch });
                 }
             }
         } else {
@@ -80,6 +83,7 @@ class ReversalSignalFilter {
                 this.lastFilterEvent = `🔒 ACTIVE WATCH LOCKED: ${newType} @ ₹${newEntry} (Waiting for ${newType === "BUY" ? "Dip Below" : "Rally Above"} Entry)`;
                 console.log(`\n👁️ [REVERSAL WATCH STARTED & LOCKED] ${newType} Consensus Signal received @ Entry ₹${newEntry}`);
                 console.log(`⏳ Stage 1: Watching for ${newType === "BUY" ? "dip/sweep below" : "rally/sweep above"} ₹${newEntry}... (New signals locked out)`);
+                logger.logInfo("WATCH_STARTED", `Started watching ${newType} consensus signal @ Entry ₹${newEntry}`, { watchId: this.activeWatch.watchId, signal: consensusResult });
             }
         }
 
@@ -114,6 +118,7 @@ class ReversalSignalFilter {
             console.warn(`⚠️ [RUNAWAY DRIFT GUARD] BUY Signal entry ₹${watch.entryPrice} already moved +${driftPts} pts to ₹${candleClose} (> ${maxDrift} pts max limit). Ignoring & cancelling signal.`);
             watch.status = "EXPIRED_RUNAWAY_DRIFT";
             this.lastFilterEvent = `⚠️ Watch Cancelled: Runaway Drift (+${driftPts} pts > ${maxDrift} limit)`;
+            logger.logInfo("RUNAWAY_DRIFT_EXPIRED", `BUY signal watch cancelled due to +${driftPts} pts drift > ${maxDrift} limit`, { watch });
             this.watchHistory.push({ ...watch });
             this.activeWatch = null;
             return null;
@@ -124,6 +129,7 @@ class ReversalSignalFilter {
             console.warn(`⚠️ [RUNAWAY DRIFT GUARD] SELL Signal entry ₹${watch.entryPrice} already moved -${driftPts} pts to ₹${candleClose} (> ${maxDrift} pts max limit). Ignoring & cancelling signal.`);
             watch.status = "EXPIRED_RUNAWAY_DRIFT";
             this.lastFilterEvent = `⚠️ Watch Cancelled: Runaway Drift (-${driftPts} pts > ${maxDrift} limit)`;
+            logger.logInfo("RUNAWAY_DRIFT_EXPIRED", `SELL signal watch cancelled due to -${driftPts} pts drift > ${maxDrift} limit`, { watch });
             this.watchHistory.push({ ...watch });
             this.activeWatch = null;
             return null;
@@ -142,6 +148,7 @@ class ReversalSignalFilter {
                     this.lastFilterEvent = `🎯 STAGE 2: BUY Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Retest Close >= ₹${watch.entryPrice}`;
                     console.log(`🎯 [REVERSAL DIP DETECTED] BUY Liquidity Sweep found! Low: ₹${watch.sweepPrice} < Entry ₹${watch.entryPrice}`);
                     console.log(`⏳ Stage 2: Waiting for candle to CLOSE AT or ABOVE ₹${watch.entryPrice} to confirm re-entry...`);
+                    logger.logInfo("BUY_SWEEP_DETECTED", `BUY Liquidity Sweep detected @ ₹${watch.sweepPrice} < Entry ₹${watch.entryPrice}`, { watch });
                 } else {
                     this.lastFilterEvent = `🔒 STAGE 1: Watching BUY Dip Below ₹${watch.entryPrice} (Candle ${watch.candlesWatched}/${this.maxWatchCandles})`;
                 }
@@ -164,6 +171,7 @@ class ReversalSignalFilter {
 
                     watch.status = "CONFIRMED";
                     this.lastFilterEvent = `✅ BUY Signal CONFIRMED & APPROVED @ Re-entry ₹${candleClose} (Sweep: ₹${watch.sweepPrice})`;
+                    logger.logInfo("BUY_SIGNAL_CONFIRMED", `BUY signal confirmed & approved @ Re-entry ₹${candleClose} (Sweep: ₹${watch.sweepPrice})`, { confirmedSignal, watch });
                     this.watchHistory.push({ ...watch });
                     this.activeWatch = null;
 
@@ -187,6 +195,7 @@ class ReversalSignalFilter {
                     this.lastFilterEvent = `🎯 STAGE 2: SELL Sweep Detected @ ₹${watch.sweepPrice}! Waiting for Retest Close <= ₹${watch.entryPrice}`;
                     console.log(`🎯 [REVERSAL RALLY DETECTED] SELL Liquidity Sweep found! High: ₹${watch.sweepPrice} > Entry ₹${watch.entryPrice}`);
                     console.log(`⏳ Stage 2: Waiting for candle to CLOSE AT or BELOW ₹${watch.entryPrice} to confirm re-entry...`);
+                    logger.logInfo("SELL_SWEEP_DETECTED", `SELL Liquidity Sweep detected @ ₹${watch.sweepPrice} > Entry ₹${watch.entryPrice}`, { watch });
                 } else {
                     this.lastFilterEvent = `🔒 STAGE 1: Watching SELL Rally Above ₹${watch.entryPrice} (Candle ${watch.candlesWatched}/${this.maxWatchCandles})`;
                 }
@@ -209,6 +218,7 @@ class ReversalSignalFilter {
 
                     watch.status = "CONFIRMED";
                     this.lastFilterEvent = `✅ SELL Signal CONFIRMED & APPROVED @ Re-entry ₹${candleClose} (Sweep: ₹${watch.sweepPrice})`;
+                    logger.logInfo("SELL_SIGNAL_CONFIRMED", `SELL signal confirmed & approved @ Re-entry ₹${candleClose} (Sweep: ₹${watch.sweepPrice})`, { confirmedSignal, watch });
                     this.watchHistory.push({ ...watch });
                     this.activeWatch = null;
 
@@ -224,6 +234,7 @@ class ReversalSignalFilter {
             console.warn(`⏰ [REVERSAL WATCH EXPIRED] Watch ID ${watch.watchId} expired after ${watch.candlesWatched} candles without complete reversal retest.`);
             watch.status = "EXPIRED";
             this.lastFilterEvent = `⏰ Watch EXPIRED: ${watch.type} @ ₹${watch.entryPrice} (6 Candles / 30m Limit Reached without Retest)`;
+            logger.logInfo("WATCH_EXPIRED_TIMEOUT", `Watch ID ${watch.watchId} expired after ${watch.candlesWatched} candles without complete retest`, { watch });
             this.watchHistory.push({ ...watch });
             this.activeWatch = null;
         }

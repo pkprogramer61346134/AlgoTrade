@@ -5408,3 +5408,222 @@ Error: [REAL_TRADE] Step PLACE_ORDER failed after 1 retries: [ORDER EXECUTOR ERR
 [30/9/2026, 00:46:21] [PAPER] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24800_CE | Entry: ₹150 | Qty: 65 | SL: ₹125 | Target (TR5 (1:5)): ₹275 | Verification: VERIFIED
 [30/9/2026, 00:46:21] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
 [30/9/2026, 00:46:21] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24800_CE | Exit: ₹275 | Reason: TARGET_HIT (TR5 (1:5)) | PnL: ₹8125
+[30/9/2026, 13:35:03] [PAPER] ℹ️ [VIRTUAL_WATCH_STARTED] ⚡ [VIRTUAL SIGNAL WATCH] Started watch for NIFTY-Oct2026-22850-CE | Entry: ₹117.4 | Virtual SL: ₹112.78 (₹300 Loss) | Virtual Target: ₹132.78 (₹1000 Profit)
+[30/9/2026, 13:35:03] [PAPER] ℹ️ [VIRTUAL_SL_HIT] ⚡ [STOP HUNT DETECTED] Virtual SL (₹112.78) hit for NIFTY-Oct2026-22850-CE! Waiting for price recovery back to Entry Price (₹117.4)...
+[30/9/2026, 13:35:03] [PAPER] ℹ️ [VIRTUAL_RECOVERY_DETECTED] 🔄 Price recovered back to Entry Price (₹117.4) after Virtual SL hit! Running Consensus Re-Check...
+[30/9/2026, 13:35:04] [PAPER] ℹ️ [RECHECK_FAILED] 🛑 [DOUBLE CONFIRMATION FAILED] Recovery occurred but Consensus Signal is no longer valid (NO_SIGNAL). Real trade skipped.
+[30/9/2026, 14:15:29] [PAPER] ℹ️ [VIRTUAL_WATCH_STARTED] ⚡ [VIRTUAL SIGNAL WATCH] Started watch for NIFTY-Oct2026-22850-CE | Entry: ₹117.4 | Virtual SL: ₹112.78 (₹300 Loss) | Virtual Target: ₹132.78 (₹1000 Profit)
+[30/9/2026, 14:15:29] [PAPER] ℹ️ [VIRTUAL_SL_HIT_CLEARED] 🔴 Virtual SL (₹112.78) hit for NIFTY-Oct2026-22850-CE! Virtual Watch cleared immediately without 20-min wait. Ready for next Engine signals.
+[30/9/2026, 14:19:47] [PAPER] ℹ️ [VIRTUAL_WATCH_STARTED] ⚡ [VIRTUAL SIGNAL WATCH] Started watch for NIFTY-Oct2026-22850-CE | Entry: ₹117.4 | Virtual SL: ₹112.78 (₹300 Loss) | Virtual Target: ₹132.78 (₹1000 Profit)
+[30/9/2026, 14:19:47] [PAPER] ℹ️ [VIRTUAL_SL_HIT] ⚡ [STOP HUNT DETECTED] Virtual SL (₹112.78) hit for NIFTY-Oct2026-22850-CE! Waiting for price recovery back to Entry Price (₹117.4)...
+[30/9/2026, 14:19:47] [PAPER] ℹ️ [VIRTUAL_RECOVERY_DETECTED] 🔄 Price recovered back to Entry Price (₹117.4) after Virtual SL hit! Running Consensus Re-Check...
+[30/9/2026, 14:19:58] [PAPER] ℹ️ [RECHECK_FAILED] 🛑 [DOUBLE CONFIRMATION FAILED] Recovery occurred but Consensus Signal is no longer valid (NO_SIGNAL). Real trade skipped.
+[30/9/2026, 14:35:37] [PAPER] ℹ️ [VIRTUAL_WATCH_STARTED] ⚡ [VIRTUAL SIGNAL WATCH] Started watch for NIFTY-Oct2026-22850-CE | Entry: ₹117.4 | Virtual SL: ₹112.78 (₹300 Loss) | Virtual Target: ₹132.78 (₹1000 Profit)
+[30/9/2026, 14:35:37] [PAPER] ℹ️ [VIRTUAL_SL_HIT] ⚡ [STOP HUNT DETECTED] Virtual SL (₹112.78) hit for NIFTY-Oct2026-22850-CE! Waiting for price recovery back to Entry Price (₹117.4)...
+[30/9/2026, 14:35:37] [PAPER] ℹ️ [VIRTUAL_RECOVERY_DETECTED] 🔄 Price recovered back to Entry Price (₹117.4) after Virtual SL hit! Running Consensus Re-Check...
+[30/9/2026, 14:35:38] [PAPER] ℹ️ [RECHECK_FAILED] 🛑 [DOUBLE CONFIRMATION FAILED] Recovery occurred but Consensus Signal is no longer valid (SELL). Real trade skipped.
+[30/9/2026, 15:07:54] [PAPER] ℹ️ [VIRTUAL_WATCH_STARTED] ⚡ [VIRTUAL SIGNAL WATCH] Started watch for NIFTY-Oct2026-22850-CE | Entry: ₹117.4 | Virtual SL: ₹112.78 (₹300 Loss) | Virtual Target: ₹132.78 (₹1000 Profit)
+[30/9/2026, 15:07:54] [PAPER] ℹ️ [VIRTUAL_SL_HIT] ⚡ [STOP HUNT DETECTED] Virtual SL (₹112.78) hit for NIFTY-Oct2026-22850-CE! Waiting for price recovery back to Entry Price (₹117.4)...
+[30/9/2026, 15:07:54] [PAPER] ℹ️ [VIRTUAL_RECOVERY_DETECTED] 🔄 Price recovered back to Entry Price (₹117.4) after Virtual SL hit! Running Consensus Re-Check...
+[30/9/2026, 15:08:06] [PAPER] ℹ️ [RECHECK_FAILED] 🛑 [DOUBLE CONFIRMATION FAILED] Recovery occurred but Consensus Signal is no longer valid (NO_SIGNAL). Real trade skipped.
+[1/10/2026, 11:06:41] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹131.54 (PROFIT_LOCKED_₹1400)
+[1/10/2026, 11:06:41] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:08:27] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹123.85 (PROFIT_LOCKED_₹900)
+[1/10/2026, 11:08:27] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:09:10] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹123.85 (PROFIT_LOCKED_₹900)
+[1/10/2026, 11:09:10] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:09:12] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹131.54 (PROFIT_LOCKED_₹1400)
+[1/10/2026, 11:09:12] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:09:14] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹139.23 (PROFIT_LOCKED_₹1900)
+[1/10/2026, 11:09:14] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:09:17] [REAL_TRADE] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:09:17] [REAL_TRADE] ℹ️ [POSITION_CLOSED] Closed NIFTY_22550_CE | Exit: ₹139.23 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1900) | PnL: ₹1899.95
+[1/10/2026, 11:11:34] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹451.75 (PROFIT_LOCKED_₹900)
+[1/10/2026, 11:11:34] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:11:36] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹459.44 (PROFIT_LOCKED_₹1400)
+[1/10/2026, 11:11:36] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:11:39] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹467.13 (PROFIT_LOCKED_₹1900)
+[1/10/2026, 11:11:39] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:11:41] [REAL_TRADE] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:11:41] [REAL_TRADE] ℹ️ [POSITION_CLOSED] Closed NIFTY_23000_PE | Exit: ₹467.13 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1900) | PnL: ₹1899.95
+[1/10/2026, 11:16:11] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹498.9 (PROFIT_LOCKED_₹900)
+[1/10/2026, 11:16:11] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:16:13] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹506.59 (PROFIT_LOCKED_₹1400)
+[1/10/2026, 11:16:13] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:16:15] [REAL_TRADE] ℹ️ [SL_TRAILED] SL trailed successfully to ₹514.28 (PROFIT_LOCKED_₹1900)
+[1/10/2026, 11:16:15] [REAL_TRADE] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:16:17] [REAL_TRADE] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
+[1/10/2026, 11:16:17] [REAL_TRADE] ℹ️ [POSITION_CLOSED] Closed NIFTY_23050_PE | Exit: ₹514.28 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1900) | PnL: ₹1899.95
+[1/10/2026, 11:56:35] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Double-check Passed)
+[1/10/2026, 11:56:35] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 11:56:35] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 11:57:25] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Double-check Passed)
+[1/10/2026, 11:57:27] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Double-check Passed)
+[1/10/2026, 11:57:29] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 11:57:29] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 11:57:29] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 12:33:49] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Double-check Passed)
+[1/10/2026, 12:33:52] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Double-check Passed)
+[1/10/2026, 12:33:54] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 12:33:54] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 12:33:54] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 12:33:54] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 12:37:01] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Double-check Passed)
+[1/10/2026, 12:37:03] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Double-check Passed)
+[1/10/2026, 12:37:05] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 12:37:05] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 12:37:05] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 12:37:05] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 12:42:39] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Double-check Passed)
+[1/10/2026, 12:42:41] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Double-check Passed)
+[1/10/2026, 12:42:43] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 12:42:43] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 12:42:43] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 12:42:43] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 13:10:39] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Simulated Mode)
+[1/10/2026, 13:10:42] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Simulated Mode)
+[1/10/2026, 13:10:44] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 13:10:44] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 13:10:44] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 13:10:44] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 13:30:36] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Simulated Mode)
+[1/10/2026, 13:30:38] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Simulated Mode)
+[1/10/2026, 13:30:40] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 13:30:40] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 13:30:40] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 13:30:40] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 13:48:07] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Simulated Mode)
+[1/10/2026, 13:48:09] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Simulated Mode)
+[1/10/2026, 13:48:11] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 13:48:11] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 13:48:11] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 13:48:11] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 13:50:45] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Simulated Mode)
+[1/10/2026, 13:50:47] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Simulated Mode)
+[1/10/2026, 13:50:50] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 13:50:50] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 13:50:50] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 13:50:50] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 13:53:47] [PAPER_TEST] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_ORDER_998811 double-checked & verified on broker terminal. Status: CONFIRMED
+[1/10/2026, 13:53:47] [PAPER_TEST] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22300_PE | Entry: ₹200 | Qty: 65 | SL: ₹195.38 | Target (DYNAMIC_RUPEE_TRAILING): ₹1738.46 | Verification: VERIFIED
+[1/10/2026, 13:54:06] [PAPER_TEST] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_ORDER_998811 double-checked & verified on broker terminal. Status: CONFIRMED
+[1/10/2026, 13:54:06] [PAPER_TEST] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22300_PE | Entry: ₹200 | Qty: 65 | SL: ₹195.38 | Target (DYNAMIC_RUPEE_TRAILING): ₹1738.46 | Verification: VERIFIED
+[1/10/2026, 13:54:11] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Simulated Mode)
+[1/10/2026, 13:54:13] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Simulated Mode)
+[1/10/2026, 13:54:15] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 13:54:15] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 13:54:15] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 13:54:15] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 13:55:57] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹213.85 (PROFIT_LOCKED_₹900) (Simulated Mode)
+[1/10/2026, 13:55:59] [PAPER] ℹ️ [SL_TRAILED_SIMULATED] SL trailed to ₹221.54 (PROFIT_LOCKED_₹1400) (Simulated Mode)
+[1/10/2026, 13:56:01] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1400)). 15-minute cooldown started.
+[1/10/2026, 13:56:01] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹221.54 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1400) | PnL: ₹1400.1
+[1/10/2026, 13:56:01] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_PE | Exit: ₹202 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹130
+[1/10/2026, 13:56:01] [PAPER] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[1/10/2026, 13:58:05] [PAPER_TEST] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_ORDER_998811 double-checked & verified on broker terminal. Status: CONFIRMED
+[1/10/2026, 13:58:05] [PAPER_TEST] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22300_PE | Entry: ₹200 | Qty: 65 | SL: ₹195.38 | Target (DYNAMIC_RUPEE_TRAILING): ₹1738.46 | Verification: VERIFIED
+[1/10/2026, 14:05:51] [PAPER_TEST] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_ORDER_998811 double-checked & verified on broker terminal. Status: CONFIRMED
+[1/10/2026, 14:05:51] [PAPER_TEST] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22300_PE | Entry: ₹200 | Qty: 65 | SL: ₹195.38 | Target (DYNAMIC_RUPEE_TRAILING): ₹1738.46 | Verification: VERIFIED
+[1/10/2026, 22:51:54] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[1/10/2026, 22:51:54] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22250_CE | Exit: ₹105 | Reason: AUTO_TIME_EXIT_3_10_PM | PnL: ₹325
+[1/10/2026, 22:52:22] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹113.85 (PROFIT_LOCKED_₹900)...
+[1/10/2026, 22:52:22] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹113.85
+[1/10/2026, 22:52:22] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹113.85 (PROFIT_LOCKED_₹900)
+[1/10/2026, 22:52:46] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹113.85 (PROFIT_LOCKED_₹900)...
+[1/10/2026, 22:52:46] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹113.85
+[1/10/2026, 22:52:46] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹113.85 (PROFIT_LOCKED_₹900)
+[1/10/2026, 22:52:48] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹121.54 (PROFIT_LOCKED_₹1400)...
+[1/10/2026, 22:52:48] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹121.54
+[1/10/2026, 22:52:48] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹121.54 (PROFIT_LOCKED_₹1400)
+[1/10/2026, 22:52:50] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹129.23 (PROFIT_LOCKED_₹1900)...
+[1/10/2026, 22:52:50] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹129.23
+[1/10/2026, 22:52:50] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹129.23 (PROFIT_LOCKED_₹1900)
+[1/10/2026, 22:52:52] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[1/10/2026, 22:52:52] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1900)). 15-minute cooldown started.
+[1/10/2026, 22:52:52] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22250_CE | Exit: ₹129.23 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1900) | PnL: ₹1899.95
+[1/10/2026, 22:53:25] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹113.85 (PROFIT_LOCKED_₹900)...
+[1/10/2026, 22:53:25] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹113.85
+[1/10/2026, 22:53:25] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹113.85 (PROFIT_LOCKED_₹900)
+[1/10/2026, 22:53:27] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹121.54 (PROFIT_LOCKED_₹1400)...
+[1/10/2026, 22:53:27] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹121.54
+[1/10/2026, 22:53:27] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹121.54 (PROFIT_LOCKED_₹1400)
+[1/10/2026, 22:53:29] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹129.23 (PROFIT_LOCKED_₹1900)...
+[1/10/2026, 22:53:29] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹129.23
+[1/10/2026, 22:53:29] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹129.23 (PROFIT_LOCKED_₹1900)
+[1/10/2026, 22:53:31] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[1/10/2026, 22:53:31] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (PROFIT_LOCKED_₹1900)). 15-minute cooldown started.
+[1/10/2026, 22:53:31] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22250_CE | Exit: ₹129.23 | Reason: TRAILED_SL_HIT (PROFIT_LOCKED_₹1900) | PnL: ₹1899.95
+[2/10/2026, 00:08:08] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹110 (TARGET_40%_LOCK_20%)...
+[2/10/2026, 00:08:08] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹110
+[2/10/2026, 00:08:08] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹110 (TARGET_40%_LOCK_20%)
+[2/10/2026, 00:08:10] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹122.5 (TARGET_60%_LOCK_45%)...
+[2/10/2026, 00:08:10] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹122.5
+[2/10/2026, 00:08:10] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹122.5 (TARGET_60%_LOCK_45%)
+[2/10/2026, 00:08:12] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹140 (TARGET_90%_LOCK_80%)...
+[2/10/2026, 00:08:12] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹140
+[2/10/2026, 00:08:12] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹140 (TARGET_90%_LOCK_80%)
+[2/10/2026, 00:17:07] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹115.38 (TARGET_40%_LOCK_20%)...
+[2/10/2026, 00:17:07] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹115.38
+[2/10/2026, 00:17:07] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹115.38 (TARGET_40%_LOCK_20%)
+[2/10/2026, 00:17:11] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹134.61 (TARGET_60%_LOCK_45%)...
+[2/10/2026, 00:17:11] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹134.61
+[2/10/2026, 00:17:11] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹134.61 (TARGET_60%_LOCK_45%)
+[2/10/2026, 00:18:37] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹115.38 (TARGET_40%_LOCK_20%)...
+[2/10/2026, 00:18:37] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹115.38
+[2/10/2026, 00:18:37] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹115.38 (TARGET_40%_LOCK_20%)
+[2/10/2026, 00:18:39] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹134.61 (TARGET_60%_LOCK_45%)...
+[2/10/2026, 00:18:39] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹134.61
+[2/10/2026, 00:18:39] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹134.61 (TARGET_60%_LOCK_45%)
+[2/10/2026, 00:18:41] [PAPER] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹161.54 (TARGET_90%_LOCK_80%)...
+[2/10/2026, 00:18:41] [PAPER] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹161.54
+[2/10/2026, 00:18:41] [PAPER] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹161.54 (TARGET_90%_LOCK_80%)
+[2/10/2026, 00:18:44] [PAPER] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[2/10/2026, 00:18:44] [PAPER] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (TARGET_90%_LOCK_80%)). 15-minute cooldown started.
+[2/10/2026, 00:18:44] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_22250_CE | Exit: ₹161.54 | Reason: TRAILED_SL_HIT (TARGET_90%_LOCK_80%) | PnL: ₹4000.1
+[2/10/2026, 01:44:12] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹107.7 (TARGET_20%_LOCK_10%)...
+[2/10/2026, 01:44:12] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹107.7 (TARGET_20%_LOCK_10%)
+[2/10/2026, 01:44:30] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹107.7 (TARGET_20%_LOCK_10%)...
+[2/10/2026, 01:44:30] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹107.7 (TARGET_20%_LOCK_10%)
+[2/10/2026, 01:44:30] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹119.25 (TARGET_40%_LOCK_25%)...
+[2/10/2026, 01:44:30] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹119.25 (TARGET_40%_LOCK_25%)
+[2/10/2026, 01:44:30] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹134.65 (TARGET_60%_LOCK_45%)...
+[2/10/2026, 01:44:30] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹134.65 (TARGET_60%_LOCK_45%)
+[2/10/2026, 01:44:30] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹150.05 (TARGET_75%_LOCK_65%)...
+[2/10/2026, 01:44:30] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹150.05 (TARGET_75%_LOCK_65%)
+[2/10/2026, 01:45:08] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹107.7 (TARGET_20%_LOCK_10%)...
+[2/10/2026, 01:45:08] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹107.7 (TARGET_20%_LOCK_10%)
+[2/10/2026, 01:45:08] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹119.25 (TARGET_40%_LOCK_25%)...
+[2/10/2026, 01:45:08] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹119.25 (TARGET_40%_LOCK_25%)
+[2/10/2026, 01:45:08] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹150.05 (TARGET_75%_LOCK_65%)...
+[2/10/2026, 01:45:08] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹150.05 (TARGET_75%_LOCK_65%)
+[2/10/2026, 01:45:08] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹165.45 (TARGET_90%_LOCK_85%)...
+[2/10/2026, 01:45:08] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹165.45 (TARGET_90%_LOCK_85%)
+[2/10/2026, 01:45:08] [TEST] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
+[2/10/2026, 01:45:08] [TEST] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (TARGET_90%_LOCK_85%)). 15-minute cooldown started.
+[2/10/2026, 01:45:08] [TEST] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_CE | Exit: ₹165.45 | Reason: TRAILED_SL_HIT (TARGET_90%_LOCK_85%) | PnL: ₹4254.25
+[2/10/2026, 01:45:37] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹107.7 (TARGET_20%_LOCK_10%)...
+[2/10/2026, 01:45:37] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹107.7 (TARGET_20%_LOCK_10%)
+[2/10/2026, 01:45:37] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹119.25 (TARGET_40%_LOCK_25%)...
+[2/10/2026, 01:45:37] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹119.25 (TARGET_40%_LOCK_25%)
+[2/10/2026, 01:45:37] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹134.65 (TARGET_60%_LOCK_45%)...
+[2/10/2026, 01:45:37] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹134.65 (TARGET_60%_LOCK_45%)
+[2/10/2026, 01:45:37] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹150.05 (TARGET_75%_LOCK_65%)...
+[2/10/2026, 01:45:37] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹150.05 (TARGET_75%_LOCK_65%)
+[2/10/2026, 01:45:37] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹165.45 (TARGET_90%_LOCK_85%)...
+[2/10/2026, 01:45:37] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹165.45 (TARGET_90%_LOCK_85%)
+[2/10/2026, 01:45:37] [TEST] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
+[2/10/2026, 01:45:37] [TEST] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (TARGET_90%_LOCK_85%)). 15-minute cooldown started.
+[2/10/2026, 01:45:37] [TEST] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_CE | Exit: ₹165.45 | Reason: TRAILED_SL_HIT (TARGET_90%_LOCK_85%) | PnL: ₹4254.25
+[2/10/2026, 02:02:33] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹107.7 (TARGET_20%_LOCK_10%)...
+[2/10/2026, 02:02:33] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹107.7 (TARGET_20%_LOCK_10%)
+[2/10/2026, 02:02:33] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹119.25 (TARGET_40%_LOCK_25%)...
+[2/10/2026, 02:02:33] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹119.25 (TARGET_40%_LOCK_25%)
+[2/10/2026, 02:02:33] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹134.65 (TARGET_60%_LOCK_45%)...
+[2/10/2026, 02:02:33] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹134.65 (TARGET_60%_LOCK_45%)
+[2/10/2026, 02:02:33] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹150.05 (TARGET_75%_LOCK_65%)...
+[2/10/2026, 02:02:33] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹150.05 (TARGET_75%_LOCK_65%)
+[2/10/2026, 02:02:33] [TEST] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹165.45 (TARGET_90%_LOCK_85%)...
+[2/10/2026, 02:02:33] [TEST] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹165.45 (TARGET_90%_LOCK_85%)
+[2/10/2026, 02:02:33] [TEST] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
+[2/10/2026, 02:02:33] [TEST] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (TARGET_90%_LOCK_85%)). 15-minute cooldown started.
+[2/10/2026, 02:02:33] [TEST] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_CE | Exit: ₹165.45 | Reason: TRAILED_SL_HIT (TARGET_90%_LOCK_85%) | PnL: ₹4254.25

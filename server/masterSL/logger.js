@@ -37,6 +37,18 @@ class MasterSLLogger {
     }
 
     /**
+     * Clear / Reset log file contents
+     */
+    clearLog() {
+        try {
+            fs.writeFileSync(LOG_FILE, `--- LOG CLEARED AT ${this.getLocalTimeStr()} ---\n`, 'utf-8');
+            console.log(`🧹 [LOGGER] Cleared ${LOG_FILE}`);
+        } catch (e) {
+            console.error(`❌ [LOGGER ERROR] Failed to clear log file: ${e.message}`);
+        }
+    }
+
+    /**
      * Format and log an error to master_sl_error.log with full diagnostic context
      * 
      * @param {string} envName - Environment ("PAPER_TRADE" | "REAL_TRADE" | "BACKTEST")
