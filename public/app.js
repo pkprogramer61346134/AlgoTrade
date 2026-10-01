@@ -204,23 +204,46 @@ function renderRealDashboard(data, config = {}) {
     if (revContainer) {
         const rStat = data.reversalStatus || {};
         const watch = rStat.activeWatch;
+        const recent = (rStat.recentWatches || []).slice(-1)[0];
+
         if (watch) {
+            const isStage1 = watch.stage === 'STAGE_1_WATCH_REVERSAL';
+            const stageText = watch.candlesWatched <= 1 
+                ? '⏳ SIGNAL CANDLE SKIPPED (Waiting for Candle 2+)'
+                : isStage1 
+                ? (watch.type === 'BUY' ? '⏳ STAGE 1: Watching Dip Below Entry' : '⏳ STAGE 1: Watching Rally Above Entry')
+                : '🎯 STAGE 2: Sweep Found! Waiting Retest Close';
+
             revContainer.innerHTML = `
                 <div class="reversal-card">
                     <div class="reversal-header">
-                        <span class="reversal-title">👁️ Active Reversal Liquidity Sweep Filter Watch</span>
-                        <span class="badge-warning">STAGE: ${watch.stage || 'STAGE_1_WATCH_REVERSAL'}</span>
+                        <span class="reversal-title">👁️ Reversal Liquidity Sweep Filter (ACTIVE WATCH)</span>
+                        <span class="badge-warning">${stageText}</span>
                     </div>
                     <div class="reversal-grid">
-                        <div class="reversal-item"><span class="rev-label">Signal Type</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Signal Entry</span><span class="rev-val">₹${watch.entryPrice}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val text-warning">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Watching...'}</span></div>
-                        <div class="reversal-item"><span class="rev-label">Watch Count</span><span class="rev-val">${watch.candlesWatched} / 6 Candles</span></div>
+                        <div class="reversal-item"><span class="rev-label">Signal Type</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type} @ ₹${watch.entryPrice}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Current Stage</span><span class="rev-val text-warning">${watch.stage}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val highlight">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching...'}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Watch Progress</span><span class="rev-val">${watch.candlesWatched} / 6 Candles (30m Max)</span></div>
                     </div>
                 </div>
             `;
         } else {
-            revContainer.innerHTML = ``;
+            const lastStatusText = recent ? `Last Watch (${recent.type} @ ₹${recent.entryPrice}): ${recent.status}` : 'System Listening for Consensus Signals';
+            revContainer.innerHTML = `
+                <div class="reversal-card">
+                    <div class="reversal-header">
+                        <span class="reversal-title">👁️ Reversal Liquidity Sweep Filter (SYSTEM READY)</span>
+                        <span class="badge-success">FILTER ACTIVE & ONLINE</span>
+                    </div>
+                    <div class="reversal-grid">
+                        <div class="reversal-item"><span class="rev-label">Rule 1: Signal Candle Skip</span><span class="rev-val text-success">Enabled (Starts on Candle 2+)</span></div>
+                        <div class="reversal-item"><span class="rev-label">Rule 2: Runaway Drift Limit</span><span class="rev-val text-info">40 Points Max Drift</span></div>
+                        <div class="reversal-item"><span class="rev-label">Rule 3: Timeout Limit</span><span class="rev-val">6 Candles (30 Minutes)</span></div>
+                        <div class="reversal-item"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastStatusText}</span></div>
+                    </div>
+                </div>
+            `;
         }
     }
 
