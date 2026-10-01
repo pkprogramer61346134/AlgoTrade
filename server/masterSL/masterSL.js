@@ -346,7 +346,7 @@ class MasterTrailingEngine {
     }
 
     // =========================================================================
-    // STEP 7: MODIFY TRAILING SL ON BROKER TERMINAL (WITH DOUBLE-CHECK)
+    // STEP 7: MODIFY TRAILING SL ON BROKER TERMINAL (WITH 10 RETRIES & EMERGENCY CLOSE)
     // =========================================================================
     async modifyTrailingSL(newSl, newStage, envName = "PAPER") {
         if (!this.activePosition || this.isModifyInFlight) return false;
@@ -359,46 +359,59 @@ class MasterTrailingEngine {
             const targetStage = newStage;
 
             if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
-                try {
-                    await this.retryStepAsync(
-                        () => pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage),
-                        "MODIFY_ORDER_SL",
-                        envName,
-                        3,
-                        2000
-                    );
-                    pos.currentSl = targetSl;
-                    pos.trailingStage = targetStage;
-                    logger.logInfo(envName, "SL_TRAILED", `SL trailed successfully to ₹${targetSl} (${targetStage})`);
+                let modifySuccess = false;
+                const maxAttempts = 10;
 
-                    // DOUBLE-CHECK SL MODIFICATION ON BROKER TERMINAL
-                    const verifyFn = pos.handlers.verifyOrderModification || pos.handlers.verifyModification;
-                    if (typeof verifyFn === 'function') {
-                        try {
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    try {
+                        logger.logInfo(envName, "MODIFY_ORDER_SL_ATTEMPT", `Attempting SL Modification (${attempt}/${maxAttempts}) to ₹${targetSl} (${targetStage})...`);
+                        await pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage);
+
+                        // DOUBLE-CHECK SL MODIFICATION ON BROKER TERMINAL
+                        const verifyFn = pos.handlers.verifyOrderModification || pos.handlers.verifyModification;
+                        if (typeof verifyFn === 'function') {
                             const modConfirm = await verifyFn(pos.orderId, targetSl);
                             if (modConfirm && modConfirm.isConfirmed) {
-                                logger.logInfo(envName, "SL_MODIFY_DOUBLE_CHECKED", `SL modification double-checked & verified on broker terminal: ₹${targetSl} (Terminal Price: ₹${modConfirm.priceOnTerminal || targetSl})`);
+                                logger.logInfo(envName, "SL_MODIFY_DOUBLE_CHECKED", `SL modification double-checked & verified CONFIRMED on terminal: ₹${targetSl}`);
+                                modifySuccess = true;
+                                break;
                             } else {
-                                logger.logError(envName, "SL_MODIFY_VERIFY_WARNING", new Error(`SL modification for order ${pos.orderId} unconfirmed on terminal.`));
+                                logger.logError(envName, "SL_MODIFY_VERIFY_WARNING", new Error(`Attempt ${attempt}/${maxAttempts}: SL modification unconfirmed on broker terminal.`));
                             }
-                        } catch (vErr) {
-                            logger.logError(envName, "SL_MODIFY_VERIFY_ERROR", vErr);
+                        } else {
+                            // Simulated / Paper Trading confirmation
+                            modifySuccess = true;
+                            break;
                         }
-                    } else {
-                        logger.logInfo(envName, "SL_MODIFY_DOUBLE_CHECKED", `SL modification double-checked (Simulated / Paper Trading).`);
+                    } catch (mErr) {
+                        logger.logError(envName, `MODIFY_ORDER_ATTEMPT_${attempt}_FAILED`, mErr);
                     }
 
-                    return true;
-                } catch (err) {
-                    logger.logError(envName, "MODIFY_ORDER_FAILED", err);
-                } finally {
+                    if (attempt < maxAttempts) {
+                        await new Promise(res => setTimeout(res, 1000));
+                    }
+                }
+
+                if (modifySuccess) {
+                    pos.currentSl = targetSl;
+                    pos.trailingStage = targetStage;
+                    pos.isVerifiedModify = true;
                     this.isModifyInFlight = false;
+                    logger.logInfo(envName, "SL_TRAILED_VERIFIED", `SL trailed & double-check confirmed: ₹${targetSl} (${targetStage})`);
+                    return true;
+                } else {
+                    // EMERGENCY CLOSE FALLBACK: SL Modification failed after 10 retries!
+                    logger.logError(envName, "SL_MODIFY_FAILED_EMERGENCY_CLOSE", new Error(`🚨 [EMERGENCY CLOSE] SL Modification to ₹${targetSl} failed after 10 attempts! Executing emergency market exit to lock profit.`));
+                    this.isModifyInFlight = false;
+                    await this.closePosition(targetSl, "EMERGENCY_SL_MODIFY_FAILED_CLOSE", envName);
+                    return false;
                 }
             } else {
                 pos.currentSl = targetSl;
                 pos.trailingStage = targetStage;
+                pos.isVerifiedModify = true;
                 this.isModifyInFlight = false;
-                logger.logInfo(envName, "SL_TRAILED_SIMULATED", `SL trailed to ₹${targetSl} (${targetStage}) (Double-check Passed)`);
+                logger.logInfo(envName, "SL_TRAILED_SIMULATED", `SL trailed to ₹${targetSl} (${targetStage}) (Simulated Mode)`);
                 return true;
             }
         }
@@ -585,12 +598,24 @@ class MasterTrailingEngine {
             this.activePosition = null;
         }
 
+        const cfg = masterConfig.getConfig();
+        const slCooldownMins = Number(cfg.slCooldownMinutes || 15);
+        const SL_COOLDOWN_MS = slCooldownMins * 60 * 1000;
+        const timeSinceLastSlExit = Date.now() - (this.lastSlExitTimestamp || 0);
+        const isSlCooldownActive = Boolean(this.lastSlExitTimestamp > 0 && timeSinceLastSlExit < SL_COOLDOWN_MS);
+        const remainingCooldownMs = isSlCooldownActive ? (SL_COOLDOWN_MS - timeSinceLastSlExit) : 0;
+
         return {
             activePosition: this.activePosition,
             history: this.tradeHistory,
             totalTrades: this.tradeHistory.length,
             totalPnl: Number(this.tradeHistory.reduce((acc, t) => acc + (t.realizedPnl || 0), 0).toFixed(2)),
-            lastExitTimestamp: this.lastExitTimestamp
+            lastExitTimestamp: this.lastExitTimestamp,
+            lastSlExitTimestamp: this.lastSlExitTimestamp,
+            isSlCooldownActive: isSlCooldownActive,
+            remainingCooldownMs: remainingCooldownMs,
+            remainingCooldownMins: Math.floor(remainingCooldownMs / 60000),
+            remainingCooldownSecs: Math.ceil((remainingCooldownMs % 60000) / 1000)
         };
     }
 }

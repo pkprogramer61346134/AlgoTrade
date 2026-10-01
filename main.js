@@ -12,6 +12,7 @@
 
 const mainConfig = require('./server/config_manager');
 const realTradeEngine = require('./server/realtread/realtread');
+const masterSL = require('./server/masterSL/masterSL');
 const reversalFilter = require('./server/reversalTest/reversal');
 const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { createUIServer } = require('./server/ui_server');
@@ -48,6 +49,7 @@ function getLiveMarketData() {
         tickTime: latestTickTime,
         consensus: latestConsensusResult,
         reversalStatus: reversalFilter.getStatus(),
+        masterSLStatus: masterSL.getStatus(),
         candle: latestConsensusResult?.evaluatedCandle || latestConsensusResult?.candle || null,
         config: mainConfig.getConfig(),
         realStatus: realTradeEngine.getStatus()

@@ -176,6 +176,54 @@ function renderRealDashboard(data, config = {}) {
         termBadge.className = `status-pill ${isEnabled ? 'badge-danger' : 'badge-neutral'}`;
     }
 
+    // Render 15-Min SL Exit Cooldown Banner
+    const mSL = data.masterSLStatus || {};
+    const cooldownContainer = document.getElementById("sl-cooldown-banner-container");
+    if (cooldownContainer) {
+        if (mSL.isSlCooldownActive) {
+            const remMins = mSL.remainingCooldownMins || 0;
+            const remSecs = mSL.remainingCooldownSecs || 0;
+            cooldownContainer.innerHTML = `
+                <div class="cooldown-banner active">
+                    <span>⏳ 15-MIN SL EXIT COOLDOWN ACTIVE</span>
+                    <span>${remMins}m ${remSecs}s Remaining (New entry signals blocked after SL hit)</span>
+                </div>
+            `;
+        } else {
+            cooldownContainer.innerHTML = `
+                <div class="cooldown-banner ready">
+                    <span>✅ SYSTEM READY FOR SIGNALS</span>
+                    <span>MasterSL Engine ready (No active SL cooldown)</span>
+                </div>
+            `;
+        }
+    }
+
+    // Render Reversal Engine Telemetry Card
+    const revContainer = document.getElementById("reversal-telemetry-container");
+    if (revContainer) {
+        const rStat = data.reversalStatus || {};
+        const watch = rStat.activeWatch;
+        if (watch) {
+            revContainer.innerHTML = `
+                <div class="reversal-card">
+                    <div class="reversal-header">
+                        <span class="reversal-title">👁️ Active Reversal Liquidity Sweep Filter Watch</span>
+                        <span class="badge-warning">STAGE: ${watch.stage || 'STAGE_1_WATCH_REVERSAL'}</span>
+                    </div>
+                    <div class="reversal-grid">
+                        <div class="reversal-item"><span class="rev-label">Signal Type</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Signal Entry</span><span class="rev-val">₹${watch.entryPrice}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Sweep Price</span><span class="rev-val text-warning">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Watching...'}</span></div>
+                        <div class="reversal-item"><span class="rev-label">Watch Count</span><span class="rev-val">${watch.candlesWatched} / 6 Candles</span></div>
+                    </div>
+                </div>
+            `;
+        } else {
+            revContainer.innerHTML = ``;
+        }
+    }
+
     // Dhan Real Account Funds
     const funds = data.funds || {};
     const availBal = Number(
@@ -227,26 +275,18 @@ function renderRealDashboard(data, config = {}) {
             const displayEntry = entryLtpVal > 0 ? entryLtpVal.toFixed(2) : '--';
             const displayCurrent = currentLtpVal > 0 ? currentLtpVal.toFixed(2) : '--';
 
-            const lvls = pos.levels || {};
-            const tr1 = lvls.tr1 ? Number(lvls.tr1).toFixed(2) : '--';
-            const tr2 = lvls.tr2 ? Number(lvls.tr2).toFixed(2) : '--';
-            const tr3 = lvls.tr3 ? Number(lvls.tr3).toFixed(2) : '--';
-            const tr4 = lvls.tr4 ? Number(lvls.tr4).toFixed(2) : (pos.targetPrice ? Number(pos.targetPrice).toFixed(2) : '--');
-
-            let progressPct = "0.0";
-            if (entryLtpVal > 0 && tr4 !== '--' && Number(tr4) > entryLtpVal) {
-                const range = Math.max(0.1, Number(tr4) - entryLtpVal);
-                const rawPct = (((currentLtpVal - entryLtpVal) / range) * 100);
-                progressPct = Math.min(100, Math.max(0, rawPct)).toFixed(1);
-                if (isNaN(progressPct)) progressPct = "0.0";
-            }
+            const stageLabel = pos.trailingStage || 'INITIAL';
+            const isSlShifted = stageLabel.includes('PROFIT_LOCKED');
+            const verifyStatusHtml = pos.isVerifiedPlacement !== false 
+                ? `<span class="double-check-badge verified">✓ TERMINAL VERIFIED CONFIRMED</span>` 
+                : `<span class="double-check-badge unconfirmed">⚠️ UNCONFIRMED RETRYING</span>`;
 
             posCard.className = "active-trade-card glass-card";
             posCard.innerHTML = `
                 <div class="trade-details-grid">
                     <div class="trade-item-box">
                         <div class="item-label">Contract Symbol</div>
-                        <div class="item-val">${pos.symbol || 'NIFTY_OPTION'}</div>
+                        <div class="item-val">${pos.symbol || 'NIFTY_OPTION'} (Qty: ${pos.qty || 65})</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Entry Option LTP</div>
@@ -261,29 +301,33 @@ function renderRealDashboard(data, config = {}) {
                         <div class="item-val ${pnlColor}">${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)} (${pos.pnlPercent || '0%'})</div>
                     </div>
                     <div class="trade-item-box">
-                        <div class="item-label">Trailed Stop Loss</div>
-                        <div class="item-val text-danger">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</div>
+                        <div class="item-label">Current Trailed SL</div>
+                        <div class="item-val text-danger">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'} ${isSlShifted ? '🟢 (SL Shifted)' : ''}</div>
                     </div>
                     <div class="trade-item-box">
-                        <div class="item-label">Target TR4</div>
-                        <div class="item-val text-success">₹${tr4}</div>
+                        <div class="item-label">SL Shift Stage</div>
+                        <div class="item-val ${isSlShifted ? 'text-success' : 'text-warning'}">${stageLabel}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Terminal Verification</div>
+                        <div class="item-val">${verifyStatusHtml}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Emergency Close Guard</div>
+                        <div class="item-val text-success">🛡️ 10 Retries + Emergency Market Close Active</div>
                     </div>
                 </div>
 
                 <div class="progress-container">
                     <div class="progress-header">
-                        <span>Target Progress (Stage: ${pos.trailingStage || 'INITIAL'})</span>
-                        <span>${progressPct}% to Target</span>
-                    </div>
-                    <div class="progress-bar-bg">
-                        <div class="progress-bar-fill" style="width: ${progressPct}%"></div>
+                        <span>Dynamic Rupee Profit Trailing SL Engine</span>
+                        <span>Stage: ${stageLabel}</span>
                     </div>
                     <div class="targets-milestones-row">
-                        <span>Entry: ₹${displayEntry}</span>
-                        <span>TR1: ₹${tr1}</span>
-                        <span>TR2: ₹${tr2}</span>
-                        <span>TR3: ₹${tr3}</span>
-                        <span>TR4: ₹${tr4}</span>
+                        <span>Initial SL: ₹${pos.initialSl ? Number(pos.initialSl).toFixed(2) : '--'}</span>
+                        <span>Current SL: ₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</span>
+                        <span>1st Profit Trigger: ₹1,000 (Lock ₹900)</span>
+                        <span>Step Jump: Every +₹500</span>
                     </div>
                 </div>
             `;
