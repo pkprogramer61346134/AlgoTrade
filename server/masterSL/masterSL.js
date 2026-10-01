@@ -253,8 +253,8 @@ class MasterTrailingEngine {
             return { status: "IGNORED", reason: `ORDER_COOLDOWN_ACTIVE (${remSecs}s)` };
         }
 
-        // SL Exit Cooldown Guard (Default 15 minutes after SL hit)
-        const slCooldownMins = Number(cfg.slCooldownMinutes || 15);
+        // SL Exit Cooldown Guard (Default 0 minutes if removed from config)
+        const slCooldownMins = Number(cfg.slCooldownMinutes !== undefined ? cfg.slCooldownMinutes : 0);
         const SL_COOLDOWN_MS = slCooldownMins * 60 * 1000;
         const timeSinceLastSlExit = Date.now() - (this.lastSlExitTimestamp || 0);
         if (timeSinceLastSlExit < SL_COOLDOWN_MS) {
@@ -630,7 +630,7 @@ class MasterTrailingEngine {
         }
 
         const cfg = masterConfig.getConfig();
-        const slCooldownMins = Number(cfg.slCooldownMinutes || 15);
+        const slCooldownMins = Number(cfg.slCooldownMinutes !== undefined ? cfg.slCooldownMinutes : 0);
         const SL_COOLDOWN_MS = slCooldownMins * 60 * 1000;
         const timeSinceLastSlExit = Date.now() - (this.lastSlExitTimestamp || 0);
         const isSlCooldownActive = Boolean(this.lastSlExitTimestamp > 0 && timeSinceLastSlExit < SL_COOLDOWN_MS);

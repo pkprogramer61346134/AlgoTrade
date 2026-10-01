@@ -8,7 +8,6 @@
     { "targetPercent": 90, "lockPercent": 80 }
   ],
   "maxTradesPerDay": 3,
-  "slCooldownMinutes": 15,
   "autoSquareOffTime": "15:10:00",
   "maxRetriesPerStep": 5,
   "retryDelayMs": 1000,
