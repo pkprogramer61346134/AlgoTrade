@@ -143,6 +143,17 @@ async function runFullSystemCrossAudit() {
         recordFail("Reversal Filter Expiry Guard", "Failed to expire watch after 6 candles");
     }
 
+    // 2D: Runaway Drift Guard Test (40+ points drift)
+    reversalFilter.activeWatch = null;
+    reversalFilter.evaluateSignal(simulatedBuySignal, { close: 22500, low: 22500, high: 22505 });
+    // Next candle price surges +45 points to ₹22,545
+    let driftRes = reversalFilter.evaluateSignal(null, { close: 22545, low: 22500, high: 22548 });
+    if (driftRes === null && reversalFilter.activeWatch === null && reversalFilter.watchHistory.slice(-1)[0]?.status === "EXPIRED_RUNAWAY_DRIFT") {
+        recordPass("Reversal Filter Runaway Drift Guard", "Signal drifted +45 pts (> 40 pts limit) correctly IGNORED & CANCELLED");
+    } else {
+        recordFail("Reversal Filter Runaway Drift Guard", "Failed to cancel runaway signal drifting 40+ points");
+    }
+
     // --------------------------------------------------------------------------
     // TEST MODULE 3: MasterSL Dynamic Rupee Trailing SL Engine Audit
     // --------------------------------------------------------------------------

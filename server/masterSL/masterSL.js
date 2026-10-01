@@ -26,6 +26,7 @@ class MasterTrailingEngine {
         this.lastOrderTimestamp = 0;
         this.lastModifyTimestamp = 0;
         this.lastExitTimestamp = 0;
+        this.lastSlExitTimestamp = 0;
     }
 
     /**
@@ -251,6 +252,18 @@ class MasterTrailingEngine {
             return { status: "IGNORED", reason: `ORDER_COOLDOWN_ACTIVE (${remSecs}s)` };
         }
 
+        // SL Exit Cooldown Guard (Default 15 minutes after SL hit)
+        const slCooldownMins = Number(cfg.slCooldownMinutes || 15);
+        const SL_COOLDOWN_MS = slCooldownMins * 60 * 1000;
+        const timeSinceLastSlExit = Date.now() - (this.lastSlExitTimestamp || 0);
+        if (timeSinceLastSlExit < SL_COOLDOWN_MS) {
+            const remMs = SL_COOLDOWN_MS - timeSinceLastSlExit;
+            const remMins = Math.floor(remMs / 60000);
+            const remSecs = Math.ceil((remMs % 60000) / 1000);
+            logger.logInfo(envName, "SIGNAL_IGNORED", `SL exit cooldown active (${remMins}m ${remSecs}s remaining after SL hit). Ignoring signal.`);
+            return { status: "IGNORED", reason: `SL_EXIT_COOLDOWN_ACTIVE (${remMins}m ${remSecs}s)` };
+        }
+
         // Synchronously acquire atomic lock & record timestamp BEFORE any async operations
         this.isOrderInFlight = true;
         this.lastOrderTimestamp = Date.now();
@@ -450,6 +463,10 @@ class MasterTrailingEngine {
                 const closedPosition = { ...pos };
                 this.activePosition = null;
                 this.lastExitTimestamp = Date.now();
+                if (String(exitReason || "").includes("SL_HIT")) {
+                    this.lastSlExitTimestamp = Date.now();
+                    logger.logInfo(envName, "SL_EXIT_COOLDOWN_STARTED", `SL exit recorded (${exitReason}). 15-minute cooldown started.`);
+                }
                 this.isCloseInFlight = false;
 
                 logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);

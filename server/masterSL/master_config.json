@@ -6,6 +6,7 @@
   "trailLockBuffer": 100,
   "targetMode": "DYNAMIC_RUPEE_TRAILING",
   "maxTradesPerDay": 3,
+  "slCooldownMinutes": 15,
   "autoSquareOffTime": "15:10:00",
   "maxRetriesPerStep": 5,
   "retryDelayMs": 1000,

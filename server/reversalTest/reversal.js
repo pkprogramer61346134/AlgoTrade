@@ -21,6 +21,7 @@ class ReversalSignalFilter {
         this.activeWatch = null;
         this.enabled = true; // Can be toggled via config
         this.maxWatchCandles = 6; // Default 6 candles (30 minutes in 5-min timeframe)
+        this.maxDriftPoints = 40; // Default 40 points runaway drift limit
         this.watchHistory = [];
     }
 
@@ -78,6 +79,27 @@ class ReversalSignalFilter {
         watch.candlesWatched += 1;
 
         console.log(`🔍 [REVERSAL TICK] Watch ID: ${watch.watchId} | Type: ${watch.type} | Stage: ${watch.stage} | Candle Close: ₹${candleClose} (High: ₹${candleHigh}, Low: ₹${candleLow}) | Watch Count: ${watch.candlesWatched}/${this.maxWatchCandles}`);
+
+        // 2.5 RUNAWAY DRIFT GUARD (40 Points Max Drift Check)
+        // If price has already moved 40+ points away from entry, ignore & cancel watch to prevent chasing runaway market
+        const maxDrift = this.maxDriftPoints || 40;
+        if (watch.type === "BUY" && candleClose > (watch.entryPrice + maxDrift)) {
+            const driftPts = Number((candleClose - watch.entryPrice).toFixed(2));
+            console.warn(`⚠️ [RUNAWAY DRIFT GUARD] BUY Signal entry ₹${watch.entryPrice} already moved +${driftPts} pts to ₹${candleClose} (> ${maxDrift} pts max limit). Ignoring & cancelling signal.`);
+            watch.status = "EXPIRED_RUNAWAY_DRIFT";
+            this.watchHistory.push({ ...watch });
+            this.activeWatch = null;
+            return null;
+        }
+
+        if (watch.type === "SELL" && candleClose < (watch.entryPrice - maxDrift)) {
+            const driftPts = Number((watch.entryPrice - candleClose).toFixed(2));
+            console.warn(`⚠️ [RUNAWAY DRIFT GUARD] SELL Signal entry ₹${watch.entryPrice} already moved -${driftPts} pts to ₹${candleClose} (> ${maxDrift} pts max limit). Ignoring & cancelling signal.`);
+            watch.status = "EXPIRED_RUNAWAY_DRIFT";
+            this.watchHistory.push({ ...watch });
+            this.activeWatch = null;
+            return null;
+        }
 
         // =========================================================================
         // BUY SIGNAL REVERSAL LOGIC
