@@ -1,7 +1,7 @@
 {
   "maxBudgetPercent": 100,
   "maxTargetPerTrade": 5000,
-  "maxLossPerTrade": 300,
+  "maxLossPerTrade": 500,
   "percentTrailingRules": [
     { "targetPercent": 20, "lockPercent": 10 },
     { "targetPercent": 40, "lockPercent": 25 },
