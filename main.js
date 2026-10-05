@@ -47,15 +47,20 @@ function getLiveMarketData() {
     const mainCandle = latestConsensusResult?.evaluatedCandle || latestConsensusResult?.candle || latestConsensusResult?.lastCandle || null;
     const effectiveLivePrice = latestLivePrice > 0 ? latestLivePrice : Number(mainCandle?.close || 0);
 
+    const realStat = realTradeEngine.getStatus();
+    const masterStat = masterSL.getStatus();
+    const activePos = realStat.activePosition || masterStat.activePosition || null;
+
     return {
         livePrice: effectiveLivePrice,
         tickTime: latestTickTime,
         consensus: latestConsensusResult,
         reversalStatus: reversalFilter.getStatus(),
-        masterSLStatus: masterSL.getStatus(),
+        masterSLStatus: masterStat,
         candle: mainCandle,
         config: mainConfig.getConfig(),
-        realStatus: realTradeEngine.getStatus()
+        realStatus: realStat,
+        activePosition: activePos
     };
 }
 

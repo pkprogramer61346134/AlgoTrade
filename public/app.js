@@ -347,9 +347,11 @@ function renderRealDashboard(data, config = {}) {
     const activeSymbol = document.getElementById("real-active-symbol");
     const activePnl = document.getElementById("real-active-pnl");
 
-    if (data.activePosition && data.activePosition.status === "OPEN") {
-        activeSymbol.innerText = data.activePosition.symbol;
-        activePnl.innerText = `PnL: ₹${data.activePosition.pnl || 0}`;
+    const activePos = data.activePosition || (data.realStatus && data.realStatus.activePosition) || (data.masterSLStatus && data.masterSLStatus.activePosition) || null;
+
+    if (activePos && activePos.status === "OPEN") {
+        activeSymbol.innerText = activePos.symbol;
+        activePnl.innerText = `PnL: ₹${activePos.pnl || 0}`;
     } else {
         activeSymbol.innerText = "NONE";
         activePnl.innerText = "PnL: ₹0.00";
@@ -358,8 +360,8 @@ function renderRealDashboard(data, config = {}) {
     // Active Real Position Card
     const posCard = document.getElementById("real-active-position-card");
     if (posCard) {
-        if (data.activePosition && data.activePosition.status === "OPEN") {
-            const pos = data.activePosition;
+        if (activePos && activePos.status === "OPEN") {
+            const pos = activePos;
             const pnlVal = Number(pos.pnl || pos.realizedPnl || 0);
             const pnlColor = pnlVal > 0 ? "text-success" : pnlVal < 0 ? "text-danger" : "";
 

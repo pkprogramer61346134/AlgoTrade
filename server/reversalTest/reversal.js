@@ -24,8 +24,43 @@ class ReversalSignalFilter {
         this.enabled = true; // Can be toggled via config
         this.maxWatchCandles = 6; // Default 6 candles (30 minutes in 5-min timeframe)
         this.maxDriftPoints = 40; // Default 40 points runaway drift limit
+        this.minStartTime = "10:00:00"; // Default 10:00 AM start time cutoff
         this.watchHistory = [];
         this.lastFilterEvent = "System Listening for Consensus Signals";
+    }
+
+    /**
+     * Check if a given time string is before 10:00 AM cutoff
+     * @param {string} timeStr Time string in HH:MM:SS or HH:MM AM/PM format
+     * @returns {boolean} True if time is before 10:00 AM
+     */
+    isBeforeTenAM(timeStr) {
+        if (!timeStr) {
+            const now = new Date();
+            timeStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+        }
+        
+        const str = String(timeStr).trim();
+        let hours = 0;
+        let minutes = 0;
+        
+        if (/AM|PM/i.test(str)) {
+            const isPM = /PM/i.test(str);
+            const cleanStr = str.replace(/(AM|PM)/i, "").trim();
+            const parts = cleanStr.split(":");
+            hours = parseInt(parts[0], 10) || 0;
+            minutes = parseInt(parts[1], 10) || 0;
+            if (isPM && hours < 12) hours += 12;
+            if (!isPM && hours === 12) hours = 0;
+        } else {
+            const parts = str.split(":");
+            hours = parseInt(parts[0], 10) || 0;
+            minutes = parseInt(parts[1], 10) || 0;
+        }
+
+        const totalMinutes = hours * 60 + minutes;
+        // 10:00 AM = 600 minutes
+        return totalMinutes < 600;
     }
 
     /**
@@ -39,6 +74,17 @@ class ReversalSignalFilter {
             // Bypass mode: Pass consensus signal directly if reversal filter is disabled
             if (consensusResult && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
                 return consensusResult;
+            }
+            return null;
+        }
+
+        // TIME GUARD: Ignore all consensus signals generated before 10:00 AM
+        const signalTime = consensusResult?.time || lastCandle?.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+        if (this.isBeforeTenAM(signalTime)) {
+            if (consensusResult && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
+                console.log(`⏰ [PRE-10:00 AM GUARD] Incoming ${consensusResult.consensus} signal @ ${signalTime} IGNORED (Trading allowed only after 10:00 AM).`);
+                this.lastFilterEvent = `⏰ Pre-10:00 AM Guard: ${consensusResult.consensus} signal @ ${signalTime} ignored (Active after 10:00 AM)`;
+                logger.logInfo("PRE_10AM_SIGNAL_IGNORED", `Ignored ${consensusResult.consensus} signal at ${signalTime} before 10:00 AM start cutoff`, { signalTime, signal: consensusResult });
             }
             return null;
         }
