@@ -174,11 +174,27 @@ function renderRealDashboard(data, config = {}) {
         termBadge.className = `status-pill ${isEnabled ? 'badge-danger' : 'badge-neutral'}`;
     }
 
-    // Render 15-Min SL Exit Cooldown Banner
+    // Render 15-Min SL Exit Cooldown Banner & Exit Retry Banner
     const mSL = data.masterSLStatus || {};
+    const pos = data.activePosition || mSL.activePosition;
     const cooldownContainer = document.getElementById("sl-cooldown-banner-container");
     if (cooldownContainer) {
-        if (mSL.isSlCooldownActive) {
+        if (pos && (pos.status === "EXIT_FAILED" || pos.exitError)) {
+            const errTxt = pos.exitError || "🚨 Trailing SL hit ho gaya par order close nahi ho raha hai!";
+            cooldownContainer.innerHTML = `
+                <div class="cooldown-banner active" style="background: rgba(239, 68, 68, 0.25); border: 2px solid #ef4444; color: #f87171; font-weight: 700;">
+                    <span>${errTxt}</span>
+                    <span>Dhan broker terminal par position netQty > 0 dikh raha hai after 10 attempts. Retrying market exit...</span>
+                </div>
+            `;
+        } else if (pos && pos.isCloseInFlight) {
+            cooldownContainer.innerHTML = `
+                <div class="cooldown-banner active" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #f87171;">
+                    <span>🚨 MARKET EXIT RETRYING IN PROGRESS</span>
+                    <span>Sending Market SELL Exit & verifying Dhan broker terminal netQty === 0...</span>
+                </div>
+            `;
+        } else if (mSL.isSlCooldownActive) {
             const remMins = mSL.remainingCooldownMins || 0;
             const remSecs = mSL.remainingCooldownSecs || 0;
             cooldownContainer.innerHTML = `
@@ -302,10 +318,14 @@ function renderRealDashboard(data, config = {}) {
             const displayCurrent = currentLtpVal > 0 ? currentLtpVal.toFixed(2) : '--';
 
             const stageLabel = pos.trailingStage || 'INITIAL';
-            const isSlShifted = stageLabel.includes('PROFIT_LOCKED');
-            const verifyStatusHtml = pos.isVerifiedPlacement !== false 
-                ? `<span class="double-check-badge verified">✓ TERMINAL VERIFIED CONFIRMED</span>` 
-                : `<span class="double-check-badge unconfirmed">⚠️ UNCONFIRMED RETRYING</span>`;
+            const isSlShifted = stageLabel !== 'INITIAL';
+            const isCloseInFlight = Boolean(pos.status === "EXIT_FAILED" || pos.isCloseInFlight);
+            
+            const verifyStatusHtml = isCloseInFlight
+                ? `<span class="double-check-badge unconfirmed">🔄 MARKET EXIT RETRYING (Waiting netQty === 0)</span>`
+                : (pos.isVerifiedPlacement !== false 
+                    ? `<span class="double-check-badge verified">✓ TERMINAL VERIFIED CONFIRMED</span>` 
+                    : `<span class="double-check-badge unconfirmed">⚠️ UNCONFIRMED RETRYING</span>`);
 
             posCard.className = "active-trade-card glass-card";
             posCard.innerHTML = `
@@ -327,8 +347,8 @@ function renderRealDashboard(data, config = {}) {
                         <div class="item-val ${pnlColor}">${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)} (${pos.pnlPercent || '0%'})</div>
                     </div>
                     <div class="trade-item-box">
-                        <div class="item-label">Current Trailed SL</div>
-                        <div class="item-val text-danger">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'} ${isSlShifted ? '🟢 (SL Shifted)' : ''}</div>
+                        <div class="item-label">Internal Trailed SL</div>
+                        <div class="item-val text-danger">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'} ${isSlShifted ? '⚡ (Internal SL Trailed)' : ''}</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">SL Shift Stage</div>
@@ -339,21 +359,22 @@ function renderRealDashboard(data, config = {}) {
                         <div class="item-val">${verifyStatusHtml}</div>
                     </div>
                     <div class="trade-item-box">
-                        <div class="item-label">Emergency Close Guard</div>
-                        <div class="item-val text-success">🛡️ 10 Retries + Emergency Market Close Active</div>
+                        <div class="item-label">Exit Guard Mode</div>
+                        <div class="item-val text-success">🛡️ Persistent Exit Loop (Retries until netQty === 0)</div>
                     </div>
                 </div>
 
                 <div class="progress-container">
                     <div class="progress-header">
-                        <span>Dynamic Rupee Profit Trailing SL Engine</span>
+                        <span>⚡ High-Speed Internal Memory Trailing Engine (Zero Dhan API Modify Messages)</span>
                         <span>Stage: ${stageLabel}</span>
                     </div>
                     <div class="targets-milestones-row">
                         <span>Initial SL: ₹${pos.initialSl ? Number(pos.initialSl).toFixed(2) : '--'}</span>
-                        <span>Current SL: ₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</span>
-                        <span>1st Profit Trigger: ₹1,000 (Lock ₹900)</span>
-                        <span>Step Jump: Every +₹500</span>
+                        <span>Current Memory SL: ₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</span>
+                        <span>Target 40%: Lock 20%</span>
+                        <span>Target 100%: Lock 66.6%</span>
+                        <span>Target 150%: Lock 116.6%</span>
                     </div>
                 </div>
             `;

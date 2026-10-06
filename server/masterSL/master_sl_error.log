@@ -5942,3 +5942,141 @@ Error: [REAL_TRADE] Step PLACE_ORDER failed after 1 retries: [ORDER EXECUTOR ERR
 [6/10/2026, 10:31:12] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
 [6/10/2026, 10:31:12] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Available balance (₹500) is below minimum required balance (₹1000). Ignoring signal.
 [6/10/2026, 10:31:12] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Max trades per day reached (3). Ignoring signal.
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹115.38 (TARGET_40%_LOCK_20%) | Zero Dhan API Modify Messages Sent.
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹115.38 (TRAILED_SL_HIT (TARGET_40%_LOCK_20%)). Starting persistent exit loop until Dhan terminal confirms netQty === 0.
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (1/15) for NIFTY_24500_CE (Security: NIFTY_24500_CE)...
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [POSITION_CLOSE_CONFIRMED_TERMINAL] ✅ [TERMINAL CLOSE CONFIRMED] Position NIFTY_24500_CE verified CLOSED (netQty: 0) on Dhan broker terminal on attempt 1.
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (TARGET_40%_LOCK_20%)). Mandatory 15-minute cooldown started.
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹115.38 | Reason: TRAILED_SL_HIT (TARGET_40%_LOCK_20%) | PnL: ₹999.7
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [SIGNAL_IGNORED] 15-min trade exit cooldown active (14m 60s remaining after trade exit). Ignoring signal.
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 10:39:00] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹115.38 (TARGET_40%_LOCK_20%) | Zero Dhan API Modify Messages Sent.
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹115.38 (TRAILED_SL_HIT (TARGET_40%_LOCK_20%)). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (1/10) for NIFTY_24500_CE (Security: NIFTY_24500_CE)...
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [POSITION_CLOSE_CONFIRMED_TERMINAL] ✅ [TERMINAL CLOSE CONFIRMED] Position NIFTY_24500_CE verified CLOSED (netQty: 0) on Dhan broker terminal on attempt 1.
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (TARGET_40%_LOCK_20%)). Mandatory 15-minute cooldown started.
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹115.38 | Reason: TRAILED_SL_HIT (TARGET_40%_LOCK_20%) | PnL: ₹999.7
+[6/10/2026, 10:42:46] [TEST_ENV] ℹ️ [SIGNAL_IGNORED] 15-min trade exit cooldown active (14m 60s remaining after trade exit). Ignoring signal.
+[6/10/2026, 10:42:47] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 10:42:47] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 10:45:06] [PAPER] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹115 (TEST_FAIL_10). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[6/10/2026, 10:45:06] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (1/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:06 (2026-10-06T05:15:06.201Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 1/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 1/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:07] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (2/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:07 (2026-10-06T05:15:07.207Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 2/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 2/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:08] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (3/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:08 (2026-10-06T05:15:08.224Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 3/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 3/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:09] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (4/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:09 (2026-10-06T05:15:09.240Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 4/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 4/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:10] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (5/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:10 (2026-10-06T05:15:10.262Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 5/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 5/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:11] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (6/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:11 (2026-10-06T05:15:11.276Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 6/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 6/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:12] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (7/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:12 (2026-10-06T05:15:12.291Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 7/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 7/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:13] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (8/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:13 (2026-10-06T05:15:13.306Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 8/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 8/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:14] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (9/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:14 (2026-10-06T05:15:14.322Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 9/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 9/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:45:15] [PAPER] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (10/10) for NIFTY_TEST_PE (Security: 99999)...
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:15 (2026-10-06T05:15:15.339Z) | Env: [PAPER] | Step: [POSITION_STILL_OPEN_RETRYING]
+💥 Message: ⚠️ Attempt 10/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+📍 Stack Trace:
+Error: ⚠️ Attempt 10/10: Position 99999 still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:415:90)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+==========================================================================
+🚨 [ERROR LOG] Timestamp: 6/10/2026, 10:45:15 (2026-10-06T05:15:15.344Z) | Env: [PAPER] | Step: [POSITION_CLOSE_FAILED_AFTER_10_ATTEMPTS]
+💥 Message: 🚨 Trailed SL hit ho gaya par order close nahi ho raha hai! Failed after 10 attempts on Dhan broker terminal. Retaining position for next tick retry.
+📍 Stack Trace:
+Error: 🚨 Trailed SL hit ho gaya par order close nahi ho raha hai! Failed after 10 attempts on Dhan broker terminal. Retaining position for next tick retry.
+    at MasterTrailingEngine.closePosition (C:\AlgoTrade\server\masterSL\masterSL.js:458:85)
+    at async runZeroBugAudit (C:\AlgoTrade\scratch\audit_zero_bug_check.js:115:26)
+==========================================================================
+
+[6/10/2026, 10:50:46] [PAPER] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹266.6 (TARGET_200%_LOCK_166.6%) | Zero Dhan API Modify Messages Sent.
+[6/10/2026, 10:50:46] [PAPER] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹200 (TARGET_HIT (undefined)). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[6/10/2026, 10:50:46] [PAPER] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TARGET_HIT (undefined)). Mandatory 15-minute cooldown started.
+[6/10/2026, 10:50:46] [PAPER] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹200 | Reason: TARGET_HIT (undefined) | PnL: ₹6500
+[6/10/2026, 10:51:19] [PAPER] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹266.6 (TARGET_200%_LOCK_166.6%) | Zero Dhan API Modify Messages Sent.

@@ -388,9 +388,9 @@ class MasterTrailingEngine {
         pos.realizedPnl = Number((diff * pos.qty).toFixed(2));
 
         let isCloseSuccessful = false;
-        const maxExitAttempts = 15;
+        const maxExitAttempts = 10;
 
-        logger.logInfo(envName, "CLOSE_POSITION_TRIGGERED", `🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹${exitPrice} (${exitReason}). Starting persistent exit loop until Dhan terminal confirms netQty === 0.`);
+        logger.logInfo(envName, "CLOSE_POSITION_TRIGGERED", `🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹${exitPrice} (${exitReason}). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.`);
 
         try {
             if (pos.handlers && typeof pos.handlers.closeOrder === 'function') {
@@ -409,13 +409,15 @@ class MasterTrailingEngine {
                             if (closeConfirm && closeConfirm.isClosedOnTerminal !== false) {
                                 logger.logInfo(envName, "POSITION_CLOSE_CONFIRMED_TERMINAL", `✅ [TERMINAL CLOSE CONFIRMED] Position ${secId} verified CLOSED (netQty: 0) on Dhan broker terminal on attempt ${attempt}.`);
                                 isCloseSuccessful = true;
+                                pos.exitError = null;
                                 break;
                             } else {
-                                logger.logError(envName, "POSITION_STILL_OPEN_RETRYING", new Error(`⚠️ Position ${secId} still shows open (netQty > 0) on Dhan terminal on attempt ${attempt}. Retrying Market Exit...`));
+                                logger.logError(envName, "POSITION_STILL_OPEN_RETRYING", new Error(`⚠️ Attempt ${attempt}/${maxExitAttempts}: Position ${secId} still shows open (netQty > 0) on Dhan terminal. Retrying Market Exit...`));
                             }
                         } else {
                             // Simulated / Paper Trading confirmation
                             isCloseSuccessful = true;
+                            pos.exitError = null;
                             break;
                         }
                     } catch (attemptErr) {
@@ -428,13 +430,16 @@ class MasterTrailingEngine {
                 }
             } else {
                 isCloseSuccessful = true;
+                pos.exitError = null;
             }
         } catch (err) {
             logger.logError(envName, "CLOSE_ORDER_FAILED", err);
             pos.status = "EXIT_FAILED";
+            pos.exitError = "🚨 Trailed SL hit ho gaya par order close nahi ho raha hai! (Dhan Terminal netQty > 0)";
         } finally {
             if (isCloseSuccessful || !pos.handlers || typeof pos.handlers.closeOrder !== 'function') {
                 pos.status = "CLOSED";
+                pos.exitError = null;
                 this.tradeHistory.push({ ...pos });
                 if (this.tradeHistory.length > 1000) this.tradeHistory.shift();
                 const closedPosition = { ...pos };
@@ -448,7 +453,9 @@ class MasterTrailingEngine {
                 return closedPosition;
             } else {
                 this.isCloseInFlight = false;
-                logger.logError(envName, "POSITION_CLOSE_RETAINED", new Error(`Position close failed on broker terminal after ${maxExitAttempts} attempts! Retaining active position for next tick retry.`));
+                pos.status = "EXIT_FAILED";
+                pos.exitError = "🚨 Trailed SL hit ho gaya par order close nahi ho raha hai! (10 Attempts Failed)";
+                logger.logError(envName, "POSITION_CLOSE_FAILED_AFTER_10_ATTEMPTS", new Error(`🚨 Trailed SL hit ho gaya par order close nahi ho raha hai! Failed after ${maxExitAttempts} attempts on Dhan broker terminal. Retaining position for next tick retry.`));
                 return null;
             }
         }
