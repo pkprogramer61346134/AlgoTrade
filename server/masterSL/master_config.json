@@ -1,13 +1,18 @@
 {
   "maxBudgetPercent": 100,
   "maxTargetPerTrade": 5000,
-  "maxLossPerTrade": 500,
+  "maxLossPerTrade": 300,
   "percentTrailingRules": [
-    { "targetPercent": 20, "lockPercent": 10 },
-    { "targetPercent": 40, "lockPercent": 25 },
-    { "targetPercent": 60, "lockPercent": 45 },
-    { "targetPercent": 75, "lockPercent": 65 },
-    { "targetPercent": 90, "lockPercent": 85 }
+    { "targetPercent": 40, "lockPercent": 20 },
+    { "targetPercent": 100, "lockPercent": 66.6 },
+    { "targetPercent": 150, "lockPercent": 116.6 },
+    { "targetPercent": 200, "lockPercent": 166.6 },
+    { "targetPercent": 266.6, "lockPercent": 233.3 },
+    { "targetPercent": 333.3, "lockPercent": 300.0 },
+    { "targetPercent": 400, "lockPercent": 366.6 },
+    { "targetPercent": 500, "lockPercent": 466.6 },
+    { "targetPercent": 600, "lockPercent": 566.6 },
+    { "targetPercent": 666.6, "lockPercent": 633.3 }
   ],
   "maxTradesPerDay": 3,
   "autoSquareOffTime": "15:10:00",

@@ -4,7 +4,7 @@
   "enabled": true,
   "minStrategyVotes": 1,
   "enableSignalConfirmation": true,
-  "warmupCount": 200,
+  "warmupCount": 100,
   "strategies": {
     "master_strategy.json": {
       "enabled": true,

@@ -13,11 +13,9 @@
 const mainConfig = require('./server/config_manager');
 const realTradeEngine = require('./server/realtread/realtread');
 const masterSL = require('./server/masterSL/masterSL');
-const reversalFilter = require('./server/reversalTest/reversal');
 const { evaluateConsensusEngine } = require('./utility/usedfull/Engines/consensusEngine');
 const { createUIServer } = require('./server/ui_server');
 const { ensureValidDhanToken } = require('./utility/token/autoTokenRefresh');
-const { getCandlesBefore } = require('./utility/usedfull/cached-historical-data');
 
 let latestLivePrice = 0;
 let latestTickTime = null;
@@ -55,7 +53,7 @@ function getLiveMarketData() {
         livePrice: effectiveLivePrice,
         tickTime: latestTickTime,
         consensus: latestConsensusResult,
-        reversalStatus: reversalFilter.getStatus(),
+        reversalStatus: { status: "BYPASSED", isBypassed: true, message: "Direct Head Consensus Engine Execution" },
         masterSLStatus: masterStat,
         candle: mainCandle,
         config: mainConfig.getConfig(),
@@ -84,7 +82,7 @@ async function runFiveMinuteEvaluation() {
 
     try {
         const cfg = mainConfig.getConfig();
-        const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
+        const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "15" };
 
         const now = new Date();
         const currentDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -98,7 +96,7 @@ async function runFiveMinuteEvaluation() {
         const consensusResult = await evaluateConsensusEngine({
             securityId: String(scrip.securityId),
             exchangeSegment: scrip.exchangeSegment,
-            interval: String(scrip.interval || "5"),
+            interval: String(scrip.interval || "15"),
             date: currentDateStr,
             time: currentTimeStr
         });
@@ -114,14 +112,10 @@ async function runFiveMinuteEvaluation() {
 
         console.log(`🧠 [CONSENSUS RESULT] Consensus: ${consensusResult.consensus} | Strategy: ${consensusResult.strategyName || 'None'} | Entry: ₹${consensusResult.entry || 0}`);
 
-        // Filter signal through Reversal Liquidity Sweep & Retest Filter
-        const lastCandle = consensusResult?.lastCandle || consensusResult?.evaluatedCandle || null;
-        const confirmedSignal = reversalFilter.evaluateSignal(consensusResult, lastCandle);
-
-        // Process Confirmed Signal in Real Trading Engine if enabled
-        if (cfg.realTradeEnabled && confirmedSignal && (confirmedSignal.consensus === "BUY" || confirmedSignal.consensus === "SELL")) {
-            console.log(`🚀 [REVERSAL APPROVED] Forwarding confirmed ${confirmedSignal.consensus} signal to Real Trading Engine...`);
-            await realTradeEngine.processSignal(confirmedSignal, scrip);
+        // Forward Head Consensus Signal directly to Real Trading Engine & MasterSL (Reversal Filter Bypassed)
+        if (cfg.realTradeEnabled && consensusResult && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
+            console.log(`🚀 [HEAD CONSENSUS APPROVED] Forwarding ${consensusResult.consensus} signal directly to Real Trading Engine & MasterSL...`);
+            await realTradeEngine.processSignal(consensusResult, scrip);
         }
     } catch (err) {
         console.error("❌ [CYCLE ERROR]:", err.message);
@@ -133,7 +127,7 @@ async function runFiveMinuteEvaluation() {
 /**
  * Schedules evaluation execution aligned with clock boundaries (e.g. at 11:10:02, 11:15:02, 11:20:02)
  */
-function scheduleClockAlignedFiveMinLoop(intervalMins = 5) {
+function scheduleClockAlignedFifteenMinLoop(intervalMins = 15) {
     const getMsToNextBoundary = () => {
         const now = new Date();
         const mins = now.getMinutes();
@@ -170,24 +164,22 @@ let livePriceTracker = null;
 function startLiveTickStream() {
     try {
         const cfg = mainConfig.getConfig();
-        const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "5" };
+        const scrip = cfg.selectedStock || { securityId: "13", exchangeSegment: "IDX_I", symbol: "NIFTY", instrument: "INDEX", interval: "15" };
         
         livePriceTracker = new DhanLivePrice();
         livePriceTracker.getLivePrice(
             String(scrip.securityId || "13"),
             scrip.exchangeSegment || "IDX_I",
-            Number(scrip.interval || 5),
+            Number(scrip.interval || 15),
             (tickData) => {
                 if (tickData && tickData.price > 0) {
                     latestLivePrice = Number(tickData.price);
                     latestTickTime = `${tickData.date || ''} ${tickData.time || ''}`.trim();
-                    // Update Reversal Filter with live Nifty spot ticks!
-                    reversalFilter.updateLiveTick(latestLivePrice);
                 }
             },
             scrip.instrument || "INDEX"
         );
-        console.log(`📡 [LIVE TICK STREAM ONLINE] Dhan WebSocket streaming live price ticks for ${scrip.symbol} (${scrip.securityId}) into Reversal Engine.`);
+        console.log(`📡 [LIVE TICK STREAM ONLINE] Dhan WebSocket streaming live price ticks for ${scrip.symbol} (${scrip.securityId}) directly into Master System.`);
     } catch (err) {
         console.warn(`⚠️ [LIVE TICK STREAM NOTICE]: ${err.message}`);
     }
@@ -224,7 +216,7 @@ async function startMasterSystem() {
     console.log(`⏱️ Starting clock-aligned ${intervalMins}-minute consensus evaluation loop for ${scrip.symbol} (${scrip.securityId})...\n`);
 
     // Start clock-aligned evaluation loop
-    scheduleClockAlignedFiveMinLoop(intervalMins);
+    scheduleClockAlignedFifteenMinLoop(intervalMins);
 }
 
 // Auto-start master system

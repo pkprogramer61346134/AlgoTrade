@@ -63,9 +63,7 @@
                     <div class="form-group">
                         <label for="interval"><i class="fa-regular fa-clock"></i> Interval</label>
                         <select id="interval" name="interval">
-                            <option value="1">1 Minute</option>
-                            <option value="5" selected>5 Minutes</option>
-                            <option value="15">15 Minutes</option>
+                            <option value="15" selected>15 Minutes</option>
                         </select>
                     </div>
 
@@ -75,14 +73,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="targetMode"><i class="fa-solid fa-crosshairs"></i> Target & SL Mode</label>
-                        <select id="targetMode" name="targetMode">
-                            <option value="TRAILING" selected>4-Stage Trailing SL (Auto)</option>
-                            <option value="1:1">Fixed 1:1 Target (No Trailing)</option>
-                            <option value="1:2">Fixed 1:2 Target (No Trailing)</option>
-                            <option value="1:3">Fixed 1:3 Target (No Trailing)</option>
-                            <option value="1:4">Fixed 1:4 Target (No Trailing)</option>
-                        </select>
+                        <label for="slPoints"><i class="fa-solid fa-shield-halved"></i> SL Points</label>
+                        <input type="number" id="slPoints" name="slPoints" value="35" min="1" max="500" step="1" placeholder="e.g. 10">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="targetPoints"><i class="fa-solid fa-bullseye"></i> Target Points</label>
+                        <input type="number" id="targetPoints" name="targetPoints" value="70" min="1" max="1000" step="1" placeholder="e.g. 30">
                     </div>
 
                     <div class="form-group btn-group">

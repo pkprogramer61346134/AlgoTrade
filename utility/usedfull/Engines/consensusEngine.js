@@ -163,7 +163,8 @@ function computeIndicators(candles, cfg = {}) {
         const fnORB = indicators.getOpeningRange || (indicators.marketContext && indicators.marketContext.getOpeningRange);
         for (const [d, dateCandles] of Object.entries(candlesByDate)) {
             if (fnORB) {
-                const res = fnORB(dateCandles, 15);
+                const candleInterval = Number(cfg.interval || (dateCandles[0]?.interval) || 15);
+                const res = fnORB(dateCandles, 15, candleInterval);
                 orbMap[d] = { high: res ? res.orbHigh : null, low: res ? res.orbLow : null };
             }
         }
@@ -175,7 +176,9 @@ function computeIndicators(candles, cfg = {}) {
             if (prevCandles && prevCandles.length > 0) {
                 const high = Math.max(...prevCandles.map(c => c.high || c.candleHigh || c.close));
                 const low = Math.min(...prevCandles.map(c => c.low || c.candleLow || c.close));
-                prevDayMap[currentDate] = { pdh: high, pdl: low };
+                const lastPrev = prevCandles[prevCandles.length - 1];
+                const close = Number(lastPrev.close || lastPrev.candleClose || lastPrev.price || 0);
+                prevDayMap[currentDate] = { pdh: high, pdl: low, pdc: close };
             }
         }
     }
@@ -189,7 +192,7 @@ function computeIndicators(candles, cfg = {}) {
 /**
  * Evaluate a single strategy against a candle
  */
-function evaluateSingleStrategy(c, i, candles, strat, computed) {
+function evaluateSingleStrategy(c, i, candles, strat, computed, options = {}) {
     if (!c) return null;
     const spotPrice = Number(c.close || c.candleClose || c.price || c.ltp || c.liveLtp || 0);
     if (!spotPrice || isNaN(spotPrice) || spotPrice <= 0) return null;
@@ -241,6 +244,14 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
 
     let signalType = "NONE";
 
+    const candlePatterns = (indicators.priceAction && typeof indicators.priceAction.detectCandlestickPatterns === "function") 
+        ? indicators.priceAction.detectCandlestickPatterns(candles.slice(0, i + 1)) 
+        : [];
+
+    const trendlineObj = (indicators.priceAction && typeof indicators.priceAction.detectTrendlineBreakout === "function")
+        ? indicators.priceAction.detectTrendlineBreakout(candles.slice(0, i + 1))
+        : null;
+
     if (strat.rules) {
         let buyMatch = Array.isArray(strat.rules.buy) && strat.rules.buy.length > 0;
         let sellMatch = Array.isArray(strat.rules.sell) && strat.rules.sell.length > 0;
@@ -256,17 +267,99 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
                 if (r.target === "ema" && r.condition === "goldenCross" && (eFast === null || eSlow === null || eFast <= eSlow)) buyMatch = false;
                 if (r.target === "tripleEMA" && r.condition === "bullishStack" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) buyMatch = false;
                 if (r.target === "priceAction" && r.condition === "lowerWickRejection" && !isLowerWickRej) buyMatch = false;
+                if ((r.target === "candlestickPattern" || r.target === "candlestick") && !candlePatterns.some(p => p.name === (r.pattern || r.condition || r.value) || (r.condition === "bullish" && p.type === "BULLISH"))) buyMatch = false;
+                if (r.target === "trendline" && r.condition === "bullishBreakout" && (!trendlineObj || !trendlineObj.bullishBreakout)) buyMatch = false;
                 if (r.target === "macd" && r.condition === "bullishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd <= macdObj.signal)) buyMatch = false;
                 if (r.target === "donchian" && r.condition === "upperBreak" && (!donchianObj || donchianObj.upper === null || spotPrice <= donchianObj.upper)) buyMatch = false;
                 if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) buyMatch = false;
                 if (r.target === "prevDay" && r.condition === "abovePDH" && (!prevDayObj || !prevDayObj.pdh || spotPrice <= prevDayObj.pdh)) buyMatch = false;
                 if (r.target === "bollinger" && r.condition === "upperBandBreak" && (!bbObj || !bbObj.upper || spotPrice <= bbObj.upper)) buyMatch = false;
                 if (r.target === "marketStructure" && r.condition === "swingHighBreak" && (!swingHigh || spotPrice <= swingHigh)) buyMatch = false;
+                if (r.target === "liquiditySweep" && r.condition === "bullishSweep") {
+                    let isBullSweep = false;
+                    if (i >= 5 && candles && Array.isArray(candles)) {
+                        const prior5 = candles.slice(i - 5, i);
+                        const priorLow = Math.min(...prior5.map(x => Number(x.low || x.close || 999999)));
+                        const openP = Number(c.open || c.candleOpen || c.close);
+                        const closeP = Number(c.close || c.candleClose || c.price);
+                        const lowP = Number(c.low || c.candleLow || c.close);
+                        const highP = Number(c.high || c.candleHigh || c.close);
+                        const rangeP = highP - lowP;
+                        const lowerWickP = Math.min(openP, closeP) - lowP;
+                        const ratioP = rangeP > 0 ? (lowerWickP / rangeP) : 0;
+                        isBullSweep = (lowP < priorLow && closeP > openP && closeP > priorLow && ratioP >= 0.40);
+                    }
+                    if (!isBullSweep) buyMatch = false;
+                }
+                if (r.target === "supportResistance" || r.target === "supportZone" || r.target === "support") {
+                    const pdl = prevDayObj ? prevDayObj.pdl : null;
+                    const orbLow = orbObj ? orbObj.low : null;
+                    const bbLower = bbObj ? bbObj.lower : null;
+                    const donchianLower = donchianObj ? donchianObj.lower : null;
+
+                    let pivotS1 = null, pivotS2 = null;
+                    if (prevDayObj && prevDayObj.pdh && prevDayObj.pdl && prevDayObj.pdc) {
+                        const P = (prevDayObj.pdh + prevDayObj.pdl + prevDayObj.pdc) / 3;
+                        pivotS1 = 2 * P - prevDayObj.pdh;
+                        pivotS2 = P - (prevDayObj.pdh - prevDayObj.pdl);
+                    }
+
+                    const levels = [pdl, orbLow, swingLow, pivotS1, pivotS2, donchianLower, bbLower].filter(v => v !== null && v !== undefined && !isNaN(v));
+                    const tolerance = r.tolerance || r.threshold || cfgInds.srTolerance || 35;
+
+                    const isAtSupport = levels.some(lvl => {
+                        return Math.abs(spotPrice - lvl) <= tolerance || Math.abs(candleLow - lvl) <= tolerance || (spotPrice >= (lvl - tolerance) && spotPrice <= (lvl + tolerance));
+                    });
+
+                    if (!isAtSupport) buyMatch = false;
+                }
+                if (r.target === "candleBreakout") {
+                    if (i >= 1 && candles && Array.isArray(candles)) {
+                        const prevCandleA = candles[i - 1];
+                        const prevHighA = Number(prevCandleA.high || prevCandleA.candleHigh || prevCandleA.close);
+                        const prevLowA = Number(prevCandleA.low || prevCandleA.candleLow || prevCandleA.close);
+
+                        const maxRange = r.maxCandleARange || r.candleARange || r.maxRange || cfgInds.maxCandleARange || cfgInds.candleARange;
+                        if (maxRange && (prevHighA - prevLowA) > maxRange) {
+                            buyMatch = false;
+                        }
+
+                        if (r.condition === "closeAbovePrevHigh" || r.condition === "abovePrevHigh" || r.condition === "openAbovePrevHigh" || r.condition === "openAndCloseAbovePrevHigh") {
+                            if (spotPrice <= prevHighA) buyMatch = false;
+                        } else if (r.condition === "closeBelowPrevLow" || r.condition === "belowPrevLow" || r.condition === "openBelowPrevLow" || r.condition === "openAndCloseBelowPrevLow") {
+                            if (spotPrice >= prevLowA) buyMatch = false;
+                        }
+                    } else {
+                        buyMatch = false;
+                    }
+                }
             }
         }
 
         if (sellMatch) {
             for (const r of strat.rules.sell) {
+                if (r.target === "supportResistance" || r.target === "resistanceZone" || r.target === "resistance") {
+                    const pdh = prevDayObj ? prevDayObj.pdh : null;
+                    const orbHigh = orbObj ? orbObj.high : null;
+                    const bbUpper = bbObj ? bbObj.upper : null;
+                    const donchianUpper = donchianObj ? donchianObj.upper : null;
+
+                    let pivotR1 = null, pivotR2 = null;
+                    if (prevDayObj && prevDayObj.pdh && prevDayObj.pdl && prevDayObj.pdc) {
+                        const P = (prevDayObj.pdh + prevDayObj.pdl + prevDayObj.pdc) / 3;
+                        pivotR1 = 2 * P - prevDayObj.pdl;
+                        pivotR2 = P + (prevDayObj.pdh - prevDayObj.pdl);
+                    }
+
+                    const levels = [pdh, orbHigh, swingHigh, pivotR1, pivotR2, donchianUpper, bbUpper].filter(v => v !== null && v !== undefined && !isNaN(v));
+                    const tolerance = r.tolerance || r.threshold || cfgInds.srTolerance || 35;
+
+                    const isAtResistance = levels.some(lvl => {
+                        return Math.abs(spotPrice - lvl) <= tolerance || Math.abs(candleHigh - lvl) <= tolerance || (spotPrice >= (lvl - tolerance) && spotPrice <= (lvl + tolerance));
+                    });
+
+                    if (!isAtResistance) sellMatch = false;
+                }
                 if (r.target === "supertrend" && r.condition === "bearish" && !isStBear) sellMatch = false;
                 if (r.target === "vwap" && r.condition === "below" && (vwapVal === null || spotPrice >= vwapVal)) sellMatch = false;
                 if (r.target === "rvol" && r.condition === "gte" && (effectiveRvol === null || effectiveRvol < (r.value || minRvol))) sellMatch = false;
@@ -274,14 +367,52 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
                 if (r.target === "adx" && r.condition === "gte" && (adxVal === null || adxVal < (r.value || minAdx))) sellMatch = false;
                 if (r.target === "orb" && r.condition === "belowLow" && (!orbObj || orbObj.low === null || spotPrice >= orbObj.low)) sellMatch = false;
                 if (r.target === "ema" && r.condition === "deathCross" && (eFast === null || eSlow === null || eFast >= eSlow)) sellMatch = false;
-                if (r.target === "tripleEMA" && r.condition === "bearishStack" && (e10 === null || eFast === null || eSlow === null || e10 >= eFast || eFast >= eSlow)) sellMatch = false;
+                if (r.target === "tripleEMA" && r.condition === "bearishStack" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) sellMatch = false;
                 if (r.target === "priceAction" && r.condition === "upperWickRejection" && !isUpperWickRej) sellMatch = false;
+                if ((r.target === "candlestickPattern" || r.target === "candlestick") && !candlePatterns.some(p => p.name === (r.pattern || r.condition || r.value) || (r.condition === "bearish" && p.type === "BEARISH"))) sellMatch = false;
+                if (r.target === "trendline" && r.condition === "bearishBreakout" && (!trendlineObj || !trendlineObj.bearishBreakout)) sellMatch = false;
                 if (r.target === "macd" && r.condition === "bearishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd >= macdObj.signal)) sellMatch = false;
                 if (r.target === "donchian" && r.condition === "lowerBreak" && (!donchianObj || donchianObj.lower === null || spotPrice >= donchianObj.lower)) sellMatch = false;
                 if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) sellMatch = false;
                 if (r.target === "prevDay" && r.condition === "belowPDL" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellMatch = false;
                 if (r.target === "bollinger" && r.condition === "lowerBandBreak" && (!bbObj || !bbObj.lower || spotPrice >= bbObj.lower)) sellMatch = false;
                 if (r.target === "marketStructure" && r.condition === "swingLowBreak" && (!swingLow || spotPrice >= swingLow)) sellMatch = false;
+                if (r.target === "liquiditySweep" && r.condition === "bearishSweep") {
+                    let isBearSweep = false;
+                    if (i >= 5 && candles && Array.isArray(candles)) {
+                        const prior5 = candles.slice(i - 5, i);
+                        const priorHigh = Math.max(...prior5.map(x => Number(x.high || x.close || 0)));
+                        const openP = Number(c.open || c.candleOpen || c.close);
+                        const closeP = Number(c.close || c.candleClose || c.price);
+                        const lowP = Number(c.low || c.candleLow || c.close);
+                        const highP = Number(c.high || c.candleHigh || c.close);
+                        const rangeP = highP - lowP;
+                        const upperWickP = highP - Math.max(openP, closeP);
+                        const ratioP = rangeP > 0 ? (upperWickP / rangeP) : 0;
+                        isBearSweep = (highP > priorHigh && closeP < openP && closeP < priorHigh && ratioP >= 0.40);
+                    }
+                    if (!isBearSweep) sellMatch = false;
+                }
+                if (r.target === "candleBreakout") {
+                    if (i >= 1 && candles && Array.isArray(candles)) {
+                        const prevCandleA = candles[i - 1];
+                        const prevHighA = Number(prevCandleA.high || prevCandleA.candleHigh || prevCandleA.close);
+                        const prevLowA = Number(prevCandleA.low || prevCandleA.candleLow || prevCandleA.close);
+
+                        const maxRange = r.maxCandleARange || r.candleARange || r.maxRange || cfgInds.maxCandleARange || cfgInds.candleARange;
+                        if (maxRange && (prevHighA - prevLowA) > maxRange) {
+                            sellMatch = false;
+                        }
+
+                        if (r.condition === "closeBelowPrevLow" || r.condition === "belowPrevLow" || r.condition === "openBelowPrevLow" || r.condition === "openAndCloseBelowPrevLow") {
+                            if (spotPrice >= prevLowA) sellMatch = false;
+                        } else if (r.condition === "closeAbovePrevHigh" || r.condition === "abovePrevHigh" || r.condition === "openAbovePrevHigh" || r.condition === "openAndCloseAbovePrevHigh") {
+                            if (spotPrice <= prevHighA) sellMatch = false;
+                        }
+                    } else {
+                        sellMatch = false;
+                    }
+                }
             }
         }
 
@@ -290,12 +421,19 @@ function evaluateSingleStrategy(c, i, candles, strat, computed) {
     }
 
     if (signalType !== "NONE") {
-        const dynamicSLPoints = Math.max(15.0, Math.min(35.0, safeAtr * 1.5));
-        let sl = signalType === "BUY" ? (spotPrice - dynamicSLPoints) : (spotPrice + dynamicSLPoints);
-        const risk = Math.abs(spotPrice - sl);
-        const rrMultiplier = strat.riskRewardRatio || 2.0;
-        const dynamicTRPoints = risk * rrMultiplier;
-        let tp = signalType === "BUY" ? (spotPrice + dynamicTRPoints) : (spotPrice - dynamicTRPoints);
+        const configuredSL = (options.slPoints !== undefined && options.slPoints !== null && !isNaN(Number(options.slPoints)))
+            ? Number(options.slPoints)
+            : ((strat.indicators && strat.indicators.slPoints) ? Number(strat.indicators.slPoints) : null);
+
+        const configuredTR = (options.targetPoints !== undefined && options.targetPoints !== null && !isNaN(Number(options.targetPoints)))
+            ? Number(options.targetPoints)
+            : ((strat.indicators && strat.indicators.targetPoints) ? Number(strat.indicators.targetPoints) : null);
+
+        const slPts = configuredSL !== null ? configuredSL : Math.max(15.0, Math.min(35.0, safeAtr * 1.5));
+        const trPts = configuredTR !== null ? configuredTR : (slPts * (strat.riskRewardRatio || 2.0));
+
+        let sl = signalType === "BUY" ? (spotPrice - slPts) : (spotPrice + slPts);
+        let tp = signalType === "BUY" ? (spotPrice + trPts) : (spotPrice - trPts);
 
         return {
             strategyId: strat.id,
@@ -525,7 +663,7 @@ async function evaluateConsensusEngine(inputCandles = [], i = -1, options = {}) 
     }
 
     const config = loadStrategyConfig("consensus_master_head.json");
-    const warmupCount = Number(opts.warmupCount || opts.count || config.warmupCount || 200);
+    const warmupCount = (opts.warmupCount !== undefined ? Number(opts.warmupCount) : (opts.count !== undefined ? Number(opts.count) : (config.warmupCount !== undefined ? Number(config.warmupCount) : 200)));
 
     // Auto-warmup check: If input candles are less than required warmup threshold (e.g. 200 candles)
     if (candlesArray.length < warmupCount) {
@@ -537,9 +675,9 @@ async function evaluateConsensusEngine(inputCandles = [], i = -1, options = {}) 
 
         const targetDate = opts.date || (lastCandle ? lastCandle.date : defaultDate);
         const targetTime = opts.time || (lastCandle ? lastCandle.time : defaultTime);
-        const securityId = opts.securityId || (lastCandle ? (lastCandle.securityId || lastCandle.symbol) : "13");
-        const exchangeSegment = opts.exchangeSegment || (lastCandle ? lastCandle.exchangeSegment : "IDX_I");
-        const interval = String(opts.interval || (lastCandle ? lastCandle.interval : "5"));
+        const securityId = opts.securityId || (lastCandle ? (lastCandle.securityId || lastCandle.scrip || lastCandle.symbol) : null) || "13";
+        const exchangeSegment = opts.exchangeSegment || (lastCandle ? lastCandle.exchangeSegment : null) || "IDX_I";
+        const interval = String(opts.interval || (lastCandle ? lastCandle.interval : null) || "15");
 
         if (targetDate) {
             try {
@@ -584,7 +722,7 @@ async function evaluateConsensusEngine(inputCandles = [], i = -1, options = {}) 
  * Synchronous version for callers that already pass full prepended candles (e.g. 200+ candles)
  */
 function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
-    if (!candlesArray || !Array.isArray(candlesArray) || candlesArray.length < 10) {
+    if (!candlesArray || !Array.isArray(candlesArray) || candlesArray.length < 1) {
         console.warn(`⚠️ [CONSENSUS ENGINE WARN] Insufficient candle history (${candlesArray?.length || 0} candles). Minimum 10+ candles required for accurate indicator calculation.`);
         return {
             consensus: "NO_SIGNAL",
@@ -639,7 +777,7 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
 
     for (const strat of strategies) {
         if (strat.enabled === false) continue;
-        const res = evaluateSingleStrategy(c, index, candlesArray, strat, computed);
+        const res = evaluateSingleStrategy(c, index, candlesArray, strat, computed, options);
         if (res) {
             triggeredSignals.push(res);
             strategyStates.push({

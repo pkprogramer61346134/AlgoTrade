@@ -1,61 +1,36 @@
 [
   {
-    "id": "STRAT_MASTER_QUANTUM_CONSENSUS",
-    "name": "👑 Master Quantum Multi-Indicator Strategy",
-    "winrate": "66.8%",
-    "riskRewardRatio": 2,
+    "id": "CANDLE_A_B_BREAKOUT",
+    "name": "🕯️ Reversed 15-Minute Candle B Close Strategy (Target 10 pts / SL 3 pts)",
+    "winrate": "50.0%",
+    "riskRewardRatio": 3.33,
     "indicators": {
-      "supertrendPeriod": 10,
-      "supertrendMultiplier": 3,
-      "rvolMin": 1,
-      "rsiMin": 50,
-      "adxMin": 16
+      "targetPoints": 10,
+      "slPoints": 3,
+      "maxTradesPerDay": 100,
+      "srTolerance": 45
     },
     "rules": {
       "buy": [
         {
-          "target": "supertrend",
-          "condition": "bullish"
+          "target": "candleBreakout",
+          "condition": "closeBelowPrevLow"
         },
         {
-          "target": "vwap",
-          "condition": "above"
-        },
-        {
-          "target": "tripleEMA",
-          "condition": "bullishStack"
-        },
-        {
-          "target": "macd",
-          "condition": "bullishCross"
-        },
-        {
-          "target": "rsi",
-          "condition": "gte",
-          "value": 50
+          "target": "supportResistance",
+          "condition": "atSupportZone",
+          "tolerance": 45
         }
       ],
       "sell": [
         {
-          "target": "supertrend",
-          "condition": "bearish"
+          "target": "candleBreakout",
+          "condition": "closeAbovePrevHigh"
         },
         {
-          "target": "vwap",
-          "condition": "below"
-        },
-        {
-          "target": "tripleEMA",
-          "condition": "bearishStack"
-        },
-        {
-          "target": "macd",
-          "condition": "bearishCross"
-        },
-        {
-          "target": "rsi",
-          "condition": "lte",
-          "value": 50
+          "target": "supportResistance",
+          "condition": "atResistanceZone",
+          "tolerance": 45
         }
       ]
     }

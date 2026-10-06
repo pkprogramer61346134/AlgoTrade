@@ -253,16 +253,16 @@ class MasterTrailingEngine {
             return { status: "IGNORED", reason: `ORDER_COOLDOWN_ACTIVE (${remSecs}s)` };
         }
 
-        // SL Exit Cooldown Guard (Default 0 minutes if removed from config)
-        const slCooldownMins = Number(cfg.slCooldownMinutes !== undefined ? cfg.slCooldownMinutes : 0);
-        const SL_COOLDOWN_MS = slCooldownMins * 60 * 1000;
-        const timeSinceLastSlExit = Date.now() - (this.lastSlExitTimestamp || 0);
-        if (timeSinceLastSlExit < SL_COOLDOWN_MS) {
-            const remMs = SL_COOLDOWN_MS - timeSinceLastSlExit;
+        // Mandatory Post-Trade Exit Cooldown Guard (15 Minutes = 900,000 ms after ANY trade exit - Target Hit, SL Hit, Trailing SL)
+        const cooldownMins = Number(cfg.slCooldownMinutes !== undefined ? cfg.slCooldownMinutes : 15);
+        const COOLDOWN_MS = cooldownMins * 60 * 1000;
+        const timeSinceLastExit = Date.now() - (this.lastExitTimestamp || 0);
+        if (this.lastExitTimestamp > 0 && timeSinceLastExit < COOLDOWN_MS) {
+            const remMs = COOLDOWN_MS - timeSinceLastExit;
             const remMins = Math.floor(remMs / 60000);
             const remSecs = Math.ceil((remMs % 60000) / 1000);
-            logger.logInfo(envName, "SIGNAL_IGNORED", `SL exit cooldown active (${remMins}m ${remSecs}s remaining after SL hit). Ignoring signal.`);
-            return { status: "IGNORED", reason: `SL_EXIT_COOLDOWN_ACTIVE (${remMins}m ${remSecs}s)` };
+            logger.logInfo(envName, "SIGNAL_IGNORED", `15-min trade exit cooldown active (${remMins}m ${remSecs}s remaining after trade exit). Ignoring signal.`);
+            return { status: "IGNORED", reason: `TRADE_EXIT_COOLDOWN_ACTIVE (${remMins}m ${remSecs}s)` };
         }
 
         // Synchronously acquire atomic lock & record timestamp BEFORE any async operations
@@ -478,10 +478,8 @@ class MasterTrailingEngine {
                 const closedPosition = { ...pos };
                 this.activePosition = null;
                 this.lastExitTimestamp = Date.now();
-                if (String(exitReason || "").includes("SL_HIT")) {
-                    this.lastSlExitTimestamp = Date.now();
-                    logger.logInfo(envName, "SL_EXIT_COOLDOWN_STARTED", `SL exit recorded (${exitReason}). 15-minute cooldown started.`);
-                }
+                this.lastSlExitTimestamp = Date.now();
+                logger.logInfo(envName, "TRADE_EXIT_COOLDOWN_STARTED", `Trade exit recorded (${exitReason}). Mandatory 15-minute cooldown started.`);
                 this.isCloseInFlight = false;
 
                 logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
@@ -631,11 +629,11 @@ class MasterTrailingEngine {
         }
 
         const cfg = masterConfig.getConfig();
-        const slCooldownMins = Number(cfg.slCooldownMinutes !== undefined ? cfg.slCooldownMinutes : 0);
-        const SL_COOLDOWN_MS = slCooldownMins * 60 * 1000;
-        const timeSinceLastSlExit = Date.now() - (this.lastSlExitTimestamp || 0);
-        const isSlCooldownActive = Boolean(this.lastSlExitTimestamp > 0 && timeSinceLastSlExit < SL_COOLDOWN_MS);
-        const remainingCooldownMs = isSlCooldownActive ? (SL_COOLDOWN_MS - timeSinceLastSlExit) : 0;
+        const cooldownMins = Number(cfg.slCooldownMinutes !== undefined ? cfg.slCooldownMinutes : 15);
+        const COOLDOWN_MS = cooldownMins * 60 * 1000;
+        const timeSinceLastExit = Date.now() - (this.lastExitTimestamp || 0);
+        const isSlCooldownActive = Boolean(this.lastExitTimestamp > 0 && timeSinceLastExit < COOLDOWN_MS);
+        const remainingCooldownMs = isSlCooldownActive ? (COOLDOWN_MS - timeSinceLastExit) : 0;
 
         return {
             activePosition: this.activePosition,

@@ -137,7 +137,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const toDate = toDateInput.value;
         const interval = intervalSelect.value;
         const maxTradesPerDay = document.getElementById('maxTradesPerDay') ? document.getElementById('maxTradesPerDay').value : 3;
-        const targetMode = document.getElementById('targetMode') ? document.getElementById('targetMode').value : 'TRAILING';
+        const slPoints = document.getElementById('slPoints') ? document.getElementById('slPoints').value : 35;
+        const targetPoints = document.getElementById('targetPoints') ? document.getElementById('targetPoints').value : 70;
 
         // Update Server Status
         setRunningState(true);
@@ -153,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         // Construct SSE stream URL
-        const streamUrl = `/api/stream?fromDate=${fromDate}&toDate=${toDate}&interval=${interval}&maxTradesPerDay=${maxTradesPerDay}&targetMode=${targetMode}`;
+        const streamUrl = `/api/stream?fromDate=${fromDate}&toDate=${toDate}&interval=${interval}&maxTradesPerDay=${maxTradesPerDay}&slPoints=${slPoints}&targetPoints=${targetPoints}`;
         const eventSource = new EventSource(streamUrl);
 
         eventSource.addEventListener('progress', (e) => {
@@ -300,12 +301,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 : `<span class="badge badge-danger">SELL (PE)</span>`;
 
             let reasonBadge = `<span class="badge badge-neutral">${t.exitReason}</span>`;
-            if (t.exitReason && t.exitReason.includes('TR4')) {
-                reasonBadge = `<span class="badge badge-success">🎯 TR4 TARGET (1:4)</span>`;
-            } else if (t.exitReason && t.exitReason.includes('TRAILED')) {
-                reasonBadge = `<span class="badge badge-success">🔄 ${t.exitReason}</span>`;
-            } else if (t.exitReason && t.exitReason.includes('INITIAL_SL')) {
-                reasonBadge = `<span class="badge badge-danger">🛑 INITIAL SL HIT</span>`;
+            if (t.exitReason === 'TARGET_HIT') {
+                reasonBadge = `<span class="badge badge-success">🎯 TARGET HIT</span>`;
+            } else if (t.exitReason === 'STOP_LOSS_HIT' || (t.exitReason && t.exitReason.includes('SL'))) {
+                reasonBadge = `<span class="badge badge-danger">🛑 STOP LOSS HIT</span>`;
+            } else if (t.exitReason === 'EOD_SQUARE_OFF') {
+                reasonBadge = `<span class="badge badge-neutral">⏰ EOD EXIT</span>`;
             }
 
             const resultBadge = isPass 

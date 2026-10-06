@@ -18,8 +18,24 @@ const fs = require('fs');
 const path = require('path');
 const { getCachedCandles } = require('../../utility/usedfull/cached-historical-data');
 const { evaluateConsensusEngine } = require('../../utility/usedfull/Engines/consensusEngine');
+const masterConfig = require('../masterSL/config');
 
 const REPORT_FILE = path.join(__dirname, 'backtest_report.json');
+
+function toSeconds(timeStr) {
+    if (!timeStr || typeof timeStr !== "string") return 0;
+    const cleanStr = timeStr.trim().toLowerCase();
+    const isPM = cleanStr.includes("pm");
+    const isAM = cleanStr.includes("am");
+    const timeOnly = cleanStr.replace(/(am|pm)/gi, "").trim();
+    const parts = timeOnly.split(":");
+    let hours = parseInt(parts[0] || "0", 10);
+    let minutes = parseInt(parts[1] || "0", 10);
+    let seconds = parseInt(parts[2] || "0", 10);
+    if (isPM && hours < 12) hours += 12;
+    else if (isAM && hours === 12) hours = 0;
+    return hours * 3600 + minutes * 60 + seconds;
+}
 
 class BacktestEngine {
     constructor() {
@@ -33,7 +49,7 @@ class BacktestEngine {
         const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
         const fromDate = params.fromDate || params.date || "2026-09-21";
         const toDate = params.toDate || params.date || todayStr;
-        const interval = String(params.interval || "5");
+        const interval = String(params.interval || "15");
         const maxTradesPerDay = Number(params.maxTradesPerDay || 3);
 
         console.log("==========================================================================");
@@ -87,68 +103,50 @@ class BacktestEngine {
         let activePosition = null;
         const tradesHistory = [];
         const dailyTradeCountMap = {};
+        const lastTradeExitSecsMap = {};
 
         for (let i = 0; i < targetCandles.length; i++) {
             const tick = targetCandles[i];
             const candleClose = Number(tick.close || tick.candleClose || tick.price || 0);
             const candleHigh = Number(tick.high || tick.candleHigh || candleClose);
             const candleLow = Number(tick.low || tick.candleLow || candleClose);
-
             let closedTradeThisTick = null;
             let consensusResult = { consensus: "NO_SIGNAL", reason: "NO_EVALUATION" };
 
             try {
-                // 1. Process Active Position Exit Rules (Trailing SL vs Target vs EOD)
+                // 1. Process Active Position Exit Rules (Direct Target vs SL vs EOD)
                 if (activePosition) {
                     const isBUY = activePosition.type === "BUY";
-                    const isLastCandleOfDay = (tick.time >= "15:15:00" || i === targetCandles.length - 1 || (i < targetCandles.length - 1 && targetCandles[i + 1].date !== tick.date));
+                    const tickSecs = toSeconds(tick.time);
+                    const cutoff1515 = 15 * 3600 + 15 * 60; // 54900 seconds (15:15 PM)
+                    const isLastCandleOfDay = (tickSecs >= cutoff1515 || i === targetCandles.length - 1 || (i < targetCandles.length - 1 && targetCandles[i + 1].date !== tick.date));
 
-                    // Dynamic 1-R Lag Trailing SL Update (Scratch Implementation matching MasterSL)
-                    if (isBUY) {
-                        if (candleHigh >= activePosition.tr1 && activePosition.entryPrice > activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.entryPrice;
-                            activePosition.trailingStage = "TRAILED_COST_TO_COST";
-                        }
-                        if (candleHigh >= activePosition.tr2 && activePosition.tr1 > activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr1;
-                            activePosition.trailingStage = "TRAILED_TR1";
-                        }
-                        if (candleHigh >= activePosition.tr3 && activePosition.tr2 > activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr2;
-                            activePosition.trailingStage = "TRAILED_TR2";
-                        }
-                        if (candleHigh >= activePosition.tr4 && activePosition.tr3 > activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr3;
-                            activePosition.trailingStage = "TRAILED_TR3";
-                        }
-                        if (candleHigh >= activePosition.tr5 && activePosition.tr4 > activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr4;
-                            activePosition.trailingStage = "TRAILED_TR4";
-                        }
-                    } else { // SELL / PE
-                        if (candleLow <= activePosition.tr1 && activePosition.entryPrice < activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.entryPrice;
-                            activePosition.trailingStage = "TRAILED_COST_TO_COST";
-                        }
-                        if (candleLow <= activePosition.tr2 && activePosition.tr1 < activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr1;
-                            activePosition.trailingStage = "TRAILED_TR1";
-                        }
-                        if (candleLow <= activePosition.tr3 && activePosition.tr2 < activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr2;
-                            activePosition.trailingStage = "TRAILED_TR2";
-                        }
-                        if (candleLow <= activePosition.tr4 && activePosition.tr3 < activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr3;
-                            activePosition.trailingStage = "TRAILED_TR3";
-                        }
-                        if (candleLow <= activePosition.tr5 && activePosition.tr4 < activePosition.currentSl) {
-                            activePosition.currentSl = activePosition.tr4;
-                            activePosition.trailingStage = "TRAILED_TR4";
+                    // DYNAMIC MASTERSL PERCENT TRAILING SL LADDER ENGINE
+                    const masterCfg = masterConfig.getConfig();
+                    const percentRules = Array.isArray(masterCfg.percentTrailingRules) ? masterCfg.percentTrailingRules : [];
+                    if (percentRules.length > 0) {
+                        const targetPoints = Math.abs(activePosition.targetPrice - activePosition.entryPrice);
+                        const pnlDiff = isBUY ? (candleHigh - activePosition.entryPrice) : (activePosition.entryPrice - candleLow);
+                        const sortedRules = [...percentRules].sort((a, b) => b.targetPercent - a.targetPercent);
+
+                        for (const rule of sortedRules) {
+                            const reqTargetPts = (targetPoints * rule.targetPercent) / 100;
+                            if (pnlDiff >= reqTargetPts) {
+                                const lockPts = Number(((targetPoints * rule.lockPercent) / 100).toFixed(2));
+                                const newSlPrice = isBUY 
+                                    ? Number((activePosition.entryPrice + lockPts).toFixed(2)) 
+                                    : Number((activePosition.entryPrice - lockPts).toFixed(2));
+
+                                if (isBUY ? (newSlPrice > activePosition.slPrice) : (newSlPrice < activePosition.slPrice)) {
+                                    activePosition.slPrice = newSlPrice;
+                                    activePosition.trailingStage = `TARGET_${rule.targetPercent}%_LOCK_${rule.lockPercent}%`;
+                                    break;
+                                }
+                            }
                         }
                     }
 
-                    // Evaluate Exits
+                    // Evaluate Exits (Pure Target vs Trailed SL vs EOD)
                     let isTargetHit = false;
                     let isSLHit = false;
                     let isEODSquareOff = false;
@@ -156,7 +154,7 @@ class BacktestEngine {
                     if (isBUY) {
                         if (candleHigh >= activePosition.targetPrice) {
                             isTargetHit = true;
-                        } else if (candleLow <= activePosition.currentSl) {
+                        } else if (candleLow <= activePosition.slPrice) {
                             isSLHit = true;
                         } else if (isLastCandleOfDay) {
                             isEODSquareOff = true;
@@ -164,7 +162,7 @@ class BacktestEngine {
                     } else { // SELL / PE
                         if (candleLow <= activePosition.targetPrice) {
                             isTargetHit = true;
-                        } else if (candleHigh >= activePosition.currentSl) {
+                        } else if (candleHigh >= activePosition.slPrice) {
                             isSLHit = true;
                         } else if (isLastCandleOfDay) {
                             isEODSquareOff = true;
@@ -172,10 +170,13 @@ class BacktestEngine {
                     }
 
                     if (isTargetHit || isSLHit || isEODSquareOff) {
-                        const exitPrice = isTargetHit ? activePosition.targetPrice : (isSLHit ? activePosition.currentSl : candleClose);
-                        const exitReason = isTargetHit ? "TARGET_HIT" : (isSLHit ? (activePosition.trailingStage === "INITIAL" ? "INITIAL_SL_HIT" : `TRAILED_SL_HIT (${activePosition.trailingStage})`) : "EOD_SQUARE_OFF");
+                        const exitPrice = isTargetHit ? activePosition.targetPrice : (isSLHit ? activePosition.slPrice : candleClose);
+                        const exitReason = isTargetHit ? "TARGET_HIT" : (isSLHit ? (activePosition.trailingStage ? `TRAILED_SL_HIT (${activePosition.trailingStage})` : "INITIAL_SL_HIT") : "EOD_SQUARE_OFF");
                         const pts = isBUY ? (exitPrice - activePosition.entryPrice) : (activePosition.entryPrice - exitPrice);
                         const pointsNum = Number(pts.toFixed(2));
+
+                        const exitDayKey = tick.date || "DEFAULT";
+                        lastTradeExitSecsMap[exitDayKey] = toSeconds(tick.time);
 
                         closedTradeThisTick = {
                             tradeId: activePosition.tradeId,
@@ -186,12 +187,12 @@ class BacktestEngine {
                             entryDate: activePosition.entryDate,
                             entryTime: activePosition.entryTime,
                             entryPrice: activePosition.entryPrice,
-                            initialSl: activePosition.initialSl,
-                            exitSl: activePosition.currentSl,
-                            trailingStage: activePosition.trailingStage,
-                            sl: activePosition.currentSl,
+                            initialSl: activePosition.initialSl || activePosition.slPrice,
+                            exitSl: activePosition.slPrice,
+                            sl: activePosition.slPrice,
                             tr: activePosition.targetPrice,
                             targetPrice: activePosition.targetPrice,
+                            trailingStage: activePosition.trailingStage || "INITIAL",
                             exitDate: tick.date,
                             exitTime: tick.time,
                             exitPrice: Number(exitPrice.toFixed(2)),
@@ -209,38 +210,55 @@ class BacktestEngine {
                 const dayKey = tick.date || "DEFAULT";
                 const currentDayTrades = dailyTradeCountMap[dayKey] || 0;
 
-                consensusResult = await evaluateConsensusEngine({
+                const slPointsInput = params.slPoints !== undefined && !isNaN(Number(params.slPoints)) && Number(params.slPoints) > 0 ? Number(params.slPoints) : null;
+                const targetPointsInput = params.targetPoints !== undefined && !isNaN(Number(params.targetPoints)) && Number(params.targetPoints) > 0 ? Number(params.targetPoints) : null;
+
+                const candleSlice = targetCandles.slice(0, i + 1);
+                consensusResult = await evaluateConsensusEngine(candleSlice, i, {
                     securityId: "13",
                     exchangeSegment: "IDX_I",
                     interval: interval,
                     date: tick.date,
-                    time: tick.time
+                    time: tick.time,
+                    warmupCount: 1,
+                    slPoints: slPointsInput,
+                    targetPoints: targetPointsInput
                 });
 
                 // 3. Open New Position if no position active and valid signal triggered before 3:00 PM
-                if (!activePosition && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
-                    if (consensusResult.sl && consensusResult.tr && tick.time <= "15:00:00" && currentDayTrades < maxTradesPerDay) {
+                const tickSecsForEntry = toSeconds(tick.time);
+                const cutoff1500 = 15 * 3600; // 54000 seconds (15:00 PM)
+
+                const lastExitSecs = lastTradeExitSecsMap[dayKey];
+                const cooldownSatisfied = (lastExitSecs === undefined || lastExitSecs === null) || ((tickSecsForEntry - lastExitSecs) >= 900);
+
+                if (!activePosition && cooldownSatisfied && (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")) {
+                    if (tickSecsForEntry <= cutoff1500 && currentDayTrades < maxTradesPerDay) {
                         dailyTradeCountMap[dayKey] = currentDayTrades + 1;
 
                         const entryPrice = Number((consensusResult.entry || candleClose).toFixed(2));
-                        const initialSl = Number(consensusResult.sl.toFixed(2));
-                        const riskPoints = Math.max(0.1, Number(Math.abs(entryPrice - initialSl).toFixed(2)));
                         const type = consensusResult.consensus;
 
-                        let tr1, tr2, tr3, tr4, tr5;
-                        if (type === "BUY") {
-                            tr1 = Number((entryPrice + riskPoints * 1).toFixed(2));
-                            tr2 = Number((entryPrice + riskPoints * 2).toFixed(2));
-                            tr3 = Number((entryPrice + riskPoints * 3).toFixed(2));
-                            tr4 = Number((entryPrice + riskPoints * 4).toFixed(2));
-                            tr5 = Number((entryPrice + riskPoints * 5).toFixed(2));
+                        let slPrice;
+                        if (slPointsInput !== null) {
+                            slPrice = type === "BUY" ? (entryPrice - slPointsInput) : (entryPrice + slPointsInput);
+                        } else if (consensusResult.sl !== null && consensusResult.sl !== undefined) {
+                            slPrice = Number(consensusResult.sl.toFixed(2));
                         } else {
-                            tr1 = Number((entryPrice - riskPoints * 1).toFixed(2));
-                            tr2 = Number((entryPrice - riskPoints * 2).toFixed(2));
-                            tr3 = Number((entryPrice - riskPoints * 3).toFixed(2));
-                            tr4 = Number((entryPrice - riskPoints * 4).toFixed(2));
-                            tr5 = Number((entryPrice - riskPoints * 5).toFixed(2));
+                            slPrice = type === "BUY" ? (entryPrice - 35) : (entryPrice + 35);
                         }
+
+                        let targetPrice;
+                        if (targetPointsInput !== null) {
+                            targetPrice = type === "BUY" ? (entryPrice + targetPointsInput) : (entryPrice - targetPointsInput);
+                        } else if (consensusResult.tr !== null && consensusResult.tr !== undefined) {
+                            targetPrice = Number(consensusResult.tr.toFixed(2));
+                        } else {
+                            targetPrice = type === "BUY" ? (entryPrice + 70) : (entryPrice - 70);
+                        }
+
+                        slPrice = Number(slPrice.toFixed(2));
+                        targetPrice = Number(targetPrice.toFixed(2));
 
                         activePosition = {
                             tradeId: `BT_${i}_${Date.now()}`,
@@ -250,12 +268,9 @@ class BacktestEngine {
                             entryDate: tick.date,
                             entryTime: tick.time,
                             entryPrice: entryPrice,
-                            initialSl: initialSl,
-                            currentSl: initialSl,
-                            targetPrice: Number(consensusResult.tr.toFixed(2)),
-                            trailingStage: "INITIAL",
-                            riskPoints: riskPoints,
-                            tr1, tr2, tr3, tr4, tr5
+                            initialSl: slPrice,
+                            slPrice: slPrice,
+                            targetPrice: targetPrice
                         };
                     }
                 }

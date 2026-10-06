@@ -5627,3 +5627,147 @@ Error: [REAL_TRADE] Step PLACE_ORDER failed after 1 retries: [ORDER EXECUTOR ERR
 [2/10/2026, 02:02:33] [TEST] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
 [2/10/2026, 02:02:33] [TEST] ℹ️ [SL_EXIT_COOLDOWN_STARTED] SL exit recorded (TRAILED_SL_HIT (TARGET_90%_LOCK_85%)). 15-minute cooldown started.
 [2/10/2026, 02:02:33] [TEST] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_CE | Exit: ₹165.45 | Reason: TRAILED_SL_HIT (TARGET_90%_LOCK_85%) | PnL: ₹4254.25
+[6/10/2026, 05:45:07] [TEST_VERIFICATION] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹102.4 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 05:45:07] [TEST_VERIFICATION] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹102.4 (TARGET_40%_LOCK_20%)
+[6/10/2026, 05:45:07] [TEST_VERIFICATION] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked (Simulated / Paper Trading).
+[6/10/2026, 05:45:07] [TEST_VERIFICATION] ℹ️ [POSITION_CLOSED] Closed NIFTY_22500_CE | Exit: ₹112 | Reason: TARGET_HIT (PERCENT_TRAILING) | PnL: ₹300
+[6/10/2026, 05:45:17] [TEST_VERIFICATION] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹102.4 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 05:45:17] [TEST_VERIFICATION] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹102.4 (TARGET_40%_LOCK_20%)
+[6/10/2026, 05:45:29] [TEST_VERIFICATION] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹102.4 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 05:45:29] [TEST_VERIFICATION] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹102.4 (TARGET_40%_LOCK_20%)
+[6/10/2026, 05:45:31] [TEST_VERIFICATION] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹107.99 (TARGET_100%_LOCK_66.6%)...
+[6/10/2026, 05:45:31] [TEST_VERIFICATION] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹107.99 (TARGET_100%_LOCK_66.6%)
+[6/10/2026, 05:45:33] [TEST_VERIFICATION] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹113.99 (TARGET_150%_LOCK_116.6%)...
+[6/10/2026, 05:45:33] [TEST_VERIFICATION] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹113.99 (TARGET_150%_LOCK_116.6%)
+[6/10/2026, 05:45:35] [TEST_VERIFICATION] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹119.99 (TARGET_200%_LOCK_166.6%)...
+[6/10/2026, 05:45:35] [TEST_VERIFICATION] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹119.99 (TARGET_200%_LOCK_166.6%)
+[6/10/2026, 05:45:37] [TEST_VERIFICATION] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹128 (TARGET_266%_LOCK_233.3%)...
+[6/10/2026, 05:45:37] [TEST_VERIFICATION] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹128 (TARGET_266%_LOCK_233.3%)
+[6/10/2026, 06:08:26] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 06:08:26] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:08:26] [TEST_ENV] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹115.38 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 06:08:26] [TEST_ENV] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹115.38
+[6/10/2026, 06:08:26] [TEST_ENV] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹115.38 (TARGET_40%_LOCK_20%)
+[6/10/2026, 06:08:26] [TEST_ENV] ℹ️ [SIGNAL_IGNORED] Position already open or order in flight (NIFTY_24500_CE). Ignoring signal.
+[6/10/2026, 06:08:26] [TEST_ENV] ℹ️ [SIGNAL_IGNORED] Position already open or order in flight (NIFTY_24500_CE). Ignoring signal.
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹115.38 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹115.38
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹115.38 (TARGET_40%_LOCK_20%)
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (TARGET_40%_LOCK_20%)). Mandatory 15-minute cooldown started.
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹115.38 | Reason: TRAILED_SL_HIT (TARGET_40%_LOCK_20%) | PnL: ₹999.7
+[6/10/2026, 06:08:38] [TEST_ENV] ℹ️ [SIGNAL_IGNORED] Order placement cooldown active (30s remaining). Ignoring signal.
+[6/10/2026, 06:08:39] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 06:08:39] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹115.38 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹115.38
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹115.38 (TARGET_40%_LOCK_20%)
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (TARGET_40%_LOCK_20%)). Mandatory 15-minute cooldown started.
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹115.38 | Reason: TRAILED_SL_HIT (TARGET_40%_LOCK_20%) | PnL: ₹999.7
+[6/10/2026, 06:08:48] [TEST_ENV] ℹ️ [SIGNAL_IGNORED] 15-min trade exit cooldown active (14m 60s remaining after trade exit). Ignoring signal.
+[6/10/2026, 06:08:49] [TEST_ENV] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order ORDER_MOCK_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[6/10/2026, 06:08:49] [TEST_ENV] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_SIM_9901 double-checked & verified on broker terminal. Status: TRADED
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹115.38 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹115.38
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹115.38 (TARGET_40%_LOCK_20%)
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹151.23 (TARGET_100%_LOCK_66.6%)...
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹151.23
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹151.23 (TARGET_100%_LOCK_66.6%)
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TARGET_HIT (PERCENT_TRAILING)). Mandatory 15-minute cooldown started.
+[6/10/2026, 06:12:28] [SIMULATOR] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹176.92 | Reason: TARGET_HIT (PERCENT_TRAILING) | PnL: ₹4999.8
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_SIM_9901 double-checked & verified on broker terminal. Status: TRADED
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹120 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹120
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹120 (TARGET_40%_LOCK_20%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹166.6 (TARGET_100%_LOCK_66.6%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹166.6
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹166.6 (TARGET_100%_LOCK_66.6%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹216.6 (TARGET_150%_LOCK_116.6%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹216.6
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹216.6 (TARGET_150%_LOCK_116.6%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹266.6 (TARGET_200%_LOCK_166.6%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹266.6
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹266.6 (TARGET_200%_LOCK_166.6%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹333.3 (TARGET_266.6%_LOCK_233.3%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹333.3
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹333.3 (TARGET_266.6%_LOCK_233.3%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹400 (TARGET_333.3%_LOCK_300%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹400
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹400 (TARGET_333.3%_LOCK_300%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹466.6 (TARGET_400%_LOCK_366.6%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹466.6
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹466.6 (TARGET_400%_LOCK_366.6%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹566.6 (TARGET_500%_LOCK_466.6%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹566.6
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹566.6 (TARGET_500%_LOCK_466.6%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹666.6 (TARGET_600%_LOCK_566.6%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹666.6
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹666.6 (TARGET_600%_LOCK_566.6%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹733.3 (TARGET_666.6%_LOCK_633.3%)...
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹733.3
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹733.3 (TARGET_666.6%_LOCK_633.3%)
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (TARGET_666.6%_LOCK_633.3%)). Mandatory 15-minute cooldown started.
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹733.3 | Reason: TRAILED_SL_HIT (TARGET_666.6%_LOCK_633.3%) | PnL: ₹41164.5
+[6/10/2026, 06:12:46] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] 15-min trade exit cooldown active (14m 60s remaining after trade exit). Ignoring signal.
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_SIM_9901 double-checked & verified on broker terminal. Status: TRADED
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_PE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (SIMULATOR_TEST_CLOSE). Mandatory 15-minute cooldown started.
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_PE | Exit: ₹100 | Reason: SIMULATOR_TEST_CLOSE | PnL: ₹0
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Available balance (₹500) is below minimum required balance (₹1000). Ignoring signal.
+[6/10/2026, 06:12:47] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Order placement cooldown active (30s remaining). Ignoring signal.
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_SIM_9901 double-checked & verified on broker terminal. Status: TRADED
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹120 (TARGET_40%_LOCK_20%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹120
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹120 (TARGET_40%_LOCK_20%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹166.6 (TARGET_100%_LOCK_66.6%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹166.6
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹166.6 (TARGET_100%_LOCK_66.6%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹216.6 (TARGET_150%_LOCK_116.6%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹216.6
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹216.6 (TARGET_150%_LOCK_116.6%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹266.6 (TARGET_200%_LOCK_166.6%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹266.6
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹266.6 (TARGET_200%_LOCK_166.6%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹333.3 (TARGET_266.6%_LOCK_233.3%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹333.3
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹333.3 (TARGET_266.6%_LOCK_233.3%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹400 (TARGET_333.3%_LOCK_300%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹400
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹400 (TARGET_333.3%_LOCK_300%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹466.6 (TARGET_400%_LOCK_366.6%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹466.6
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹466.6 (TARGET_400%_LOCK_366.6%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹566.6 (TARGET_500%_LOCK_466.6%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹566.6
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹566.6 (TARGET_500%_LOCK_466.6%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹666.6 (TARGET_600%_LOCK_566.6%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹666.6
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹666.6 (TARGET_600%_LOCK_566.6%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [MODIFY_ORDER_SL_ATTEMPT] Attempting SL Modification (1/10) to ₹733.3 (TARGET_666.6%_LOCK_633.3%)...
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_MODIFY_DOUBLE_CHECKED] SL modification double-checked & verified CONFIRMED on terminal: ₹733.3
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SL_TRAILED_VERIFIED] SL trailed & double-check confirmed: ₹733.3 (TARGET_666.6%_LOCK_633.3%)
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (TARGET_666.6%_LOCK_633.3%)). Mandatory 15-minute cooldown started.
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹733.3 | Reason: TRAILED_SL_HIT (TARGET_666.6%_LOCK_633.3%) | PnL: ₹41164.5
+[6/10/2026, 06:12:53] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] 15-min trade exit cooldown active (14m 60s remaining after trade exit). Ignoring signal.
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order DHAN_SIM_9901 double-checked & verified on broker terminal. Status: TRADED
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_PE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹176.92 | Verification: VERIFIED
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [POSITION_CLOSE_DOUBLE_CHECKED] Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (SIMULATOR_TEST_CLOSE). Mandatory 15-minute cooldown started.
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_PE | Exit: ₹100 | Reason: SIMULATOR_TEST_CLOSE | PnL: ₹0
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Available balance (₹500) is below minimum required balance (₹1000). Ignoring signal.
+[6/10/2026, 06:12:54] [SIMULATOR] ℹ️ [SIGNAL_IGNORED] Max trades per day reached (3). Ignoring signal.

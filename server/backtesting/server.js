@@ -121,9 +121,10 @@ app.get('/api/stream', async (req, res) => {
     const params = {
         fromDate: req.query.fromDate,
         toDate: req.query.toDate,
-        interval: req.query.interval,
+        interval: req.query.interval || "15",
         maxTradesPerDay: Number(req.query.maxTradesPerDay || 3),
-        targetMode: req.query.targetMode || "TRAILING"
+        slPoints: req.query.slPoints ? Number(req.query.slPoints) : undefined,
+        targetPoints: req.query.targetPoints ? Number(req.query.targetPoints) : undefined
     };
 
     sendEvent('start', { message: 'Backtest started', params });

@@ -197,120 +197,51 @@ function renderRealDashboard(data, config = {}) {
         }
     }
 
-    // Render Reversal Engine Telemetry Card
-    const revContainer = document.getElementById("reversal-telemetry-container");
-    if (revContainer) {
-        const rStat = data.reversalStatus || {};
-        const watch = rStat.activeWatch;
-        const recent = (rStat.recentWatches || []).slice(-1)[0];
-        const liveNiftyVal = Number(data.livePrice || watch?.livePrice || data.consensus?.evaluatedCandle?.close || data.consensus?.lastCandle?.close || data.candle?.close || 0);
+    // Render MasterSL Central Trailing Engine Telemetry Card
+    const mslContainer = document.getElementById("mastersl-telemetry-container");
+    if (mslContainer) {
+        const mStat = data.masterSLStatus || {};
+        const pos = data.activePosition || mStat.activePosition;
+        const liveNiftyVal = Number(data.livePrice || data.consensus?.evaluatedCandle?.close || data.consensus?.lastCandle?.close || data.candle?.close || 0);
         const liveNifty = liveNiftyVal > 0 ? `₹${liveNiftyVal.toFixed(2)}` : 'Connecting Live Feed...';
-        
-        const candleData = data.consensus?.evaluatedCandle || data.consensus?.lastCandle || data.candle || {};
-        const liveCandleText = (candleData.open !== undefined) 
-            ? `O: ₹${candleData.open} | H: ₹${candleData.high} | L: ₹${candleData.low} | C: ₹${candleData.close}` 
-            : 'Evaluating Ticks...';
 
-        if (watch && watch.status === "ACTIVE_WATCH") {
-            const isStage1 = watch.stage === 'STAGE_1_WATCH_REVERSAL';
-            const entry = Number(watch.entryPrice || 0);
-            const liveP = liveNiftyVal || entry;
-            
-            // Real Trade Trigger Condition & Price Details
-            let realTradeTriggerPrice = '';
-            let realTradeTriggerStatus = '';
-            let remainingPtsText = '';
+        if (pos && pos.status === "OPEN") {
+            const entryP = Number(pos.entryPrice || 0);
+            const currentSlP = Number(pos.currentSl || pos.initialSl || 0);
+            const stageText = pos.trailingStage || 'INITIAL';
 
-            if (watch.type === 'BUY') {
-                realTradeTriggerPrice = `5m Candle Close >= ₹${entry.toFixed(2)}`;
-                if (isStage1) {
-                    if (liveP >= entry) {
-                        const ptsNeeded = (liveP - entry).toFixed(2);
-                        remainingPtsText = `⏳ ${ptsNeeded} Pts DOWN needed for Dip Below ₹${entry.toFixed(2)}`;
-                    } else {
-                        remainingPtsText = `🎯 Dip Achieved! Low: ₹${(watch.sweepPrice || liveP).toFixed(2)}`;
-                    }
-                    realTradeTriggerStatus = `⏳ Stage 1: Waiting Nifty to Dip Below ₹${entry.toFixed(2)}, then Close >= ₹${entry.toFixed(2)}`;
-                } else {
-                    if (liveP < entry) {
-                        const ptsNeeded = (entry - liveP).toFixed(2);
-                        remainingPtsText = `🎯 ${ptsNeeded} Pts UP needed for Retest Close >= ₹${entry.toFixed(2)}`;
-                    } else {
-                        remainingPtsText = `✅ Retest Level Met! Candle Close >= ₹${entry.toFixed(2)}`;
-                    }
-                    realTradeTriggerStatus = `🎯 Stage 2: Sweep Found @ ₹${(watch.sweepPrice || entry).toFixed(2)}! Real Trade triggers when 5m Candle Closes >= ₹${entry.toFixed(2)}`;
-                }
-            } else if (watch.type === 'SELL') {
-                realTradeTriggerPrice = `5m Candle Close <= ₹${entry.toFixed(2)}`;
-                if (isStage1) {
-                    if (liveP <= entry) {
-                        const ptsNeeded = (entry - liveP).toFixed(2);
-                        remainingPtsText = `⏳ ${ptsNeeded} Pts UP needed for Rally Above ₹${entry.toFixed(2)}`;
-                    } else {
-                        remainingPtsText = `🎯 Rally Achieved! High: ₹${(watch.sweepPrice || liveP).toFixed(2)}`;
-                    }
-                    realTradeTriggerStatus = `⏳ Stage 1: Waiting Nifty to Rally Above ₹${entry.toFixed(2)}, then Close <= ₹${entry.toFixed(2)}`;
-                } else {
-                    if (liveP > entry) {
-                        const ptsNeeded = (liveP - liveP).toFixed(2);
-                        remainingPtsText = `🎯 ${ptsNeeded} Pts DOWN needed for Retest Close <= ₹${entry.toFixed(2)}`;
-                    } else {
-                        remainingPtsText = `✅ Retest Level Met! Candle Close <= ₹${entry.toFixed(2)}`;
-                    }
-                    realTradeTriggerStatus = `🎯 Stage 2: Sweep Found @ ₹${(watch.sweepPrice || entry).toFixed(2)}! Real Trade triggers when 5m Candle Closes <= ₹${entry.toFixed(2)}`;
-                }
-            }
-
-            const stageBadge = watch.candlesWatched <= 1 
-                ? '⏳ CANDLE 1 SKIPPED (Sweep Check Starts Candle 2+)'
-                : isStage1 
-                ? (watch.type === 'BUY' ? '⏳ STAGE 1: Watching Dip Below Entry' : '⏳ STAGE 1: Watching Rally Above Entry')
-                : '🎯 STAGE 2: Sweep Found! Waiting Retest Close';
-
-            const lastEvent = rStat.lastFilterEvent || (
-                watch.candlesWatched <= 1
-                    ? `Candle 1 Signal Candle Skipped. Next check on Candle 2.`
-                    : isStage1
-                    ? (watch.type === 'BUY' ? `Waiting for Price Low < ₹${watch.entryPrice}` : `Waiting for Price High > ₹${watch.entryPrice}`)
-                    : `Sweep Detected @ ₹${watch.sweepPrice}. Waiting Close ${watch.type === 'BUY' ? '>=' : '<='} ₹${watch.entryPrice}`
-            );
-
-            revContainer.innerHTML = `
+            mslContainer.innerHTML = `
                 <div class="reversal-card active-watch-border">
                     <div class="reversal-header">
-                        <span class="reversal-title">🔒 Reversal Liquidity Sweep Filter (ACTIVE WATCH LOCKED - LIVE TRACKING)</span>
-                        <span class="badge-warning">${stageBadge}</span>
+                        <span class="reversal-title">🛡️ MasterSL Central Trailing Engine (ACTIVE POSITION TRACKING)</span>
+                        <span class="badge-success">🟢 LIVE TRAILING ACTIVE</span>
                     </div>
                     <div class="reversal-grid">
-                        <div class="reversal-item"><span class="rev-label">1. Signal Entry Price</span><span class="rev-val ${watch.type === 'BUY' ? 'text-success' : 'text-danger'}">${watch.type} @ ₹${watch.entryPrice}</span></div>
-                        <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">🟢 ${liveNifty}</span></div>
-                        <div class="reversal-item"><span class="rev-label">3. Live 5m Candle OHLC</span><span class="rev-val text-info">${liveCandleText}</span></div>
-                        <div class="reversal-item"><span class="rev-label">4. Real Trade Trigger Price</span><span class="rev-val text-info">${realTradeTriggerPrice}</span></div>
-                        <div class="reversal-item"><span class="rev-label">5. Real Trade Signal Status</span><span class="rev-val highlight" style="font-size:0.85rem;">${realTradeTriggerStatus}</span></div>
-                        <div class="reversal-item"><span class="rev-label">6. Kitna Bacha Pts</span><span class="rev-val text-warning">${remainingPtsText}</span></div>
-                        <div class="reversal-item"><span class="rev-label">7. Sweep Price</span><span class="rev-val text-info">${watch.sweepPrice ? '₹' + watch.sweepPrice : 'Searching Low/High...'}</span></div>
-                        <div class="reversal-item"><span class="rev-label">8. Watch Progress</span><span class="rev-val">${watch.candlesWatched} / ${rStat.maxWatchCandles || 6} Candles (${watch.candlesWatched * 5}m / 30m Max)</span></div>
-                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastEvent}</span></div>
+                        <div class="reversal-item"><span class="rev-label">1. Symbol & Contract</span><span class="rev-val highlight">${pos.symbol || 'NIFTY_OPTION'} (Qty: ${pos.qty || 25})</span></div>
+                        <div class="reversal-item"><span class="rev-label">2. Entry Price</span><span class="rev-val">₹${entryP.toFixed(2)}</span></div>
+                        <div class="reversal-item"><span class="rev-label">3. Current Trailed SL</span><span class="rev-val text-danger">₹${currentSlP.toFixed(2)}</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Current Trailing Stage</span><span class="rev-val text-warning">${stageText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. Max Loss Limit</span><span class="rev-val text-danger">₹300 Per Trade</span></div>
+                        <div class="reversal-item"><span class="rev-label">6. Trailing Ladder Config</span><span class="rev-val text-success">40%->20% | 100%->66.6% | 150%->116.6% | 200%->166.6% | 266%->233.3% | Up to ₹2000</span></div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">System Mode</span><span class="rev-val text-info" style="font-size:0.85rem;">Head Consensus Engine -> MasterSL Direct Execution (Reversal Filter Removed)</span></div>
                     </div>
                 </div>
             `;
         } else {
-            const lastStatusText = rStat.lastFilterEvent || (recent ? `Last Watch (${recent.type} @ ₹${recent.entryPrice}): ${recent.status}` : 'System Listening for Consensus Signals');
-            revContainer.innerHTML = `
+            mslContainer.innerHTML = `
                 <div class="reversal-card">
                     <div class="reversal-header">
-                        <span class="reversal-title">⚡ Reversal Liquidity Sweep Filter (LIVE TICK MONITOR ONLINE)</span>
-                        <span class="badge-success">🟢 LIVE TICK FEED STREAMING</span>
+                        <span class="reversal-title">🛡️ MasterSL Central Trailing Engine (LIVE MONITOR ONLINE)</span>
+                        <span class="badge-success">🟢 ENGINE READY</span>
                     </div>
                     <div class="reversal-grid">
-                        <div class="reversal-item"><span class="rev-label">1. Signal Entry Price</span><span class="rev-val text-muted">Waiting for Consensus Signal...</span></div>
+                        <div class="reversal-item"><span class="rev-label">1. Engine Status</span><span class="rev-val highlight">🟢 READY FOR CONSENSUS SIGNALS</span></div>
                         <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">🟢 ${liveNifty}</span></div>
-                        <div class="reversal-item"><span class="rev-label">3. Live 5m Candle OHLC</span><span class="rev-val text-info">${liveCandleText}</span></div>
-                        <div class="reversal-item"><span class="rev-label">4. Real Trade Trigger Price</span><span class="rev-val text-info">Close >= Entry Price (BUY) / <= Entry (SELL)</span></div>
-                        <div class="reversal-item"><span class="rev-label">5. Real Trade Signal Status</span><span class="rev-val text-warning">Waiting for Consensus Signal to start Reversal Filter</span></div>
-                        <div class="reversal-item"><span class="rev-label">6. Kitna Bacha Pts</span><span class="rev-val text-muted">Waiting for Signal...</span></div>
-                        <div class="reversal-item"><span class="rev-label">7. Rule Config</span><span class="rev-val text-success">Candle 2+ Skip | 40 Pts Drift | 6 Candles (30m Max)</span></div>
-                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Last Filter Event</span><span class="rev-val text-muted" style="font-size:0.8rem;">${lastStatusText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">3. Max Loss Limit</span><span class="rev-val text-danger">₹300 Per Trade</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Trailing Rules</span><span class="rev-val text-success">Infinite Open-Ended Ladder (Up to ₹2,000 Peak Profit)</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. 15-Min SL Cooldown</span><span class="rev-val text-info">${mStat.isSlCooldownActive ? '⏳ Active Cooldown' : '✅ Ready (No Cooldown)'}</span></div>
+                        <div class="reversal-item"><span class="rev-label">6. Execution Flow</span><span class="rev-val text-warning">Head Consensus Engine -> Direct MasterSL Order Execution</span></div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Active Configuration</span><span class="rev-val text-muted" style="font-size:0.8rem;">Target 40% (+₹60) | Target 100% (+₹200) | Target 150% (+₹350) | Target 200% (+₹500) | Target 266% (+₹700) | Up to ₹2,000</span></div>
                     </div>
                 </div>
             `;

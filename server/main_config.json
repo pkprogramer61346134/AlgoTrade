@@ -1,10 +1,10 @@
 {
-  "realTradeEnabled": false,
+  "realTradeEnabled": true,
   "selectedStock": {
     "securityId": "13",
     "exchangeSegment": "IDX_I",
     "symbol": "NIFTY",
     "instrument": "INDEX",
-    "interval": "5"
+    "interval": "15"
   }
 }

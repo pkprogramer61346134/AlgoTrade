@@ -15,7 +15,7 @@ const DEFAULT_CONFIG = {
         securityId: "13",
         exchangeSegment: "IDX_I",
         symbol: "NIFTY",
-        interval: "5",
+        interval: "15",
         instrument: "INDEX"
     }
 };
