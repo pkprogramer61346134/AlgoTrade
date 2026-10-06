@@ -440,63 +440,6 @@ function renderRealDashboard(data, config = {}) {
                 </div>
             `;
         } else {
-            posCard.className = "active-trade-card glass-card";
-            posCard.innerHTML = `
-                <div class="trade-details-grid">
-                    <div class="trade-item-box">
-                        <div class="item-label">Contract Symbol</div>
-                        <div class="item-val">${pos.symbol || 'NIFTY_OPTION'} (Qty: ${pos.qty || 65})</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Entry Option LTP</div>
-                        <div class="item-val">₹${displayEntry}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Live Option LTP</div>
-                        <div class="item-val text-success" style="font-weight: 700; font-size: 1.1rem;">₹${displayCurrent}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Unrealized PnL</div>
-                        <div class="item-val ${pnlColor}" style="font-weight: 700; font-size: 1.1rem;">${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)} (${pos.pnlPercent || '0%'})</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Internal Trailed SL</div>
-                        <div class="item-val text-danger" style="font-weight: 700;">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'} ${isSlShifted ? '⚡ (SL Trailed)' : ''}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">SL Shift Status</div>
-                        <div class="item-val ${isSlShifted ? 'text-success' : 'text-warning'}" style="font-weight: 600;">${stageInfo.lockedText}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Next SL Shift Target</div>
-                        <div class="item-val text-info" style="font-size: 0.85rem;">${stageInfo.nextTriggerText}</div>
-                    </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Terminal Verification</div>
-                        <div class="item-val">${verifyStatusHtml}</div>
-                    </div>
-                </div>
-
-                <div class="progress-container">
-                    <div class="progress-header">
-                        <span>⚡ Dynamic Rupee Trailing SL Engine (Zero Dhan API Modify Messages)</span>
-                        <span class="${isSlShifted ? 'text-success' : 'text-warning'} font-bold">${stageInfo.lockedText}</span>
-                    </div>
-                    <div class="targets-milestones-row" style="margin-top: 6px; font-size: 0.82rem;">
-                        <span>Initial SL: ₹${pos.initialSl ? Number(pos.initialSl).toFixed(2) : '--'} (-₹300)</span>
-                        <span>Current Memory SL: ₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</span>
-                        <span>120->60</span>
-                        <span>300->200</span>
-                        <span>450->350</span>
-                        <span>600->500</span>
-                        <span>800->700</span>
-                        <span>1000->900</span>
-                        <span>1200->1100</span>
-                        <span>1500->1400</span>
-                    </div>
-                </div>
-            `;
-        } else {
             posCard.className = "active-trade-card glass-card empty-card";
             const errBanner = data.lastError ? `<p class="text-danger" style="margin-top:5px; font-weight:600;">⚠️ Notice: ${data.lastError}</p>` : '';
             posCard.innerHTML = `
