@@ -41,6 +41,8 @@ function startUIServer(port = 3000) {
     }
 }
 
+const masterConfig = require('./server/masterSL/config');
+
 function getLiveMarketData() {
     const mainCandle = latestConsensusResult?.evaluatedCandle || latestConsensusResult?.candle || latestConsensusResult?.lastCandle || null;
     const effectiveLivePrice = latestLivePrice > 0 ? latestLivePrice : Number(mainCandle?.close || 0);
@@ -57,6 +59,7 @@ function getLiveMarketData() {
         masterSLStatus: masterStat,
         candle: mainCandle,
         config: mainConfig.getConfig(),
+        masterConfig: masterConfig.getConfig(),
         realStatus: realStat,
         activePosition: activePos
     };

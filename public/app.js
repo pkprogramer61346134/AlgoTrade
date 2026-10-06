@@ -216,15 +216,35 @@ function renderRealDashboard(data, config = {}) {
         }
     }
 
-    // Helper to format Rupee Trailing SL Stage & Next Trigger Reason
-    function getTrailingStageInfo(stage, currentPnlRupees) {
+    // Helper to format Rupee Trailing SL Stage & Next Trigger Reason dynamically from master_config.json
+    function getTrailingStageInfo(stage, currentPnlRupees, dynamicRules = []) {
+        const rules = (Array.isArray(dynamicRules) && dynamicRules.length > 0)
+            ? dynamicRules
+            : [
+                { targetRupees: 275, lockRupees: 60 },
+                { targetRupees: 300, lockRupees: 100 },
+                { targetRupees: 500, lockRupees: 200 },
+                { targetRupees: 600, lockRupees: 300 },
+                { targetRupees: 800, lockRupees: 500 },
+                { targetRupees: 1000, lockRupees: 700 },
+                { targetRupees: 1200, lockRupees: 900 },
+                { targetRupees: 1500, lockRupees: 1200 },
+                { targetRupees: 2000, lockRupees: 1600 },
+                { targetRupees: 3000, lockRupees: 2500 },
+                { targetRupees: 5000, lockRupees: 4400 },
+                { targetRupees: 10000, lockRupees: 9200 }
+            ];
+
+        const ladder = rules.map(r => ({ peak: r.targetRupees, lock: r.lockRupees }));
+        const firstRule = ladder[0] || { peak: 275, lock: 60 };
+
         if (!stage || stage === "INITIAL") {
-            const pnlNeeded = Math.max(0, 120 - Math.round(currentPnlRupees || 0));
+            const pnlNeeded = Math.max(0, firstRule.peak - Math.round(currentPnlRupees || 0));
             return {
                 isShifted: false,
                 lockedAmount: 0,
                 lockedText: "Initial SL (-₹300 Max Loss)",
-                nextTriggerText: `Need +₹${pnlNeeded} more PnL to reach Peak ₹120 (+₹60 Lock)`
+                nextTriggerText: `Need +₹${pnlNeeded} more PnL to reach Peak ₹${firstRule.peak} (+₹${firstRule.lock} Lock)`
             };
         }
         
@@ -232,21 +252,6 @@ function renderRealDashboard(data, config = {}) {
         if (match) {
             const peakHit = parseInt(match[1], 10);
             const lockVal = parseInt(match[2], 10);
-            
-            const ladder = [
-                { peak: 120, lock: 60 },
-                { peak: 300, lock: 200 },
-                { peak: 450, lock: 350 },
-                { peak: 600, lock: 500 },
-                { peak: 800, lock: 700 },
-                { peak: 1000, lock: 900 },
-                { peak: 1200, lock: 1100 },
-                { peak: 1500, lock: 1400 },
-                { peak: 2000, lock: 1800 },
-                { peak: 3000, lock: 2700 },
-                { peak: 5000, lock: 4600 },
-                { peak: 10000, lock: 9500 }
-            ];
 
             const nextRule = ladder.find(r => r.peak > peakHit);
             const nextText = nextRule 
@@ -276,13 +281,17 @@ function renderRealDashboard(data, config = {}) {
         const pos = data.activePosition || mStat.activePosition;
         const liveNiftyVal = Number(data.livePrice || data.consensus?.evaluatedCandle?.close || data.consensus?.lastCandle?.close || data.candle?.close || 0);
         const liveNifty = liveNiftyVal > 0 ? `₹${liveNiftyVal.toFixed(2)}` : 'Connecting Live Feed...';
+        const activeRules = data.masterConfig?.rupeeTrailingRules || data.config?.rupeeTrailingRules || [];
+        const ladderSummaryText = activeRules.length > 0
+            ? activeRules.map(r => `${r.targetRupees}->${r.lockRupees}`).join(" | ")
+            : "275->60 | 300->100 | 500->200 | 600->300 | 800->500 | 1000->700 | 1200->900 | 1500->1200 (Max Target: ₹10,000)";
 
         if (pos && pos.status === "OPEN") {
             const entryP = Number(pos.entryPrice || 0);
             const currentSlP = Number(pos.currentSl || pos.initialSl || 0);
             const stageText = pos.trailingStage || 'INITIAL';
             const livePnlVal = Number(pos.pnl || 0);
-            const stageInfo = getTrailingStageInfo(stageText, livePnlVal);
+            const stageInfo = getTrailingStageInfo(stageText, livePnlVal, activeRules);
 
             mslContainer.innerHTML = `
                 <div class="reversal-card active-watch-border">
@@ -297,7 +306,7 @@ function renderRealDashboard(data, config = {}) {
                         <div class="reversal-item"><span class="rev-label">4. Current Trailed SL</span><span class="rev-val text-danger">₹${currentSlP.toFixed(2)}</span></div>
                         <div class="reversal-item"><span class="rev-label">5. SL Shift Status</span><span class="rev-val ${stageInfo.isShifted ? 'text-success font-bold' : 'text-warning'}">${stageInfo.lockedText}</span></div>
                         <div class="reversal-item"><span class="rev-label">6. Next SL Shift Target</span><span class="rev-val text-info">${stageInfo.nextTriggerText}</span></div>
-                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Rupee Trailing Ladder</span><span class="rev-val text-success" style="font-size:0.82rem;">120->60 | 300->200 | 450->350 | 600->500 | 800->700 | 1000->900 | 1200->1100 | 1500->1400 (Max Target: ₹10,000)</span></div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Rupee Trailing Ladder</span><span class="rev-val text-success" style="font-size:0.82rem;">${ladderSummaryText}</span></div>
                     </div>
                 </div>
             `;
