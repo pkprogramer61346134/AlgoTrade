@@ -310,6 +310,7 @@ class MasterTrailingEngine {
 
             const orderPayload = {
                 tradeId: "MASTER_SL_" + Date.now() + "_" + (this.tradeHistory.length + 1),
+                securityId: selectedStrikeInfo?.securityId || signal.securityId || symbol,
                 symbol: symbol,
                 optionType: optionType,
                 isOptionTrade: isOptionTrade,

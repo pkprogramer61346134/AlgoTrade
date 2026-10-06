@@ -346,13 +346,15 @@ class RealTradeEngine {
     // STEP 7: TRACK ACTIVE OPTION (WebSocket Stream & Trailing SL)
     // =========================================================================
     trackActiveOption(position) {
-        if (!position || !position.securityId) return;
+        if (!position) return;
 
-        const secId = String(position.securityId);
+        const secId = String(position.securityId || position.strikeInfo?.securityId || position.symbol || "");
+        if (!secId || secId === "13") return;
+
         if (this.activeOptionStreamSecId === secId) return;
 
         this.activeOptionStreamSecId = secId;
-        console.log(`📡 [WEBSOCKET TRACKING] Started live tracking for ${position.symbol} (${secId})...`);
+        console.log(`📡 [WEBSOCKET TRACKING] Started live option tracking for ${position.symbol} (SecID: ${secId})...`);
 
         this.livePriceTracker.streamOptionLtp({
             securityId: secId,
@@ -361,7 +363,7 @@ class RealTradeEngine {
             qty: position.qty
         }, (liveTick) => {
             this.latestOptionTick = liveTick;
-            if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
+            if (masterSL.activePosition) {
                 masterSL.activePosition.liveLtp = Number(liveTick.liveLtp || liveTick.ltp || liveTick.price || position.entryPrice);
                 masterSL.activePosition.pnl = Number(liveTick.livePnl || 0);
                 masterSL.activePosition.pnlPercent = liveTick.pnlPercent || "0.00%";
