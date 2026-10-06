@@ -283,8 +283,9 @@ class RealTradeEngine {
             if (match) {
                 const status = String(match.orderStatus).toUpperCase();
                 const isConfirmed = (status === "TRADED" || status === "TRANSIT" || status === "PENDING");
-                console.log(`📌 [DOUBLE-CHECK PLACE CONFIRMED] Order ${orderId} Status: ${status}`);
-                return { isConfirmed, status, order: match };
+                const fillPrice = Number(match.price || match.tradedPrice || match.averageTradedPrice || match.priceTraded || match.buyAvg || match.costPrice || 0);
+                console.log(`📌 [DOUBLE-CHECK PLACE CONFIRMED] Order ${orderId} Status: ${status} | Executed Fill Price: ₹${fillPrice > 0 ? fillPrice : 'N/A'}`);
+                return { isConfirmed, status, order: match, price: fillPrice || null, tradedPrice: fillPrice || null };
             }
         } catch (e) {
             console.warn(`⚠️ [DOUBLE-CHECK PLACE NOTICE]: ${e.message}`);

@@ -184,7 +184,7 @@ class MasterTrailingEngine {
     }
 
     // =========================================================================
-    // STEP 6: VERIFY AND STORE ACTIVE POSITION (DOUBLE-CHECK PLACEMENT)
+    // STEP 6: VERIFY AND STORE ACTIVE POSITION (DOUBLE-CHECK PLACEMENT & SYNC BROKER FILL PRICE)
     // =========================================================================
     async verifyAndStorePosition(orderPayload, placedOrderResult, environmentHandlers, envName = "PAPER") {
         let isVerified = true;
@@ -208,6 +208,52 @@ class MasterTrailingEngine {
             }
         } else {
             logger.logInfo(envName, "ORDER_PLACEMENT_DOUBLE_CHECKED", `Order placement double-checked (Simulated / Paper Trading).`);
+        }
+
+        // Extract actual executed fill price from Dhan broker response (tradedPrice / price / buyAvg / costPrice)
+        const actualBrokerFillPrice = Number(
+            verifyDetails?.tradedPrice ||
+            verifyDetails?.price ||
+            verifyDetails?.order?.tradedPrice ||
+            verifyDetails?.order?.price ||
+            verifyDetails?.order?.averageTradedPrice ||
+            verifyDetails?.order?.priceTraded ||
+            verifyDetails?.order?.buyAvg ||
+            verifyDetails?.position?.buyAvg ||
+            verifyDetails?.position?.costPrice ||
+            verifyDetails?.position?.price ||
+            placedOrderResult?.tradedPrice ||
+            placedOrderResult?.price ||
+            placedOrderResult?.buyAvg ||
+            placedOrderResult?.fillPrice ||
+            placedOrderResult?.tradedPrice ||
+            0
+        );
+
+        if (actualBrokerFillPrice > 0 && Math.abs(actualBrokerFillPrice - orderPayload.entryPrice) > 0.001) {
+            const estimatedPrice = orderPayload.entryPrice;
+            const cfg = masterConfig.getConfig();
+            const lotSize = Number(orderPayload.lotSize || 65);
+
+            // Recalculate Risk, Initial SL, and Target Prices on actual broker fill price
+            const newLevels = this.calculateRiskAndLevels(
+                actualBrokerFillPrice,
+                orderPayload.optionType,
+                orderPayload.isOptionTrade,
+                orderPayload.strikeInfo,
+                null,
+                cfg,
+                lotSize
+            );
+
+            orderPayload.entryPrice = actualBrokerFillPrice;
+            orderPayload.initialSl = newLevels.initialSl;
+            orderPayload.currentSl = newLevels.initialSl;
+            orderPayload.targetPrice = newLevels.targetPrice;
+            orderPayload.targetPoints = newLevels.targetPoints;
+            orderPayload.levels = newLevels;
+
+            logger.logInfo(envName, "BROKER_EXECUTION_PRICE_SYNCED", `⚡ [BROKER FILL SYNCED] Entry price updated from estimated ₹${estimatedPrice} to actual broker fill ₹${actualBrokerFillPrice} | New SL: ₹${newLevels.initialSl} | Target: ₹${newLevels.targetPrice}`);
         }
 
         this.activePosition = {
