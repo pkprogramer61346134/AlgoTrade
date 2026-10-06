@@ -81,8 +81,10 @@ class RealTradeEngine {
                 const qty = Math.abs(Number(activeDhanPos.netQty || lotSize));
                 const optionType = (activeDhanPos.drvOptionType === "PUT" || activeDhanPos.tradingSymbol?.includes("PE")) ? "PE" : "CE";
 
+                const trackedSecId = String(masterSL.activePosition?.securityId || masterSL.activePosition?.strikeInfo?.securityId || masterSL.activePosition?.symbol || "");
+
                 // PRESERVE existing MasterSL active position if securityId matches!
-                if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
+                if (masterSL.activePosition && (trackedSecId === secId || trackedSecId.includes(secId) || secId.includes(trackedSecId))) {
                     return { hasOpenPosition: true, position: masterSL.activePosition };
                 }
 
@@ -134,8 +136,8 @@ class RealTradeEngine {
                 // Dhan terminal has ZERO open positions
                 // ONLY clear MasterSL tracking if terminal explicitly returns position list AND matching security has netQty == 0
                 if (masterSL.activePosition) {
-                    const trackedSecId = String(masterSL.activePosition.securityId || masterSL.activePosition.symbol);
-                    const matchingPosOnTerminal = positionsList.find(p => String(p.securityId) === trackedSecId);
+                    const trackedSecId = String(masterSL.activePosition?.securityId || masterSL.activePosition?.strikeInfo?.securityId || masterSL.activePosition?.symbol || "");
+                    const matchingPosOnTerminal = positionsList.find(p => String(p.securityId) === trackedSecId || trackedSecId.includes(String(p.securityId)));
 
                     if (matchingPosOnTerminal && Number(matchingPosOnTerminal.netQty || 0) === 0) {
                         console.log(`✅ [DHAN POSITION SYNC] Terminal confirmed netQty: 0 for ${masterSL.activePosition.symbol}. Closing MasterSL tracking.`);
