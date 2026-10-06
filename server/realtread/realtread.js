@@ -62,55 +62,57 @@ class RealTradeEngine {
             const orders = new DhanOrders();
             const posRes = await orders.getPositions();
 
+            if (!posRes || posRes.status !== "success") {
+                // Dhan API call failed or throttled. Retain existing MasterSL active position!
+                return { hasOpenPosition: Boolean(masterSL.activePosition), position: masterSL.activePosition };
+            }
+
             const rawData = posRes?.data?.data || posRes?.data;
             const positionsList = Array.isArray(rawData) ? rawData : (Array.isArray(posRes?.data) ? posRes.data : []);
 
-            const openDhanPositions = positionsList.filter(p => (p.positionType === "LONG" || Number(p.netQty) > 0) && Number(p.netQty) !== 0);
+            // Filter open positions on Dhan broker terminal (netQty != 0)
+            const openDhanPositions = positionsList.filter(p => Number(p.netQty || 0) !== 0);
 
             if (openDhanPositions.length > 0) {
                 const activeDhanPos = openDhanPositions[0];
                 const secId = String(activeDhanPos.securityId);
-                const entryPrice = Number(activeDhanPos.buyAvg || activeDhanPos.costPrice || 0);
+                const entryPrice = Number(activeDhanPos.buyAvg || activeDhanPos.costPrice || activeDhanPos.price || 0);
                 const lotSize = Math.max(1, Number(activeDhanPos.lotSize || activeDhanPos.quantityMultiplier || 65));
                 const qty = Math.abs(Number(activeDhanPos.netQty || lotSize));
-                const optionType = activeDhanPos.drvOptionType === "PUT" ? "PE" : "CE";
-                const initialSl = Number((entryPrice * 0.85).toFixed(2));
-                const tr1 = Number((entryPrice * 1.15).toFixed(2));
-                const tr2 = Number((entryPrice * 1.30).toFixed(2));
-                const tr3 = Number((entryPrice * 1.45).toFixed(2));
-                const tr4 = Number((entryPrice * 1.60).toFixed(2));
-                const tr5 = Number((entryPrice * 1.75).toFixed(2));
+                const optionType = (activeDhanPos.drvOptionType === "PUT" || activeDhanPos.tradingSymbol?.includes("PE")) ? "PE" : "CE";
 
-                if (!masterSL.activePosition || String(masterSL.activePosition.securityId) !== secId) {
-                    console.log(`🔄 [POSITION CHECK] Found open Dhan broker position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${qty} @ ₹${entryPrice}`);
+                // PRESERVE existing MasterSL active position if securityId matches!
+                if (masterSL.activePosition && String(masterSL.activePosition.securityId) === secId) {
+                    return { hasOpenPosition: true, position: masterSL.activePosition };
                 }
 
-                // Preserve existing trailed SL if masterSL is already tracking this position
-                const isSamePos = Boolean(masterSL.activePosition && String(masterSL.activePosition.securityId) === secId);
-                const currentSl = isSamePos ? masterSL.activePosition.currentSl : initialSl;
-                const trailingStage = isSamePos ? masterSL.activePosition.trailingStage : "INITIAL";
+                // If MasterSL is NOT tracking (e.g. system restart), adopt open position from Dhan
+                console.log(`🔄 [POSITION RECOVERY] Adopting open Dhan broker position: ${activeDhanPos.tradingSymbol} (${secId}) | Qty: ${qty} @ ₹${entryPrice}`);
+
+                const initialSl = Number((entryPrice * 0.85).toFixed(2));
+                const tr2 = Number((entryPrice * 1.30).toFixed(2));
 
                 masterSL.activePosition = {
-                    tradeId: isSamePos ? masterSL.activePosition.tradeId : ("MASTER_SL_REAL_" + secId),
+                    tradeId: "MASTER_SL_REAL_" + secId,
                     symbol: activeDhanPos.tradingSymbol || `NIFTY_${activeDhanPos.drvStrikePrice}_${optionType}`,
                     securityId: secId,
                     optionType: optionType,
                     isOptionTrade: true,
-                    entryDate: isSamePos ? masterSL.activePosition.entryDate : new Date().toLocaleDateString("en-CA"),
-                    entryTime: isSamePos ? masterSL.activePosition.entryTime : new Date().toLocaleTimeString("en-IN"),
-                    entryPrice: isSamePos ? masterSL.activePosition.entryPrice : entryPrice,
+                    entryDate: new Date().toLocaleDateString("en-CA"),
+                    entryTime: new Date().toLocaleTimeString("en-IN"),
+                    entryPrice: entryPrice,
                     liveLtp: entryPrice,
-                    pnl: isSamePos ? masterSL.activePosition.pnl : 0,
-                    pnlPercent: isSamePos ? masterSL.activePosition.pnlPercent : "0.00%",
-                    initialSl: isSamePos ? masterSL.activePosition.initialSl : initialSl,
-                    currentSl: currentSl,
-                    targetPrice: isSamePos ? masterSL.activePosition.targetPrice : tr2,
-                    targetLabel: isSamePos ? masterSL.activePosition.targetLabel : "TR2 (1:2)",
-                    targetMode: isSamePos ? masterSL.activePosition.targetMode : "1:2",
+                    pnl: 0,
+                    pnlPercent: "0.00%",
+                    initialSl: initialSl,
+                    currentSl: initialSl,
+                    targetPrice: tr2,
+                    targetPoints: Number((entryPrice * 0.30).toFixed(2)),
+                    targetLabel: "DYNAMIC_RUPEE_TRAILING",
+                    targetMode: "PERCENT_TRAILING",
                     qty: qty,
                     lotSize: lotSize,
-                    levels: isSamePos ? masterSL.activePosition.levels : { initialSl, tr1, tr2, tr3, tr4, tr5 },
-                    trailingStage: trailingStage,
+                    trailingStage: "INITIAL",
                     status: "OPEN",
                     orderId: activeDhanPos.orderId || "DHAN_REAL_POS_" + secId,
                     handlers: this.getRealHandlers(),
@@ -124,40 +126,34 @@ class RealTradeEngine {
                     symbol: activeDhanPos.tradingSymbol,
                     lotSize: lotSize,
                     totalQty: qty,
-                    liveLtp: entryPrice,
-                    optionSL: initialSl,
-                    optionTR1: tr1,
-                    optionTR2: tr2,
-                    optionTR3: tr3,
-                    optionTR4: tr4,
-                    optionTR5: tr5
+                    liveLtp: entryPrice
                 };
 
                 return { hasOpenPosition: true, position: masterSL.activePosition };
             } else {
-                // Dhan Terminal has ZERO open positions (Position Executed/Closed on Dhan)
-                const isRecentOrder = masterSL.isOrderInFlight || (Date.now() - (masterSL.lastOrderTimestamp || 0) < 30000);
-                if (!isRecentOrder && masterSL.activePosition) {
-                    console.log(`✅ [DHAN POSITION SYNC] Dhan terminal has 0 open positions. Closing tracking for ${masterSL.activePosition.symbol || 'Position'}.`);
-                    
-                    const closedPos = {
-                        ...masterSL.activePosition,
-                        status: "CLOSED",
-                        exitPrice: masterSL.activePosition.liveLtp || masterSL.activePosition.entryPrice,
-                        exitReason: "DHAN_SUPER_ORDER_SL_OR_TARGET_HIT",
-                        realizedPnl: masterSL.activePosition.pnl || 0
-                    };
-                    masterSL.tradeHistory.push(closedPos);
+                // Dhan terminal has ZERO open positions
+                // ONLY clear MasterSL tracking if terminal explicitly returns position list AND matching security has netQty == 0
+                if (masterSL.activePosition) {
+                    const trackedSecId = String(masterSL.activePosition.securityId || masterSL.activePosition.symbol);
+                    const matchingPosOnTerminal = positionsList.find(p => String(p.securityId) === trackedSecId);
 
-                    masterSL.activePosition = null;
-                    this.activeOptionContract = null;
-                    this.activeOptionStreamSecId = null;
-                } else if (!isRecentOrder) {
-                    masterSL.activePosition = null;
-                    this.activeOptionContract = null;
-                    this.activeOptionStreamSecId = null;
+                    if (matchingPosOnTerminal && Number(matchingPosOnTerminal.netQty || 0) === 0) {
+                        console.log(`✅ [DHAN POSITION SYNC] Terminal confirmed netQty: 0 for ${masterSL.activePosition.symbol}. Closing MasterSL tracking.`);
+                        
+                        const closedPos = {
+                            ...masterSL.activePosition,
+                            status: "CLOSED",
+                            exitPrice: masterSL.activePosition.liveLtp || masterSL.activePosition.entryPrice,
+                            exitReason: "DHAN_SUPER_ORDER_SL_OR_TARGET_HIT",
+                            realizedPnl: masterSL.activePosition.pnl || 0
+                        };
+                        masterSL.tradeHistory.push(closedPos);
+                        masterSL.activePosition = null;
+                        this.activeOptionContract = null;
+                        this.activeOptionStreamSecId = null;
+                    }
                 }
-                return { hasOpenPosition: false, position: null };
+                return { hasOpenPosition: Boolean(masterSL.activePosition), position: masterSL.activePosition };
             }
         } catch (err) {
             console.warn(`⚠️ [POSITION CHECK NOTICE]: ${err.message}`);
