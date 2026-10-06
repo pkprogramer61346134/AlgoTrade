@@ -348,80 +348,32 @@ class MasterTrailingEngine {
     }
 
     // =========================================================================
-    // STEP 7: MODIFY TRAILING SL ON BROKER TERMINAL (WITH 10 RETRIES & EMERGENCY CLOSE)
+    // STEP 7: INTERNAL HIGH-SPEED TRAILING SL WATCH (ZERO BROKER API MODIFY MESSAGES)
     // =========================================================================
     async modifyTrailingSL(newSl, newStage, envName = "PAPER") {
         if (!this.activePosition || this.isModifyInFlight) return false;
         const pos = this.activePosition;
 
-        if (newSl !== pos.currentSl && (Date.now() - (this.lastModifyTimestamp || 0) > 2000)) {
+        if (newSl !== pos.currentSl) {
             this.isModifyInFlight = true;
             this.lastModifyTimestamp = Date.now();
             const targetSl = newSl;
             const targetStage = newStage;
 
-            if (pos.handlers && typeof pos.handlers.modifyOrder === 'function') {
-                let modifySuccess = false;
-                const maxAttempts = 10;
+            // Update SL internally in memory (No Dhan API modify call sent)
+            pos.currentSl = targetSl;
+            pos.trailingStage = targetStage;
+            pos.isVerifiedModify = true;
+            this.isModifyInFlight = false;
 
-                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                    try {
-                        logger.logInfo(envName, "MODIFY_ORDER_SL_ATTEMPT", `Attempting SL Modification (${attempt}/${maxAttempts}) to ₹${targetSl} (${targetStage})...`);
-                        await pos.handlers.modifyOrder(pos.orderId, targetSl, targetStage);
-
-                        // DOUBLE-CHECK SL MODIFICATION ON BROKER TERMINAL
-                        const verifyFn = pos.handlers.verifyOrderModification || pos.handlers.verifyModification;
-                        if (typeof verifyFn === 'function') {
-                            const modConfirm = await verifyFn(pos.orderId, targetSl);
-                            if (modConfirm && modConfirm.isConfirmed) {
-                                logger.logInfo(envName, "SL_MODIFY_DOUBLE_CHECKED", `SL modification double-checked & verified CONFIRMED on terminal: ₹${targetSl}`);
-                                modifySuccess = true;
-                                break;
-                            } else {
-                                logger.logError(envName, "SL_MODIFY_VERIFY_WARNING", new Error(`Attempt ${attempt}/${maxAttempts}: SL modification unconfirmed on broker terminal.`));
-                            }
-                        } else {
-                            // Simulated / Paper Trading confirmation
-                            modifySuccess = true;
-                            break;
-                        }
-                    } catch (mErr) {
-                        logger.logError(envName, `MODIFY_ORDER_ATTEMPT_${attempt}_FAILED`, mErr);
-                    }
-
-                    if (attempt < maxAttempts) {
-                        await new Promise(res => setTimeout(res, 1000));
-                    }
-                }
-
-                if (modifySuccess) {
-                    pos.currentSl = targetSl;
-                    pos.trailingStage = targetStage;
-                    pos.isVerifiedModify = true;
-                    this.isModifyInFlight = false;
-                    logger.logInfo(envName, "SL_TRAILED_VERIFIED", `SL trailed & double-check confirmed: ₹${targetSl} (${targetStage})`);
-                    return true;
-                } else {
-                    // EMERGENCY CLOSE FALLBACK: SL Modification failed after 10 retries!
-                    logger.logError(envName, "SL_MODIFY_FAILED_EMERGENCY_CLOSE", new Error(`🚨 [EMERGENCY CLOSE] SL Modification to ₹${targetSl} failed after 10 attempts! Executing emergency market exit to lock profit.`));
-                    this.isModifyInFlight = false;
-                    await this.closePosition(targetSl, "EMERGENCY_SL_MODIFY_FAILED_CLOSE", envName);
-                    return false;
-                }
-            } else {
-                pos.currentSl = targetSl;
-                pos.trailingStage = targetStage;
-                pos.isVerifiedModify = true;
-                this.isModifyInFlight = false;
-                logger.logInfo(envName, "SL_TRAILED_SIMULATED", `SL trailed to ₹${targetSl} (${targetStage}) (Simulated Mode)`);
-                return true;
-            }
+            logger.logInfo(envName, "SL_TRAILED_INTERNAL_MEMORY", `⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹${targetSl} (${targetStage}) | Zero Dhan API Modify Messages Sent.`);
+            return true;
         }
         return false;
     }
 
     // =========================================================================
-    // STEP 8: CLOSE POSITION ON BROKER TERMINAL (WITH DOUBLE-CHECK)
+    // STEP 8: PERSISTENT MARKET CLOSE LOOP (RETRY UNTIL BROKER TERMINAL netQty === 0)
     // =========================================================================
     async closePosition(exitPrice, exitReason, envName = "PAPER") {
         if (!this.activePosition || this.isCloseInFlight) return null;
@@ -436,37 +388,47 @@ class MasterTrailingEngine {
         pos.realizedPnl = Number((diff * pos.qty).toFixed(2));
 
         let isCloseSuccessful = false;
+        const maxExitAttempts = 15;
+
+        logger.logInfo(envName, "CLOSE_POSITION_TRIGGERED", `🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹${exitPrice} (${exitReason}). Starting persistent exit loop until Dhan terminal confirms netQty === 0.`);
 
         try {
             if (pos.handlers && typeof pos.handlers.closeOrder === 'function') {
-                await this.retryStepAsync(
-                    () => pos.handlers.closeOrder(pos),
-                    "CLOSE_ORDER",
-                    envName,
-                    5,
-                    2000
-                );
-
-                // DOUBLE-CHECK POSITION CLOSE ON BROKER TERMINAL
                 const verifyFn = pos.handlers.verifyOrderClose || pos.handlers.verifyClose;
-                if (typeof verifyFn === 'function') {
+
+                for (let attempt = 1; attempt <= maxExitAttempts; attempt++) {
                     try {
-                        const secId = pos.securityId || pos.symbol;
-                        const closeConfirm = await verifyFn(secId, pos.orderId);
-                        if (closeConfirm && closeConfirm.isClosedOnTerminal === false) {
-                            logger.logError(envName, "POSITION_CLOSE_UNCONFIRMED_RETRYING", new Error(`Position ${secId} still open on broker terminal! Retrying position exit...`));
-                            await pos.handlers.closeOrder(pos);
+                        logger.logInfo(envName, "MARKET_EXIT_ATTEMPT", `Attempting Market Exit (${attempt}/${maxExitAttempts}) for ${pos.symbol} (Security: ${pos.securityId || pos.symbol})...`);
+                        await pos.handlers.closeOrder(pos);
+
+                        // DOUBLE-CHECK POSITION CLOSE ON BROKER TERMINAL (netQty === 0)
+                        if (typeof verifyFn === 'function') {
+                            const secId = pos.securityId || pos.symbol;
+                            const closeConfirm = await verifyFn(secId, pos.orderId);
+
+                            if (closeConfirm && closeConfirm.isClosedOnTerminal !== false) {
+                                logger.logInfo(envName, "POSITION_CLOSE_CONFIRMED_TERMINAL", `✅ [TERMINAL CLOSE CONFIRMED] Position ${secId} verified CLOSED (netQty: 0) on Dhan broker terminal on attempt ${attempt}.`);
+                                isCloseSuccessful = true;
+                                break;
+                            } else {
+                                logger.logError(envName, "POSITION_STILL_OPEN_RETRYING", new Error(`⚠️ Position ${secId} still shows open (netQty > 0) on Dhan terminal on attempt ${attempt}. Retrying Market Exit...`));
+                            }
                         } else {
-                            logger.logInfo(envName, "POSITION_CLOSE_DOUBLE_CHECKED", `Position close double-checked & verified CLOSED (netQty: 0) on broker terminal.`);
+                            // Simulated / Paper Trading confirmation
+                            isCloseSuccessful = true;
+                            break;
                         }
-                    } catch (vErr) {
-                        logger.logError(envName, "POSITION_CLOSE_VERIFY_ERROR", vErr);
+                    } catch (attemptErr) {
+                        logger.logError(envName, `MARKET_EXIT_ATTEMPT_${attempt}_FAILED`, attemptErr);
                     }
-                } else {
-                    logger.logInfo(envName, "POSITION_CLOSE_DOUBLE_CHECKED", `Position close double-checked (Simulated / Paper Trading).`);
+
+                    if (attempt < maxExitAttempts) {
+                        await new Promise(res => setTimeout(res, 1000));
+                    }
                 }
+            } else {
+                isCloseSuccessful = true;
             }
-            isCloseSuccessful = true;
         } catch (err) {
             logger.logError(envName, "CLOSE_ORDER_FAILED", err);
             pos.status = "EXIT_FAILED";
@@ -486,7 +448,7 @@ class MasterTrailingEngine {
                 return closedPosition;
             } else {
                 this.isCloseInFlight = false;
-                logger.logError(envName, "POSITION_CLOSE_RETAINED", new Error(`Position close failed on broker terminal! Retaining active position for retry.`));
+                logger.logError(envName, "POSITION_CLOSE_RETAINED", new Error(`Position close failed on broker terminal after ${maxExitAttempts} attempts! Retaining active position for next tick retry.`));
                 return null;
             }
         }
