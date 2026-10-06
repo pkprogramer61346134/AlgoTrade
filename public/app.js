@@ -440,6 +440,63 @@ function renderRealDashboard(data, config = {}) {
                 </div>
             `;
         } else {
+            posCard.className = "active-trade-card glass-card";
+            posCard.innerHTML = `
+                <div class="trade-details-grid">
+                    <div class="trade-item-box">
+                        <div class="item-label">Contract Symbol</div>
+                        <div class="item-val">${pos.symbol || 'NIFTY_OPTION'} (Qty: ${pos.qty || 65})</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Entry Option LTP</div>
+                        <div class="item-val">₹${displayEntry}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Live Option LTP</div>
+                        <div class="item-val text-success" style="font-weight: 700; font-size: 1.1rem;">₹${displayCurrent}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Unrealized PnL</div>
+                        <div class="item-val ${pnlColor}" style="font-weight: 700; font-size: 1.1rem;">${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)} (${pos.pnlPercent || '0%'})</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Internal Trailed SL</div>
+                        <div class="item-val text-danger" style="font-weight: 700;">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'} ${isSlShifted ? '⚡ (SL Trailed)' : ''}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">SL Shift Status</div>
+                        <div class="item-val ${isSlShifted ? 'text-success' : 'text-warning'}" style="font-weight: 600;">${stageInfo.lockedText}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Next SL Shift Target</div>
+                        <div class="item-val text-info" style="font-size: 0.85rem;">${stageInfo.nextTriggerText}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Terminal Verification</div>
+                        <div class="item-val">${verifyStatusHtml}</div>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <span>⚡ Dynamic Rupee Trailing SL Engine (Zero Dhan API Modify Messages)</span>
+                        <span class="${isSlShifted ? 'text-success' : 'text-warning'} font-bold">${stageInfo.lockedText}</span>
+                    </div>
+                    <div class="targets-milestones-row" style="margin-top: 6px; font-size: 0.82rem;">
+                        <span>Initial SL: ₹${pos.initialSl ? Number(pos.initialSl).toFixed(2) : '--'} (-₹300)</span>
+                        <span>Current Memory SL: ₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</span>
+                        <span>120->60</span>
+                        <span>300->200</span>
+                        <span>450->350</span>
+                        <span>600->500</span>
+                        <span>800->700</span>
+                        <span>1000->900</span>
+                        <span>1200->1100</span>
+                        <span>1500->1400</span>
+                    </div>
+                </div>
+            `;
+        } else {
             posCard.className = "active-trade-card glass-card empty-card";
             const errBanner = data.lastError ? `<p class="text-danger" style="margin-top:5px; font-weight:600;">⚠️ Notice: ${data.lastError}</p>` : '';
             posCard.innerHTML = `
@@ -452,6 +509,79 @@ function renderRealDashboard(data, config = {}) {
             `;
         }
     }
+
+    // 4. Render Active Position SL Shift Timeline
+    renderSlShiftTimeline(activePos);
+
+    // 5. Render Real Trade History Logs Table
+    renderTradeHistory(data);
+}
+
+function renderSlShiftTimeline(pos) {
+    const section = document.getElementById("sl-shift-timeline-section");
+    const tbody = document.getElementById("sl-shift-timeline-tbody");
+    if (!section || !tbody) return;
+
+    if (pos && pos.status === "OPEN") {
+        section.style.display = "block";
+        const history = pos.slShiftHistory || [
+            { time: pos.entryTime || "--", stage: pos.trailingStage || "INITIAL", sl: pos.currentSl || pos.initialSl }
+        ];
+
+        tbody.innerHTML = history.map((h, i) => {
+            const isInitial = h.stage === "INITIAL" || i === 0;
+            const stageMatch = String(h.stage).match(/PROFIT_₹(\d+)_LOCK_₹(\d+)/);
+            const lockAmt = stageMatch ? `+₹${stageMatch[2]}` : (isInitial ? "₹0 (Initial SL)" : "--");
+            const statusHtml = isInitial
+                ? `<span class="badge-neutral">🛡️ Initial SL set at Entry</span>`
+                : `<span class="badge-success">⚡ Memory SL Trailed (+${lockAmt})</span>`;
+
+            return `
+                <tr>
+                    <td><strong>${h.time || '--'}</strong></td>
+                    <td><strong class="${isInitial ? 'text-warning' : 'text-success'}">${h.stage || 'INITIAL'}</strong></td>
+                    <td class="text-danger"><strong>₹${Number(h.sl || 0).toFixed(2)}</strong></td>
+                    <td class="text-success"><strong>${lockAmt}</strong></td>
+                    <td>${statusHtml}</td>
+                </tr>
+            `;
+        }).join("");
+    } else {
+        section.style.display = "none";
+    }
+}
+
+function renderTradeHistory(data) {
+    const tbody = document.getElementById("real-history-tbody");
+    if (!tbody) return;
+
+    const mStat = data.masterSLStatus || {};
+    const historyList = mStat.history || data.tradeHistory || (data.realStatus && data.realStatus.history) || [];
+
+    if (historyList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">No real trades logged yet.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = historyList.slice().reverse().map(t => {
+        const pnlVal = Number(t.realizedPnl || 0);
+        const pnlColor = pnlVal > 0 ? "text-success" : pnlVal < 0 ? "text-danger" : "";
+        const exitReasonText = t.exitReason || "COMPLETED";
+
+        return `
+            <tr>
+                <td><strong>${t.tradeId || t.orderId || '--'}</strong></td>
+                <td>${t.entryTime || t.entryDate || '--'}</td>
+                <td><strong>${t.symbol || 'NIFTY_OPTION'}</strong></td>
+                <td><span class="${t.optionType === 'CE' ? 'badge-success' : 'badge-danger'}">${t.optionType || 'CE'}</span></td>
+                <td>₹${Number(t.entryPrice || 0).toFixed(2)}</td>
+                <td>₹${Number(t.exitPrice || 0).toFixed(2)}</td>
+                <td>${t.qty || 65}</td>
+                <td><span class="text-warning font-mono" style="font-size: 0.82rem;">${exitReasonText}</span></td>
+                <td class="${pnlColor}"><strong>${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)}</strong></td>
+            </tr>
+        `;
+    }).join("");
 }
 
 async function toggleRealTrade(status) {

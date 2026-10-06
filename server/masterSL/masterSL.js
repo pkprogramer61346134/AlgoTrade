@@ -216,7 +216,10 @@ class MasterTrailingEngine {
             orderId: placedOrderResult?.orderId || orderPayload.tradeId,
             handlers: environmentHandlers,
             envName: envName,
-            isVerifiedPlacement: isVerified
+            isVerifiedPlacement: isVerified,
+            slShiftHistory: [
+                { time: orderPayload.entryTime || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }), sl: orderPayload.initialSl, stage: "INITIAL" }
+            ]
         };
 
         logger.logInfo(envName, "ORDER_EXECUTED", `Position Opened: ${orderPayload.symbol} | Entry: ₹${orderPayload.entryPrice} | Qty: ${this.activePosition.qty} | SL: ₹${orderPayload.initialSl} | Target (${orderPayload.targetLabel}): ₹${orderPayload.targetPrice} | Verification: ${isVerified ? 'VERIFIED' : 'UNCONFIRMED'}`);
@@ -366,6 +369,13 @@ class MasterTrailingEngine {
             pos.trailingStage = targetStage;
             pos.isVerifiedModify = true;
             this.isModifyInFlight = false;
+
+            pos.slShiftHistory = pos.slShiftHistory || [];
+            pos.slShiftHistory.push({
+                time: new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }),
+                sl: targetSl,
+                stage: targetStage
+            });
 
             logger.logInfo(envName, "SL_TRAILED_INTERNAL_MEMORY", `⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹${targetSl} (${targetStage}) | Zero Dhan API Modify Messages Sent.`);
             return true;
