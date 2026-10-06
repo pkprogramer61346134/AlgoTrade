@@ -501,16 +501,33 @@ class MasterTrailingEngine {
 
         const isOptionBuying = Boolean(pos.isOptionTrade) || pos.optionType === "CE";
 
-        // 1. DYNAMIC PERCENTAGE & RUPEE PROFIT TRAILING SL JUMP ENGINE
+        // 1. DYNAMIC RUPEE PROFIT & PERCENTAGE TRAILING SL JUMP ENGINE
         if (!exitTriggered && cfg.enableAutoTrailing !== false) {
             const qty = Number(pos.qty || pos.lotSize || 65);
             const pnlDiff = Number((isOptionBuying ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice)).toFixed(2));
             const currentProfitRupees = Math.round(pnlDiff * qty);
 
-            // PERCENTAGE-BASED TRAILING RULES (Target % Hit -> SL Lock %)
+            const rupeeRules = Array.isArray(cfg.rupeeTrailingRules) ? cfg.rupeeTrailingRules : [];
             const percentRules = Array.isArray(cfg.percentTrailingRules) ? cfg.percentTrailingRules : [];
-            if (percentRules.length > 0) {
-                // Calculate target points (e.g. from optionTR5, targetPoints, or 3x risk)
+
+            if (rupeeRules.length > 0) {
+                const sortedRupeeRules = [...rupeeRules].sort((a, b) => b.targetRupees - a.targetRupees);
+                for (const rule of sortedRupeeRules) {
+                    if (currentProfitRupees >= rule.targetRupees) {
+                        const lockPts = Number((rule.lockRupees / qty).toFixed(2));
+                        const newSlPrice = isOptionBuying 
+                            ? Number((pos.entryPrice + lockPts).toFixed(2)) 
+                            : Number((pos.entryPrice - lockPts).toFixed(2));
+
+                        if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
+                            const newStage = `PROFIT_₹${rule.targetRupees}_LOCK_₹${rule.lockRupees}`;
+                            await this.modifyTrailingSL(newSlPrice, newStage, envName);
+                            break;
+                        }
+                    }
+                }
+            } else if (percentRules.length > 0) {
+                // PERCENTAGE-BASED TRAILING RULES (Target % Hit -> SL Lock %)
                 const targetPoints = Number(
                     pos.targetPoints || 
                     (pos.strikeInfo?.optionTR5 ? Math.abs(pos.strikeInfo.optionTR5 - pos.entryPrice) : 0) ||
