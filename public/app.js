@@ -182,9 +182,12 @@ function renderRealDashboard(data, config = {}) {
         if (pos && (pos.status === "EXIT_FAILED" || pos.exitError)) {
             const errTxt = pos.exitError || "🚨 Trailing SL hit ho gaya par order close nahi ho raha hai!";
             cooldownContainer.innerHTML = `
-                <div class="cooldown-banner active" style="background: rgba(239, 68, 68, 0.25); border: 2px solid #ef4444; color: #f87171; font-weight: 700;">
-                    <span>${errTxt}</span>
-                    <span>Dhan broker terminal par position netQty > 0 dikh raha hai after 10 attempts. Retrying market exit...</span>
+                <div class="cooldown-banner active" style="background: rgba(239, 68, 68, 0.25); border: 2px solid #ef4444; color: #f87171; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span>${errTxt}</span>
+                        <div style="font-size: 0.82rem; font-weight: 400; margin-top: 3px;">Dhan broker terminal par position netQty > 0 dikh raha hai after 10 attempts. Retrying market exit...</div>
+                    </div>
+                    <button class="nav-link-btn" style="background: #ef4444; color: #fff; padding: 5px 12px; font-size: 0.8rem; border: none; cursor: pointer; border-radius: 4px; font-weight: 600;" onclick="clearActivePosition()">Reset Alert</button>
                 </div>
             `;
         } else if (pos && pos.isCloseInFlight) {
@@ -453,22 +456,34 @@ function renderRealDashboard(data, config = {}) {
         }
     }
 
-    // 4. Render Active Position SL Shift Timeline
-    renderSlShiftTimeline(activePos);
+    // 4. Render Active Position / Last Trade SL Shift Timeline
+    renderSlShiftTimeline(activePos, data);
 
     // 5. Render Real Trade History Logs Table
     renderTradeHistory(data);
 }
 
-function renderSlShiftTimeline(pos) {
+function renderSlShiftTimeline(pos, data = {}) {
     const section = document.getElementById("sl-shift-timeline-section");
     const tbody = document.getElementById("sl-shift-timeline-tbody");
     if (!section || !tbody) return;
 
-    if (pos && pos.status === "OPEN") {
+    const mStat = data.masterSLStatus || {};
+    const historyList = mStat.history || data.tradeHistory || (data.realStatus && data.realStatus.history) || [];
+    const targetPos = (pos && pos.status === "OPEN") ? pos : (historyList.length > 0 ? historyList[historyList.length - 1] : null);
+
+    if (targetPos) {
         section.style.display = "block";
-        const history = pos.slShiftHistory || [
-            { time: pos.entryTime || "--", stage: pos.trailingStage || "INITIAL", sl: pos.currentSl || pos.initialSl }
+        const isClosed = targetPos.status === "CLOSED" || !pos;
+        const titleEl = section.querySelector("h3");
+        if (titleEl) {
+            titleEl.innerHTML = isClosed 
+                ? `<span class="title-icon">⏱️</span> Last Closed Trade SL Shift History (${targetPos.symbol || 'OPTION'})` 
+                : `<span class="title-icon">⏱️</span> Active Position SL Shift Timeline (Live Audit Trail)`;
+        }
+
+        const history = targetPos.slShiftHistory || [
+            { time: targetPos.entryTime || "--", stage: targetPos.trailingStage || "INITIAL", sl: targetPos.currentSl || targetPos.initialSl }
         ];
 
         tbody.innerHTML = history.map((h, i) => {
@@ -491,6 +506,18 @@ function renderSlShiftTimeline(pos) {
         }).join("");
     } else {
         section.style.display = "none";
+    }
+}
+
+async function clearActivePosition() {
+    try {
+        const response = await fetch(`${API_BASE}/api/clear-position`, { method: "POST" });
+        const result = await response.json();
+        if (result.status === "success") {
+            updateDashboard();
+        }
+    } catch (e) {
+        console.error("Error clearing position:", e.message);
     }
 }
 
