@@ -213,6 +213,59 @@ function renderRealDashboard(data, config = {}) {
         }
     }
 
+    // Helper to format Rupee Trailing SL Stage & Next Trigger Reason
+    function getTrailingStageInfo(stage, currentPnlRupees) {
+        if (!stage || stage === "INITIAL") {
+            const pnlNeeded = Math.max(0, 120 - Math.round(currentPnlRupees || 0));
+            return {
+                isShifted: false,
+                lockedAmount: 0,
+                lockedText: "Initial SL (-₹300 Max Loss)",
+                nextTriggerText: `Need +₹${pnlNeeded} more PnL to reach Peak ₹120 (+₹60 Lock)`
+            };
+        }
+        
+        const match = String(stage).match(/PROFIT_₹(\d+)_LOCK_₹(\d+)/);
+        if (match) {
+            const peakHit = parseInt(match[1], 10);
+            const lockVal = parseInt(match[2], 10);
+            
+            const ladder = [
+                { peak: 120, lock: 60 },
+                { peak: 300, lock: 200 },
+                { peak: 450, lock: 350 },
+                { peak: 600, lock: 500 },
+                { peak: 800, lock: 700 },
+                { peak: 1000, lock: 900 },
+                { peak: 1200, lock: 1100 },
+                { peak: 1500, lock: 1400 },
+                { peak: 2000, lock: 1800 },
+                { peak: 3000, lock: 2700 },
+                { peak: 5000, lock: 4600 },
+                { peak: 10000, lock: 9500 }
+            ];
+
+            const nextRule = ladder.find(r => r.peak > peakHit);
+            const nextText = nextRule 
+                ? `Next Shift at Peak ₹${nextRule.peak} (Locks +₹${nextRule.lock})`
+                : `Max Target Stage Active (Target ₹10,000)`;
+
+            return {
+                isShifted: true,
+                lockedAmount: lockVal,
+                lockedText: `⚡ SL Shifted: +₹${lockVal} Profit Locked!`,
+                nextTriggerText: nextText
+            };
+        }
+
+        return {
+            isShifted: true,
+            lockedAmount: 0,
+            lockedText: `⚡ Trailing Stage: ${stage}`,
+            nextTriggerText: `Active Trailing Rule Engaged`
+        };
+    }
+
     // Render MasterSL Central Trailing Engine Telemetry Card
     const mslContainer = document.getElementById("mastersl-telemetry-container");
     if (mslContainer) {
@@ -225,21 +278,23 @@ function renderRealDashboard(data, config = {}) {
             const entryP = Number(pos.entryPrice || 0);
             const currentSlP = Number(pos.currentSl || pos.initialSl || 0);
             const stageText = pos.trailingStage || 'INITIAL';
+            const livePnlVal = Number(pos.pnl || 0);
+            const stageInfo = getTrailingStageInfo(stageText, livePnlVal);
 
             mslContainer.innerHTML = `
                 <div class="reversal-card active-watch-border">
                     <div class="reversal-header">
-                        <span class="reversal-title">🛡️ MasterSL Central Trailing Engine (ACTIVE POSITION TRACKING)</span>
+                        <span class="reversal-title">🛡️ MasterSL Dynamic Rupee Trailing Engine (ACTIVE POSITION TRACKING)</span>
                         <span class="badge-success">🟢 LIVE TRAILING ACTIVE</span>
                     </div>
                     <div class="reversal-grid">
-                        <div class="reversal-item"><span class="rev-label">1. Symbol & Contract</span><span class="rev-val highlight">${pos.symbol || 'NIFTY_OPTION'} (Qty: ${pos.qty || 25})</span></div>
-                        <div class="reversal-item"><span class="rev-label">2. Entry Price</span><span class="rev-val">₹${entryP.toFixed(2)}</span></div>
-                        <div class="reversal-item"><span class="rev-label">3. Current Trailed SL</span><span class="rev-val text-danger">₹${currentSlP.toFixed(2)}</span></div>
-                        <div class="reversal-item"><span class="rev-label">4. Current Trailing Stage</span><span class="rev-val text-warning">${stageText}</span></div>
-                        <div class="reversal-item"><span class="rev-label">5. Max Loss Limit</span><span class="rev-val text-danger">₹300 Per Trade</span></div>
-                        <div class="reversal-item"><span class="rev-label">6. Trailing Ladder Config</span><span class="rev-val text-success">40%->20% | 100%->66.6% | 150%->116.6% | 200%->166.6% | 266%->233.3% | Up to ₹2000</span></div>
-                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">System Mode</span><span class="rev-val text-info" style="font-size:0.85rem;">Head Consensus Engine -> MasterSL Direct Execution (Reversal Filter Removed)</span></div>
+                        <div class="reversal-item"><span class="rev-label">1. Symbol & Contract</span><span class="rev-val highlight">${pos.symbol || 'NIFTY_OPTION'} (Qty: ${pos.qty || 65})</span></div>
+                        <div class="reversal-item"><span class="rev-label">2. Entry Option LTP</span><span class="rev-val">₹${entryP.toFixed(2)}</span></div>
+                        <div class="reversal-item"><span class="rev-label">3. Live Option LTP</span><span class="rev-val text-success">₹${Number(pos.liveLtp || entryP).toFixed(2)}</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Current Trailed SL</span><span class="rev-val text-danger">₹${currentSlP.toFixed(2)}</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. SL Shift Status</span><span class="rev-val ${stageInfo.isShifted ? 'text-success font-bold' : 'text-warning'}">${stageInfo.lockedText}</span></div>
+                        <div class="reversal-item"><span class="rev-label">6. Next SL Shift Target</span><span class="rev-val text-info">${stageInfo.nextTriggerText}</span></div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Rupee Trailing Ladder</span><span class="rev-val text-success" style="font-size:0.82rem;">120->60 | 300->200 | 450->350 | 600->500 | 800->700 | 1000->900 | 1200->1100 | 1500->1400 (Max Target: ₹10,000)</span></div>
                     </div>
                 </div>
             `;
@@ -247,17 +302,17 @@ function renderRealDashboard(data, config = {}) {
             mslContainer.innerHTML = `
                 <div class="reversal-card">
                     <div class="reversal-header">
-                        <span class="reversal-title">🛡️ MasterSL Central Trailing Engine (LIVE MONITOR ONLINE)</span>
+                        <span class="reversal-title">🛡️ MasterSL Dynamic Rupee Trailing Engine (LIVE MONITOR ONLINE)</span>
                         <span class="badge-success">🟢 ENGINE READY</span>
                     </div>
                     <div class="reversal-grid">
                         <div class="reversal-item"><span class="rev-label">1. Engine Status</span><span class="rev-val highlight">🟢 READY FOR CONSENSUS SIGNALS</span></div>
                         <div class="reversal-item"><span class="rev-label">2. Live Nifty Spot</span><span class="rev-val highlight">🟢 ${liveNifty}</span></div>
                         <div class="reversal-item"><span class="rev-label">3. Max Loss Limit</span><span class="rev-val text-danger">₹300 Per Trade</span></div>
-                        <div class="reversal-item"><span class="rev-label">4. Trailing Rules</span><span class="rev-val text-success">Infinite Open-Ended Ladder (Up to ₹2,000 Peak Profit)</span></div>
-                        <div class="reversal-item"><span class="rev-label">5. 15-Min SL Cooldown</span><span class="rev-val text-info">${mStat.isSlCooldownActive ? '⏳ Active Cooldown' : '✅ Ready (No Cooldown)'}</span></div>
-                        <div class="reversal-item"><span class="rev-label">6. Execution Flow</span><span class="rev-val text-warning">Head Consensus Engine -> Direct MasterSL Order Execution</span></div>
-                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Active Configuration</span><span class="rev-val text-muted" style="font-size:0.8rem;">Target 40% (+₹60) | Target 100% (+₹200) | Target 150% (+₹350) | Target 200% (+₹500) | Target 266% (+₹700) | Up to ₹2,000</span></div>
+                        <div class="reversal-item"><span class="rev-label">4. Max Profit Target</span><span class="rev-val text-success">₹10,000 Max Target Target</span></div>
+                        <div class="reversal-item"><span class="rev-label">5. Starting Trailing Peak</span><span class="rev-val text-info">Peak ₹120 Profit -> Lock +₹60 Profit</span></div>
+                        <div class="reversal-item"><span class="rev-label">6. 15-Min SL Cooldown</span><span class="rev-val text-info">${mStat.isSlCooldownActive ? '⏳ Active Cooldown' : '✅ Ready (No Cooldown)'}</span></div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;"><span class="rev-label">Active Rupee Trailing Ladder</span><span class="rev-val text-muted" style="font-size:0.8rem;">120->60 | 300->200 | 450->350 | 600->500 | 800->700 | 1000->900 | 1200->1100 | 1500->1400 (Max Target ₹10,000)</span></div>
                     </div>
                 </div>
             `;
@@ -318,7 +373,8 @@ function renderRealDashboard(data, config = {}) {
             const displayCurrent = currentLtpVal > 0 ? currentLtpVal.toFixed(2) : '--';
 
             const stageLabel = pos.trailingStage || 'INITIAL';
-            const isSlShifted = stageLabel !== 'INITIAL';
+            const stageInfo = getTrailingStageInfo(stageLabel, pnlVal);
+            const isSlShifted = stageInfo.isShifted;
             const isCloseInFlight = Boolean(pos.status === "EXIT_FAILED" || pos.isCloseInFlight);
             
             const verifyStatusHtml = isCloseInFlight
@@ -340,41 +396,46 @@ function renderRealDashboard(data, config = {}) {
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Live Option LTP</div>
-                        <div class="item-val">₹${displayCurrent}</div>
+                        <div class="item-val text-success" style="font-weight: 700; font-size: 1.1rem;">₹${displayCurrent}</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Unrealized PnL</div>
-                        <div class="item-val ${pnlColor}">${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)} (${pos.pnlPercent || '0%'})</div>
+                        <div class="item-val ${pnlColor}" style="font-weight: 700; font-size: 1.1rem;">${pnlVal >= 0 ? '+' : ''}₹${pnlVal.toFixed(2)} (${pos.pnlPercent || '0%'})</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Internal Trailed SL</div>
-                        <div class="item-val text-danger">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'} ${isSlShifted ? '⚡ (Internal SL Trailed)' : ''}</div>
+                        <div class="item-val text-danger" style="font-weight: 700;">₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'} ${isSlShifted ? '⚡ (SL Trailed)' : ''}</div>
                     </div>
                     <div class="trade-item-box">
-                        <div class="item-label">SL Shift Stage</div>
-                        <div class="item-val ${isSlShifted ? 'text-success' : 'text-warning'}">${stageLabel}</div>
+                        <div class="item-label">SL Shift Status</div>
+                        <div class="item-val ${isSlShifted ? 'text-success' : 'text-warning'}" style="font-weight: 600;">${stageInfo.lockedText}</div>
+                    </div>
+                    <div class="trade-item-box">
+                        <div class="item-label">Next SL Shift Target</div>
+                        <div class="item-val text-info" style="font-size: 0.85rem;">${stageInfo.nextTriggerText}</div>
                     </div>
                     <div class="trade-item-box">
                         <div class="item-label">Terminal Verification</div>
                         <div class="item-val">${verifyStatusHtml}</div>
                     </div>
-                    <div class="trade-item-box">
-                        <div class="item-label">Exit Guard Mode</div>
-                        <div class="item-val text-success">🛡️ Persistent Exit Loop (Retries until netQty === 0)</div>
-                    </div>
                 </div>
 
                 <div class="progress-container">
                     <div class="progress-header">
-                        <span>⚡ High-Speed Internal Memory Trailing Engine (Zero Dhan API Modify Messages)</span>
-                        <span>Stage: ${stageLabel}</span>
+                        <span>⚡ Dynamic Rupee Trailing SL Engine (Zero Dhan API Modify Messages)</span>
+                        <span class="${isSlShifted ? 'text-success' : 'text-warning'} font-bold">${stageInfo.lockedText}</span>
                     </div>
-                    <div class="targets-milestones-row">
-                        <span>Initial SL: ₹${pos.initialSl ? Number(pos.initialSl).toFixed(2) : '--'}</span>
+                    <div class="targets-milestones-row" style="margin-top: 6px; font-size: 0.82rem;">
+                        <span>Initial SL: ₹${pos.initialSl ? Number(pos.initialSl).toFixed(2) : '--'} (-₹300)</span>
                         <span>Current Memory SL: ₹${pos.currentSl ? Number(pos.currentSl).toFixed(2) : '--'}</span>
-                        <span>Target 40%: Lock 20%</span>
-                        <span>Target 100%: Lock 66.6%</span>
-                        <span>Target 150%: Lock 116.6%</span>
+                        <span>120->60</span>
+                        <span>300->200</span>
+                        <span>450->350</span>
+                        <span>600->500</span>
+                        <span>800->700</span>
+                        <span>1000->900</span>
+                        <span>1200->1100</span>
+                        <span>1500->1400</span>
                     </div>
                 </div>
             `;
