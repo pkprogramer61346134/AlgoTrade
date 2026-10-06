@@ -494,8 +494,8 @@ class MasterTrailingEngine {
             return null;
         }
 
-        const currentHigh = isLiveTick ? livePrice : Number(tick.candleHigh || tick.high || livePrice);
-        const currentLow = isLiveTick ? livePrice : Number(tick.candleLow || tick.low || livePrice);
+        const currentHigh = Number(tick.candleHigh || tick.high || livePrice);
+        const currentLow = Number(tick.candleLow || tick.low || livePrice);
 
         if (isNaN(currentHigh) || isNaN(currentLow) || currentHigh <= 0 || currentLow <= 0 || isNaN(pos.currentSl) || isNaN(pos.targetPrice)) return null;
 
@@ -515,7 +515,8 @@ class MasterTrailingEngine {
         // 1. DYNAMIC RUPEE PROFIT & PERCENTAGE TRAILING SL JUMP ENGINE
         if (!exitTriggered && cfg.enableAutoTrailing !== false) {
             const qty = Number(pos.qty || pos.lotSize || 65);
-            const pnlDiff = Number((isOptionBuying ? (livePrice - pos.entryPrice) : (pos.entryPrice - livePrice)).toFixed(2));
+            const peakEvaluationPrice = isOptionBuying ? currentHigh : currentLow;
+            const pnlDiff = Number((isOptionBuying ? (peakEvaluationPrice - pos.entryPrice) : (pos.entryPrice - peakEvaluationPrice)).toFixed(2));
             const currentProfitRupees = Math.round(pnlDiff * qty);
 
             const rupeeRules = Array.isArray(cfg.rupeeTrailingRules) ? cfg.rupeeTrailingRules : [];

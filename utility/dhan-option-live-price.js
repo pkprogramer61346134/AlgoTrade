@@ -48,6 +48,19 @@ class DhanOptionLivePrice {
         }
 
         this.subscribedSecurityId = securityId;
+        this.fiveSecBucket = { high: 0, low: Infinity, open: 0, close: 0, startTime: Date.now() };
+
+        const updateFiveSecBucket = (price) => {
+            if (!price || price <= 0) return;
+            const now = Date.now();
+            if (now - this.fiveSecBucket.startTime >= 5000 || this.fiveSecBucket.high === 0) {
+                this.fiveSecBucket = { high: price, low: price, open: price, close: price, startTime: now };
+            } else {
+                if (price > this.fiveSecBucket.high) this.fiveSecBucket.high = price;
+                if (price < this.fiveSecBucket.low) this.fiveSecBucket.low = price;
+                this.fiveSecBucket.close = price;
+            }
+        };
 
         // Dynamically load freshest token config
         try {
@@ -65,10 +78,15 @@ class DhanOptionLivePrice {
                 const quoteObj = res?.data?.data?.[exchangeSegment]?.[String(securityId)];
                 if (quoteObj && quoteObj.last_price > 0) {
                     const price = Number(quoteObj.last_price.toFixed(2));
+                    updateFiveSecBucket(price);
+
                     const diff = buyPrice > 0 ? (price - buyPrice) : 0;
                     const livePnl = Number((diff * qty).toFixed(2));
                     const pnlPctVal = buyPrice > 0 ? ((diff / buyPrice) * 100) : 0;
                     const pnlPercent = `${pnlPctVal >= 0 ? '+' : ''}${pnlPctVal.toFixed(2)}%`;
+
+                    const currentHigh = Math.max(price, this.fiveSecBucket.high || price);
+                    const currentLow = Math.min(price, this.fiveSecBucket.low < Infinity ? this.fiveSecBucket.low : price);
 
                     onTick({
                         status: "live",
@@ -78,11 +96,11 @@ class DhanOptionLivePrice {
                         ltp: price,
                         liveLtp: price,
                         close: price,
-                        high: price,
-                        low: price,
+                        high: currentHigh,
+                        low: currentLow,
                         candleClose: price,
-                        candleHigh: price,
-                        candleLow: price,
+                        candleHigh: currentHigh,
+                        candleLow: currentLow,
                         buyPrice,
                         qty,
                         livePnl,
@@ -103,20 +121,20 @@ class DhanOptionLivePrice {
         // Immediately fetch REST quote for option
         fetchRestQuote();
 
-        // 2.5s fallback polling loop
+        // 1s fast fallback polling loop for zero-delay quote updates
         if (this.pollTimer) clearInterval(this.pollTimer);
-        this.pollTimer = setInterval(fetchRestQuote, 2500);
+        this.pollTimer = setInterval(fetchRestQuote, 1000);
 
         const wsUrl = `wss://api-feed.dhan.co?version=2&token=${this.accessToken}&clientId=${this.clientId}&authType=2`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.on("open", () => {
             this.isConnected = true;
-            console.log(`📡 [DHAN OPTION LIVE] Connected! Subscribing to Option Contract: ${securityId} (${exchangeSegment})...`);
+            console.log(`📡 [DHAN OPTION LIVE] Connected! Subscribing to Option Contract: ${securityId} (${exchangeSegment}) [5s Bucket Active]...`);
 
-            // Subscribe via RequestCode 17 (Quote Packet Mode)
+            // Subscribe via RequestCode 21 (Ticker / Full Mode) for fastest tick delivery
             this.ws.send(JSON.stringify({
-                RequestCode: 17,
+                RequestCode: 21,
                 InstrumentCount: 1,
                 InstrumentList: [
                     {
@@ -163,6 +181,7 @@ class DhanOptionLivePrice {
                 }
 
                 if (price <= 0) return;
+                updateFiveSecBucket(price);
 
                 // Calculate Live PnL if buyPrice and qty are provided
                 let livePnl = 0;
@@ -172,6 +191,9 @@ class DhanOptionLivePrice {
                     pnlPercent = Number((((price - buyPrice) / buyPrice) * 100).toFixed(2));
                 }
 
+                const currentHigh = Math.max(price, this.fiveSecBucket.high || price);
+                const currentLow = Math.min(price, this.fiveSecBucket.low < Infinity ? this.fiveSecBucket.low : price);
+
                 onTick({
                     status: "live",
                     securityId,
@@ -180,11 +202,11 @@ class DhanOptionLivePrice {
                     ltp: price,
                     liveLtp: price,
                     close: price,
-                    high: price,
-                    low: price,
+                    high: currentHigh,
+                    low: currentLow,
                     candleClose: price,
-                    candleHigh: price,
-                    candleLow: price,
+                    candleHigh: currentHigh,
+                    candleLow: currentLow,
                     buyPrice,
                     qty,
                     livePnl,
