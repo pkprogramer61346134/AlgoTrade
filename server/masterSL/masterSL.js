@@ -210,34 +210,27 @@ class MasterTrailingEngine {
             logger.logInfo(envName, "ORDER_PLACEMENT_DOUBLE_CHECKED", `Order placement double-checked (Simulated / Paper Trading).`);
         }
 
-        // Extract actual executed fill price from Dhan broker response (tradedPrice / price / buyAvg / costPrice)
-        const actualBrokerFillPrice = Number(
-            verifyDetails?.tradedPrice ||
-            verifyDetails?.price ||
-            verifyDetails?.order?.tradedPrice ||
-            verifyDetails?.order?.price ||
+        // Extract 3 exact core fields directly from Dhan Broker Super Order response
+        const fillPrice = Number(
+            verifyDetails?.averageTradedPrice ||
             verifyDetails?.order?.averageTradedPrice ||
-            verifyDetails?.order?.priceTraded ||
-            verifyDetails?.order?.buyAvg ||
-            verifyDetails?.position?.buyAvg ||
-            verifyDetails?.position?.costPrice ||
-            verifyDetails?.position?.price ||
-            placedOrderResult?.tradedPrice ||
-            placedOrderResult?.price ||
-            placedOrderResult?.buyAvg ||
-            placedOrderResult?.fillPrice ||
-            placedOrderResult?.tradedPrice ||
-            0
+            verifyDetails?.buyAvg
         );
 
-        if (actualBrokerFillPrice > 0 && Math.abs(actualBrokerFillPrice - orderPayload.entryPrice) > 0.001) {
-            const estimatedPrice = orderPayload.entryPrice;
+        const slLegPrice = Number(
+            verifyDetails?.legDetails?.find(l => l.legName === 'STOP_LOSS_LEG')?.price || 0
+        );
+
+        const targetLegPrice = Number(
+            verifyDetails?.legDetails?.find(l => l.legName === 'TARGET_LEG')?.price || 0
+        );
+
+        if (fillPrice > 0) {
             const cfg = masterConfig.getConfig();
             const lotSize = Number(orderPayload.lotSize || 65);
 
-            // Recalculate Risk, Initial SL, and Target Prices on actual broker fill price
             const newLevels = this.calculateRiskAndLevels(
-                actualBrokerFillPrice,
+                fillPrice,
                 orderPayload.optionType,
                 orderPayload.isOptionTrade,
                 orderPayload.strikeInfo,
@@ -246,14 +239,15 @@ class MasterTrailingEngine {
                 lotSize
             );
 
-            orderPayload.entryPrice = actualBrokerFillPrice;
-            orderPayload.initialSl = newLevels.initialSl;
-            orderPayload.currentSl = newLevels.initialSl;
-            orderPayload.targetPrice = newLevels.targetPrice;
+            // Store strictly the 3 exact core fields
+            orderPayload.entryPrice = fillPrice;
+            orderPayload.initialSl = slLegPrice > 0 ? slLegPrice : newLevels.initialSl;
+            orderPayload.currentSl = orderPayload.initialSl;
+            orderPayload.targetPrice = targetLegPrice > 0 ? targetLegPrice : newLevels.targetPrice;
             orderPayload.targetPoints = newLevels.targetPoints;
             orderPayload.levels = newLevels;
 
-            logger.logInfo(envName, "BROKER_EXECUTION_PRICE_SYNCED", `⚡ [BROKER FILL SYNCED] Entry price updated from estimated ₹${estimatedPrice} to actual broker fill ₹${actualBrokerFillPrice} | New SL: ₹${newLevels.initialSl} | Target: ₹${newLevels.targetPrice}`);
+            logger.logInfo(envName, "BROKER_EXECUTION_PRICE_SYNCED", `⚡ [BROKER FILL SYNCED] Entry: ₹${orderPayload.entryPrice} | SL: ₹${orderPayload.initialSl} | Target: ₹${orderPayload.targetPrice}`);
         }
 
         this.activePosition = {
