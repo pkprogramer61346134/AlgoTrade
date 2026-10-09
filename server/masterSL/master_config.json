@@ -4,7 +4,7 @@
   "maxLossPerTrade": 300,
   "rupeeTrailingRules": [
     { "targetRupees": 275, "lockRupees": 60 },
-    { "targetRupees": 300, "lockRupees": 100 },
+
     { "targetRupees": 500, "lockRupees": 200 },
     { "targetRupees": 600, "lockRupees": 500 },
     { "targetRupees": 800, "lockRupees": 700 },
