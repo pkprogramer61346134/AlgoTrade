@@ -4,11 +4,11 @@
   "maxLossPerTrade": 300,
   "rupeeTrailingRules": [
     { "targetRupees": 275, "lockRupees": 60 },
-    { "targetRupees": 300, "lockRupees": 100 },
+
     { "targetRupees": 500, "lockRupees": 200 },
-    { "targetRupees": 600, "lockRupees": 300 },
-    { "targetRupees": 800, "lockRupees": 500 },
-    { "targetRupees": 1000, "lockRupees": 700 },
+    { "targetRupees": 600, "lockRupees": 500 },
+    { "targetRupees": 800, "lockRupees": 700 },
+    { "targetRupees": 1000, "lockRupees": 800 },
     { "targetRupees": 1200, "lockRupees": 900 },
     { "targetRupees": 1500, "lockRupees": 1200 },
     { "targetRupees": 2000, "lockRupees": 1600 },
