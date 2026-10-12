@@ -121,10 +121,32 @@ class BacktestEngine {
                     const cutoff1515 = 15 * 3600 + 15 * 60; // 54900 seconds (15:15 PM)
                     const isLastCandleOfDay = (tickSecs >= cutoff1515 || i === targetCandles.length - 1 || (i < targetCandles.length - 1 && targetCandles[i + 1].date !== tick.date));
 
-                    // DYNAMIC MASTERSL PERCENT TRAILING SL LADDER ENGINE
+                    // DYNAMIC MASTERSL TRAILING SL LADDER ENGINE
                     const masterCfg = masterConfig.getConfig();
+                    const rupeeRules = Array.isArray(masterCfg.rupeeTrailingRules) ? masterCfg.rupeeTrailingRules : [];
                     const percentRules = Array.isArray(masterCfg.percentTrailingRules) ? masterCfg.percentTrailingRules : [];
-                    if (percentRules.length > 0) {
+
+                    if (rupeeRules.length > 0) {
+                        const lotSize = 65;
+                        const pnlDiff = isBUY ? (candleHigh - activePosition.entryPrice) : (activePosition.entryPrice - candleLow);
+                        const currentProfitRupees = Math.round(pnlDiff * lotSize);
+                        const sortedRupeeRules = [...rupeeRules].sort((a, b) => b.targetRupees - a.targetRupees);
+
+                        for (const rule of sortedRupeeRules) {
+                            if (currentProfitRupees >= rule.targetRupees) {
+                                const lockPts = Number((rule.lockRupees / lotSize).toFixed(2));
+                                const newSlPrice = isBUY 
+                                    ? Number((activePosition.entryPrice + lockPts).toFixed(2)) 
+                                    : Number((activePosition.entryPrice - lockPts).toFixed(2));
+
+                                if (isBUY ? (newSlPrice > activePosition.slPrice) : (newSlPrice < activePosition.slPrice)) {
+                                    activePosition.slPrice = newSlPrice;
+                                    activePosition.trailingStage = `PROFIT_₹${rule.targetRupees}_LOCK_₹${rule.lockRupees}`;
+                                    break;
+                                }
+                            }
+                        }
+                    } else if (percentRules.length > 0) {
                         const targetPoints = Math.abs(activePosition.targetPrice - activePosition.entryPrice);
                         const pnlDiff = isBUY ? (candleHigh - activePosition.entryPrice) : (activePosition.entryPrice - candleLow);
                         const sortedRules = [...percentRules].sort((a, b) => b.targetPercent - a.targetPercent);
@@ -239,13 +261,21 @@ class BacktestEngine {
                         const entryPrice = Number((consensusResult.entry || candleClose).toFixed(2));
                         const type = consensusResult.consensus;
 
+                        const masterCfg = masterConfig.getConfig();
+                        const defaultSlPts = (masterCfg.maxLossPerTrade && !isNaN(Number(masterCfg.maxLossPerTrade)))
+                            ? Number((masterCfg.maxLossPerTrade / 65).toFixed(2))
+                            : 5;
+                        const defaultTargetPts = (masterCfg.rupeeTrailingRules && masterCfg.rupeeTrailingRules[0]?.targetRupees)
+                            ? Number((masterCfg.rupeeTrailingRules[0].targetRupees / 65).toFixed(2))
+                            : 10;
+
                         let slPrice;
                         if (slPointsInput !== null) {
                             slPrice = type === "BUY" ? (entryPrice - slPointsInput) : (entryPrice + slPointsInput);
                         } else if (consensusResult.sl !== null && consensusResult.sl !== undefined) {
                             slPrice = Number(consensusResult.sl.toFixed(2));
                         } else {
-                            slPrice = type === "BUY" ? (entryPrice - 35) : (entryPrice + 35);
+                            slPrice = type === "BUY" ? (entryPrice - defaultSlPts) : (entryPrice + defaultSlPts);
                         }
 
                         let targetPrice;
@@ -254,7 +284,7 @@ class BacktestEngine {
                         } else if (consensusResult.tr !== null && consensusResult.tr !== undefined) {
                             targetPrice = Number(consensusResult.tr.toFixed(2));
                         } else {
-                            targetPrice = type === "BUY" ? (entryPrice + 70) : (entryPrice - 70);
+                            targetPrice = type === "BUY" ? (entryPrice + defaultTargetPts) : (entryPrice - defaultTargetPts);
                         }
 
                         slPrice = Number(slPrice.toFixed(2));
@@ -314,7 +344,7 @@ class BacktestEngine {
         const formattedTrades = tradesHistory.map(t => {
             const isWin = t.points >= 0;
             if (t.exitReason === "TARGET_HIT") trHitsCount++;
-            else if (t.exitReason === "STOP_LOSS_HIT") slHitsCount++;
+            else if (t.exitReason && (t.exitReason.includes("SL_HIT") || t.exitReason === "STOP_LOSS_HIT")) slHitsCount++;
             else if (t.exitReason === "EOD_SQUARE_OFF") eodCount++;
 
             if (isWin) {
@@ -354,7 +384,7 @@ class BacktestEngine {
             if (t.points >= 0) dailyMap[dayKey].winningTrades += 1;
             else dailyMap[dayKey].losingTrades += 1;
             if (t.exitReason === "TARGET_HIT") dailyMap[dayKey].trHits += 1;
-            if (t.exitReason === "STOP_LOSS_HIT") dailyMap[dayKey].slHits += 1;
+            if (t.exitReason && (t.exitReason.includes("SL_HIT") || t.exitReason === "STOP_LOSS_HIT")) dailyMap[dayKey].slHits += 1;
         });
 
         const dailyBreakdown = Object.values(dailyMap).map(d => ({

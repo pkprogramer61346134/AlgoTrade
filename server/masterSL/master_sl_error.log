@@ -6311,3 +6311,51 @@ Error: 🚨 Trailed SL hit ho gaya par order close nahi ho raha hai! Failed afte
 [12/10/2026, 11:37:29] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹486.77 (PROFIT_₹1000_LOCK_₹700) | Zero Dhan API Modify Messages Sent.
 [12/10/2026, 11:37:31] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹494.46 (PROFIT_₹1500_LOCK_₹1200) | Zero Dhan API Modify Messages Sent.
 [12/10/2026, 11:37:33] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹500.62 (PROFIT_₹2000_LOCK_₹1600) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 13:15:07] [REAL_TRADE] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order 223261012317371 double-checked & verified on broker terminal. Status: TRADED
+[12/10/2026, 13:15:07] [REAL_TRADE] ℹ️ [BROKER_EXECUTION_PRICE_SYNCED] ⚡ [BROKER FILL SYNCED] Entry: ₹195.6 | SL: ₹190.98 | Target: ₹349.45
+[12/10/2026, 13:15:07] [REAL_TRADE] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22200_CE | Entry: ₹195.6 | Qty: 65 | SL: ₹190.98 | Target (PERCENT_TRAILING): ₹349.45 | Verification: VERIFIED
+[12/10/2026, 13:15:13] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹196.52 (PROFIT_₹275_LOCK_₹60) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 13:15:13] [REAL_TRADE] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹196.52 (TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60)). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[12/10/2026, 13:15:13] [REAL_TRADE] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (1/10) for NIFTY_22200_CE (Security: 44592)...
+[12/10/2026, 13:15:17] [REAL_TRADE] ℹ️ [POSITION_CLOSE_CONFIRMED_TERMINAL] ✅ [TERMINAL CLOSE CONFIRMED] Position 44592 verified CLOSED (netQty: 0) on Dhan broker terminal on attempt 1.
+[12/10/2026, 13:15:17] [REAL_TRADE] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60)). Mandatory 15-minute cooldown started.
+[12/10/2026, 13:15:17] [REAL_TRADE] ℹ️ [POSITION_CLOSED] Closed NIFTY_22200_CE | Exit: ₹196.52 | Reason: TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60) | PnL: ₹59.8
+[12/10/2026, 14:15:06] [REAL_TRADE] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order 223261012362771 double-checked & verified on broker terminal. Status: TRADED
+[12/10/2026, 14:15:06] [REAL_TRADE] ℹ️ [BROKER_EXECUTION_PRICE_SYNCED] ⚡ [BROKER FILL SYNCED] Entry: ₹174.6 | SL: ₹169.98 | Target: ₹328.45
+[12/10/2026, 14:15:06] [REAL_TRADE] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22200_CE | Entry: ₹174.6 | Qty: 65 | SL: ₹169.98 | Target (PERCENT_TRAILING): ₹328.45 | Verification: VERIFIED
+[12/10/2026, 14:15:43] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹175.52 (PROFIT_₹275_LOCK_₹60) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 14:15:59] [REAL_TRADE] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹175.52 (TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60)). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[12/10/2026, 14:15:59] [REAL_TRADE] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (1/10) for NIFTY_22200_CE (Security: 44592)...
+[12/10/2026, 14:16:03] [REAL_TRADE] ℹ️ [POSITION_CLOSE_CONFIRMED_TERMINAL] ✅ [TERMINAL CLOSE CONFIRMED] Position 44592 verified CLOSED (netQty: 0) on Dhan broker terminal on attempt 1.
+[12/10/2026, 14:16:03] [REAL_TRADE] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60)). Mandatory 15-minute cooldown started.
+[12/10/2026, 14:16:03] [REAL_TRADE] ℹ️ [POSITION_CLOSED] Closed NIFTY_22200_CE | Exit: ₹175.52 | Reason: TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60) | PnL: ₹59.8
+[12/10/2026, 14:30:02] [REAL_TRADE] ℹ️ [SIGNAL_IGNORED] 15-min trade exit cooldown active (1m 1s remaining after trade exit). Ignoring signal.
+[12/10/2026, 14:45:07] [REAL_TRADE] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order 223261012390871 double-checked & verified on broker terminal. Status: TRADED
+[12/10/2026, 14:45:07] [REAL_TRADE] ℹ️ [BROKER_EXECUTION_PRICE_SYNCED] ⚡ [BROKER FILL SYNCED] Entry: ₹197.15 | SL: ₹192.53 | Target: ₹351
+[12/10/2026, 14:45:07] [REAL_TRADE] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_22150_CE | Entry: ₹197.15 | Qty: 65 | SL: ₹192.53 | Target (PERCENT_TRAILING): ₹351 | Verification: VERIFIED
+[12/10/2026, 14:45:26] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹198.07 (PROFIT_₹275_LOCK_₹60) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 14:47:26] [REAL_TRADE] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹198.07 (TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60)). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[12/10/2026, 14:47:26] [REAL_TRADE] ℹ️ [MARKET_EXIT_ATTEMPT] Attempting Market Exit (1/10) for NIFTY_22150_CE (Security: 44586)...
+[12/10/2026, 14:47:30] [REAL_TRADE] ℹ️ [POSITION_CLOSE_CONFIRMED_TERMINAL] ✅ [TERMINAL CLOSE CONFIRMED] Position 44586 verified CLOSED (netQty: 0) on Dhan broker terminal on attempt 1.
+[12/10/2026, 14:47:30] [REAL_TRADE] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60)). Mandatory 15-minute cooldown started.
+[12/10/2026, 14:47:30] [REAL_TRADE] ℹ️ [POSITION_CLOSED] Closed NIFTY_22150_CE | Exit: ₹198.07 | Reason: TRAILED_SL_HIT (PROFIT_₹275_LOCK_₹60) | PnL: ₹59.8
+[12/10/2026, 18:04:30] [VM_AUDIT] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order AUDIT_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[12/10/2026, 18:04:30] [VM_AUDIT] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95.38 | Target (PERCENT_TRAILING): ₹253.85 | Verification: VERIFIED
+[12/10/2026, 18:04:30] [VM_AUDIT] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹118.46 (PROFIT_₹1500_LOCK_₹1200) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 18:05:43] [VM_AUDIT] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order AUDIT_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[12/10/2026, 18:05:43] [VM_AUDIT] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95 | Target (PERCENT_TRAILING): ₹253.85 | Verification: VERIFIED
+[12/10/2026, 18:05:43] [VM_AUDIT] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹115 (PROFIT_₹1300_LOCK_₹975) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 18:11:18] [VM_AUDIT] ℹ️ [ORDER_PLACEMENT_DOUBLE_CHECKED] Order AUDIT_101 double-checked & verified on broker terminal. Status: CONFIRMED
+[12/10/2026, 18:11:18] [VM_AUDIT] ℹ️ [ORDER_EXECUTED] Position Opened: NIFTY_24500_CE | Entry: ₹100 | Qty: 65 | SL: ₹95 | Target (PERCENT_TRAILING): ₹561.54 | Verification: VERIFIED
+[12/10/2026, 18:11:18] [VM_AUDIT] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹115 (PROFIT_₹1300_LOCK_₹975) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 18:17:45] [TEST] ℹ️ [AUTO_SHUTDOWN_SCHEDULED] 🛑 [DAILY QUOTA REACHED] 3 trades completed today (3/3). Initiating safe Server & VM shutdown in 60 seconds...
+[12/10/2026, 18:18:01] [TEST] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹110 (TARGET_HIT). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[12/10/2026, 18:18:01] [TEST] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TARGET_HIT). Mandatory 15-minute cooldown started.
+[12/10/2026, 18:18:01] [TEST] ℹ️ [POSITION_CLOSED] Closed NIFTY_22200_CE | Exit: ₹110 | Reason: TARGET_HIT | PnL: ₹650
+[12/10/2026, 18:18:01] [TEST] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹110 (TARGET_HIT). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[12/10/2026, 18:18:01] [TEST] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TARGET_HIT). Mandatory 15-minute cooldown started.
+[12/10/2026, 18:18:01] [TEST] ℹ️ [POSITION_CLOSED] Closed NIFTY_22200_CE | Exit: ₹110 | Reason: TARGET_HIT | PnL: ₹650
+[12/10/2026, 18:18:01] [TEST] ℹ️ [CLOSE_POSITION_TRIGGERED] 🏁 [MARKET EXIT INITIATED] Trailed SL/Target breached at ₹110 (TARGET_HIT). Starting persistent exit loop (max 10 attempts) until Dhan terminal confirms netQty === 0.
+[12/10/2026, 18:18:01] [TEST] ℹ️ [TRADE_EXIT_COOLDOWN_STARTED] Trade exit recorded (TARGET_HIT). Mandatory 15-minute cooldown started.
+[12/10/2026, 18:18:01] [TEST] ℹ️ [POSITION_CLOSED] Closed NIFTY_22200_CE | Exit: ₹110 | Reason: TARGET_HIT | PnL: ₹650
+[12/10/2026, 18:18:01] [TEST] ℹ️ [AUTO_SHUTDOWN_SCHEDULED] 🛑 [DAILY QUOTA REACHED] 3 trades completed today (3/3). Initiating safe Server & VM shutdown in 10 seconds...

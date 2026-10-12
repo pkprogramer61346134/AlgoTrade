@@ -137,8 +137,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const toDate = toDateInput.value;
         const interval = intervalSelect.value;
         const maxTradesPerDay = document.getElementById('maxTradesPerDay') ? document.getElementById('maxTradesPerDay').value : 3;
-        const slPoints = document.getElementById('slPoints') ? document.getElementById('slPoints').value : 35;
-        const targetPoints = document.getElementById('targetPoints') ? document.getElementById('targetPoints').value : 70;
+        const slPoints = document.getElementById('slPoints') ? document.getElementById('slPoints').value : 5;
+        const targetPoints = document.getElementById('targetPoints') ? document.getElementById('targetPoints').value : 10;
 
         // Update Server Status
         setRunningState(true);

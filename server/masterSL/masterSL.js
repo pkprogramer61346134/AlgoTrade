@@ -13,14 +13,18 @@
  * 8. Step 7: modifyTrailingSL() & closePosition() -> Dynamic Trailing SL & broker exit control.
  */
 
+const fs = require('fs');
+const path = require('path');
 const masterConfig = require('./config');
 const logger = require('./logger');
 const autoShutdownManager = require('./autoShutdownManager');
 
+const TRADE_HISTORY_FILE = path.join(__dirname, 'master_trade_history.json');
+
 class MasterTrailingEngine {
     constructor() {
         this.activePosition = null;
-        this.tradeHistory = [];
+        this.tradeHistory = this.loadTradeHistory();
         this.isOrderInFlight = false;
         this.isModifyInFlight = false;
         this.isCloseInFlight = false;
@@ -28,6 +32,26 @@ class MasterTrailingEngine {
         this.lastModifyTimestamp = 0;
         this.lastExitTimestamp = 0;
         this.lastSlExitTimestamp = 0;
+    }
+
+    loadTradeHistory() {
+        try {
+            if (fs.existsSync(TRADE_HISTORY_FILE)) {
+                const data = JSON.parse(fs.readFileSync(TRADE_HISTORY_FILE, 'utf-8'));
+                if (Array.isArray(data)) return data;
+            }
+        } catch (e) {
+            console.warn(`⚠️ [MASTER SL] Could not load trade history from disk: ${e.message}`);
+        }
+        return [];
+    }
+
+    saveTradeHistory() {
+        try {
+            fs.writeFileSync(TRADE_HISTORY_FILE, JSON.stringify(this.tradeHistory, null, 2), 'utf-8');
+        } catch (e) {
+            console.error(`❌ [MASTER SL] Could not save trade history to disk: ${e.message}`);
+        }
     }
 
     /**
@@ -315,7 +339,7 @@ class MasterTrailingEngine {
 
         try {
             // Guard Check: Max Trades Per Day Check
-            const todayDate = signal.date || new Date().toLocaleDateString("en-CA");
+            const todayDate = signal.date || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
             const todayTradesCount = this.tradeHistory.filter(t => (t.entryDate === todayDate)).length;
             if (todayTradesCount >= cfg.maxTradesPerDay) {
                 logger.logInfo(envName, "SIGNAL_IGNORED", `Max trades per day reached (${cfg.maxTradesPerDay}). Ignoring signal.`);
@@ -358,8 +382,8 @@ class MasterTrailingEngine {
                 symbol: symbol,
                 optionType: optionType,
                 isOptionTrade: isOptionTrade,
-                entryDate: signal.date || new Date().toLocaleDateString("en-CA"),
-                entryTime: signal.time || new Date().toLocaleTimeString("en-IN"),
+                entryDate: signal.date || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+                entryTime: signal.time || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }),
                 entryPrice: entryPrice,
                 initialSl: levels.initialSl,
                 currentSl: levels.initialSl,
@@ -429,6 +453,7 @@ class MasterTrailingEngine {
     // =========================================================================
     async closePosition(exitPrice, exitReason, envName = "PAPER") {
         if (!this.activePosition || this.isCloseInFlight) return null;
+        const cfg = masterConfig.getConfig();
         const pos = this.activePosition;
 
         this.isCloseInFlight = true;
@@ -494,6 +519,7 @@ class MasterTrailingEngine {
                 pos.exitError = null;
                 this.tradeHistory.push({ ...pos });
                 if (this.tradeHistory.length > 1000) this.tradeHistory.shift();
+                this.saveTradeHistory();
                 const closedPosition = { ...pos };
                 this.activePosition = null;
                 this.lastExitTimestamp = Date.now();

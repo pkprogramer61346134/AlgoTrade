@@ -18,6 +18,7 @@
 
 const { exec } = require('child_process');
 const logger = require('./logger');
+const masterConfig = require('./config');
 
 class AutoShutdownManager {
     constructor() {
@@ -42,6 +43,10 @@ class AutoShutdownManager {
             return false;
         }
 
+        const activeCfg = (cfg && typeof cfg === 'object' && Object.keys(cfg).length > 0) 
+            ? cfg 
+            : masterConfig.getConfig();
+
         // Debounce: Trigger only once per day
         if (this.isShutdownInitiated) {
             return false;
@@ -53,23 +58,23 @@ class AutoShutdownManager {
             return false;
         }
 
-        // Count completed trades for today
-        const todayDate = new Date().toLocaleDateString("en-CA");
+        // Count completed trades for today (strictly Indian Market trading date)
+        const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
         const todayCompletedTrades = (Array.isArray(tradeHistory) ? tradeHistory : []).filter(t => 
             (t.entryDate === todayDate || t.date === todayDate) && t.status === "CLOSED"
         );
 
         this.todayTradesCount = todayCompletedTrades.length;
-        const maxTrades = Number(cfg?.maxTradesPerDay || 3);
-        const isEnabled = cfg?.autoShutdownOnMaxTrades !== false;
+        const maxTrades = Number(activeCfg?.maxTradesPerDay || 3);
+        const isEnabled = activeCfg?.autoShutdownOnMaxTrades !== false;
 
         // Check if trade quota reached
         if (isEnabled && this.todayTradesCount >= maxTrades) {
             this.isShutdownInitiated = true;
-            const graceDelayMs = Number(cfg?.shutdownGraceDelayMs || 10000); // 10 seconds default
+            const graceDelayMs = Number(activeCfg?.shutdownGraceDelayMs || 10000); // 10 seconds default
             this.scheduledShutdownTime = Date.now() + graceDelayMs;
 
-            const shutdownMsg = `🛑 [DAILY QUOTA REACHED] 3 trades completed today (${this.todayTradesCount}/${maxTrades}). Initiating safe Server & VM shutdown in ${graceDelayMs / 1000} seconds...`;
+            const shutdownMsg = `🛑 [DAILY QUOTA REACHED] ${this.todayTradesCount} trades completed today (${this.todayTradesCount}/${maxTrades}). Initiating safe Server & VM shutdown in ${graceDelayMs / 1000} seconds...`;
             console.log(`\n==========================================================================`);
             console.log(shutdownMsg);
             console.log(`==========================================================================\n`);
@@ -92,9 +97,9 @@ class AutoShutdownManager {
     executeSystemShutdown(envName = "REAL_TRADE") {
         const isLinux = process.platform === 'linux';
 
-        if (isLinux) {
+        if (isLinux && envName === "REAL_TRADE") {
             // Google Cloud Linux VM: Execute graceful OS poweroff
-            const logMsg = `🛑 [VM SHUTDOWN EXECUTING] Google Cloud Linux VM detected. Executing 'sudo shutdown -h now' to power off VM and stop billing...`;
+            const logMsg = `🛑 [VM SHUTDOWN EXECUTING] Google Cloud Linux VM detected in REAL_TRADE. Executing 'sudo shutdown -h now' to power off VM and stop billing...`;
             console.log(logMsg);
             logger.logInfo(envName, "VM_SHUTDOWN_EXECUTED", logMsg);
 
@@ -110,9 +115,14 @@ class AutoShutdownManager {
                     });
                 }
             });
+        } else if (isLinux) {
+            // Linux in non-REAL_TRADE mode (simulation/testing)
+            const noticeMsg = `ℹ️ [AUTO SHUTDOWN NOTICE] Daily quota reached in ${envName} mode. OS poweroff skipped for non-live trading.`;
+            console.log(noticeMsg);
+            logger.logInfo(envName, "AUTO_SHUTDOWN_TEST_NOTICE", noticeMsg);
         } else {
             // Windows Dev Machine: Do not power off user's computer; log notification safely
-            const winMsg = `ℹ️ [AUTO SHUTDOWN NOTICE] 3 daily trades completed. On Google Cloud Linux VM, 'sudo shutdown -h now' will execute. On Windows workstation, OS shutdown is skipped to protect your desktop.`;
+            const winMsg = `ℹ️ [AUTO SHUTDOWN NOTICE] ${this.todayTradesCount} daily trades completed. On Google Cloud Linux VM, 'sudo shutdown -h now' will execute. On Windows workstation, OS shutdown is skipped to protect your desktop.`;
             console.log(winMsg);
             logger.logInfo(envName, "AUTO_SHUTDOWN_WINDOWS_NOTICE", winMsg);
         }
