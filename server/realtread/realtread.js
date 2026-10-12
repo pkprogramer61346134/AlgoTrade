@@ -153,6 +153,11 @@ class RealTradeEngine {
                         masterSL.activePosition = null;
                         this.activeOptionContract = null;
                         this.activeOptionStreamSecId = null;
+
+                        // Check and trigger auto-shutdown if 3 daily trades completed
+                        if (typeof masterSL.checkDailyAutoShutdown === 'function') {
+                            masterSL.checkDailyAutoShutdown("REAL_TRADE");
+                        }
                     }
                 }
                 return { hasOpenPosition: Boolean(masterSL.activePosition), position: masterSL.activePosition };

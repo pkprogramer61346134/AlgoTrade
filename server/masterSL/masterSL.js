@@ -15,6 +15,7 @@
 
 const masterConfig = require('./config');
 const logger = require('./logger');
+const autoShutdownManager = require('./autoShutdownManager');
 
 class MasterTrailingEngine {
     constructor() {
@@ -501,6 +502,10 @@ class MasterTrailingEngine {
                 this.isCloseInFlight = false;
 
                 logger.logInfo(envName, "POSITION_CLOSED", `Closed ${closedPosition.symbol} | Exit: ₹${exitPrice} | Reason: ${exitReason} | PnL: ₹${closedPosition.realizedPnl}`);
+
+                // Check and trigger auto-shutdown if max daily trades reached
+                autoShutdownManager.checkAndTriggerShutdown(this.tradeHistory, this.activePosition, cfg, envName);
+
                 return closedPosition;
             } else {
                 this.isCloseInFlight = false;
@@ -683,8 +688,17 @@ class MasterTrailingEngine {
             isSlCooldownActive: isSlCooldownActive,
             remainingCooldownMs: remainingCooldownMs,
             remainingCooldownMins: Math.floor(remainingCooldownMs / 60000),
-            remainingCooldownSecs: Math.ceil((remainingCooldownMs % 60000) / 1000)
+            remainingCooldownSecs: Math.ceil((remainingCooldownMs % 60000) / 1000),
+            autoShutdown: autoShutdownManager.getStatus()
         };
+    }
+
+    /**
+     * Check and trigger daily auto-shutdown if 3 trades completed
+     */
+    checkDailyAutoShutdown(envName = "REAL_TRADE") {
+        const cfg = masterConfig.getConfig();
+        return autoShutdownManager.checkAndTriggerShutdown(this.tradeHistory, this.activePosition, cfg, envName);
     }
 }
 

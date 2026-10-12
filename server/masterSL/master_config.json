@@ -29,5 +29,7 @@
     "instrument": "INDEX"
   },
   "minRequiredBalance": 1000,
-  "enableAutoTrailing": true
+  "enableAutoTrailing": true,
+  "autoShutdownOnMaxTrades": true,
+  "shutdownGraceDelayMs": 10000
 }

@@ -6305,3 +6305,9 @@ Error: 🚨 Trailed SL hit ho gaya par order close nahi ho raha hai! Failed afte
 [6/10/2026, 17:10:23] [FULL_AUDIT] ℹ️ [POSITION_CLOSED] Closed NIFTY_24500_CE | Exit: ₹103.58 | Reason: TRAILED_SL_HIT (PROFIT_₹500_LOCK_₹200) | PnL: ₹200.2
 [6/10/2026, 17:10:23] [FULL_AUDIT] ℹ️ [SIGNAL_IGNORED] 15-min trade exit cooldown active (14m 60s remaining after trade exit). Ignoring signal.
 [6/10/2026, 17:10:23] [FULL_AUDIT] ℹ️ [SIGNAL_IGNORED] Trading cutoff time reached (3:10 PM). Ignoring new signal.
+[12/10/2026, 11:37:05] [TEST] ℹ️ [AUTO_SHUTDOWN_SCHEDULED] 🛑 [DAILY QUOTA REACHED] 3 trades completed today (3/3). Initiating safe Server & VM shutdown in 60 seconds...
+[12/10/2026, 11:37:11] [PAPER] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹124.62 (PROFIT_₹2000_LOCK_₹1600) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 11:37:13] [PAPER] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹138.46 (PROFIT_₹3000_LOCK_₹2500) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 11:37:29] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹486.77 (PROFIT_₹1000_LOCK_₹700) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 11:37:31] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹494.46 (PROFIT_₹1500_LOCK_₹1200) | Zero Dhan API Modify Messages Sent.
+[12/10/2026, 11:37:33] [REAL_TRADE] ℹ️ [SL_TRAILED_INTERNAL_MEMORY] ⚡ [INTERNAL SL TRAILED] Memory SL updated to ₹500.62 (PROFIT_₹2000_LOCK_₹1600) | Zero Dhan API Modify Messages Sent.
