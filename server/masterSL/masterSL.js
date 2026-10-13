@@ -48,7 +48,9 @@ class MasterTrailingEngine {
 
     saveTradeHistory() {
         try {
-            fs.writeFileSync(TRADE_HISTORY_FILE, JSON.stringify(this.tradeHistory, null, 2), 'utf-8');
+            // Persist ONLY real broker trades (test / paper / audit trades never touch disk)
+            const realTrades = this.tradeHistory.filter(t => t.envName === "REAL_TRADE");
+            fs.writeFileSync(TRADE_HISTORY_FILE, JSON.stringify(realTrades, null, 2), 'utf-8');
         } catch (e) {
             console.error(`❌ [MASTER SL] Could not save trade history to disk: ${e.message}`);
         }
@@ -178,15 +180,15 @@ class MasterTrailingEngine {
         const maxLossRupees = Number(cfg.maxLossPerTrade || 300);
         const riskPoints = Number((maxLossRupees / lotSize).toFixed(2));
 
-        const initialSl = isOptionTrade || optionType === "CE" 
-            ? Number((entryPrice - riskPoints).toFixed(2)) 
+        const initialSl = isOptionTrade || optionType === "CE"
+            ? Number((entryPrice - riskPoints).toFixed(2))
             : Number((entryPrice + riskPoints).toFixed(2));
 
         // Target Points based on maxTargetPerTrade (default ₹5,000 profit target)
         const maxTargetRupees = Number(cfg.maxTargetPerTrade || 5000);
         const targetPoints = Number((maxTargetRupees / lotSize).toFixed(2));
-        const targetPrice = isOptionTrade || optionType === "CE" 
-            ? Number((entryPrice + targetPoints).toFixed(2)) 
+        const targetPrice = isOptionTrade || optionType === "CE"
+            ? Number((entryPrice + targetPoints).toFixed(2))
             : Number((entryPrice - targetPoints).toFixed(2));
 
         return { initialSl, riskPoints, targetPrice, targetPoints };
@@ -517,9 +519,33 @@ class MasterTrailingEngine {
             if (isCloseSuccessful || !pos.handlers || typeof pos.handlers.closeOrder !== 'function') {
                 pos.status = "CLOSED";
                 pos.exitError = null;
-                this.tradeHistory.push({ ...pos });
-                if (this.tradeHistory.length > 1000) this.tradeHistory.shift();
-                this.saveTradeHistory();
+                // Prevent duplicate trade-history entries
+                const existingTrade = this.tradeHistory.some(t =>
+                    (pos.tradeId && t.tradeId === pos.tradeId) ||
+                    (pos.orderId && t.orderId === pos.orderId)
+                );
+
+                if (!existingTrade) {
+                    this.tradeHistory.push({ ...pos });
+
+                    if (this.tradeHistory.length > 1000) {
+                        this.tradeHistory.shift();
+                    }
+
+                    this.saveTradeHistory();
+
+                    logger.logInfo(
+                        envName,
+                        "TRADE_HISTORY_SAVED",
+                        `Trade saved: ${pos.tradeId} | Order: ${pos.orderId}`
+                    );
+                } else {
+                    logger.logInfo(
+                        envName,
+                        "DUPLICATE_TRADE_SAVE_BLOCKED",
+                        `Duplicate history entry blocked: ${pos.tradeId} | Order: ${pos.orderId}`
+                    );
+                }
                 const closedPosition = { ...pos };
                 this.activePosition = null;
                 this.lastExitTimestamp = Date.now();
@@ -598,8 +624,8 @@ class MasterTrailingEngine {
                 for (const rule of sortedRupeeRules) {
                     if (currentProfitRupees >= rule.targetRupees) {
                         const lockPts = Number((rule.lockRupees / qty).toFixed(2));
-                        const newSlPrice = isOptionBuying 
-                            ? Number((pos.entryPrice + lockPts).toFixed(2)) 
+                        const newSlPrice = isOptionBuying
+                            ? Number((pos.entryPrice + lockPts).toFixed(2))
                             : Number((pos.entryPrice - lockPts).toFixed(2));
 
                         if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
@@ -612,7 +638,7 @@ class MasterTrailingEngine {
             } else if (percentRules.length > 0) {
                 // PERCENTAGE-BASED TRAILING RULES (Target % Hit -> SL Lock %)
                 const targetPoints = Number(
-                    pos.targetPoints || 
+                    pos.targetPoints ||
                     (pos.strikeInfo?.optionTR5 ? Math.abs(pos.strikeInfo.optionTR5 - pos.entryPrice) : 0) ||
                     (pos.levels?.riskPoints ? (pos.levels.riskPoints * 3) : 50)
                 );
@@ -623,8 +649,8 @@ class MasterTrailingEngine {
                     const reqTargetPts = (targetPoints * rule.targetPercent) / 100;
                     if (pnlDiff >= reqTargetPts) {
                         const lockPts = Number(((targetPoints * rule.lockPercent) / 100).toFixed(2));
-                        const newSlPrice = isOptionBuying 
-                            ? Number((pos.entryPrice + lockPts).toFixed(2)) 
+                        const newSlPrice = isOptionBuying
+                            ? Number((pos.entryPrice + lockPts).toFixed(2))
                             : Number((pos.entryPrice - lockPts).toFixed(2));
 
                         if (isOptionBuying ? (newSlPrice > pos.currentSl) : (newSlPrice < pos.currentSl)) {
