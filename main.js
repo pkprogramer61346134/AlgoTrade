@@ -2,18 +2,15 @@
  * AlgoTrade Master Control Loop (main.js)
  * Location: C:\AlgoTrade\main.js
  *
- * Integrated Components:
- * 1. Master System Config (`server/main_config.json` via `config_manager.js`) — single source of truth
- * 2. Time-based 15-minute Candle Evaluator using `getCandlesBefore`
- * 3. Strategy Consensus Engine (`utility/usedfull/Engines/consensusEngine.js`)
- * 4. MasterSL Real Trading Engine (`server/masterSL.js`)
- * 5. UI Dashboard Server (`server/ui_server.js`)
- *
  * Startup Gate:
- *   - Dhan token generation को maximum 10 बार retry करता है
- *   - 10 बार में भी fail → process.exit(1)
- *   - Token मिलने के बाद ही UI / live tick / consensus loop शुरू होते हैं
+ *   1. सबसे पहले `candle_data` folder का content delete होता है (stale cache clean)
+ *   2. फिर Dhan token generation (max 10 retries)
+ *   3. 10 बार में भी fail → process.exit(1)
+ *   4. Token मिलने के बाद ही UI / live tick / consensus loop शुरू होते हैं
  */
+
+const fs = require('fs');
+const path = require('path');
 
 const mainConfig = require('./server/config_manager');
 const masterSL = require('./server/masterSL');
@@ -29,6 +26,9 @@ const RETRY_DELAY_MS = 1000;
 // Token generation retry settings
 const MAX_TOKEN_ATTEMPTS = 10;
 const TOKEN_RETRY_DELAY_MS = 3000;
+
+// Candle cache folder to clear on every startup
+const CANDLE_DATA_DIR = path.join(__dirname, 'candle_data');
 
 let latestLivePrice = 0;
 let latestTickTime = null;
@@ -54,7 +54,7 @@ let uiServerInstance = null;
 //  TOKEN STATUS & SYSTEM HEALTH
 // ==========================================================
 let tokenStatus = {
-    state: "PENDING",           // PENDING | GENERATING | SUCCESS | FAILED
+    state: "PENDING",
     attempts: 0,
     maxAttempts: MAX_TOKEN_ATTEMPTS,
     message: "Waiting to start...",
@@ -63,7 +63,7 @@ let tokenStatus = {
 };
 
 let lastCycleStatus = {
-    state: "PENDING",           // PENDING | RUNNING | SUCCESS | ERROR
+    state: "PENDING",
     message: "No cycle yet",
     time: null
 };
@@ -76,6 +76,56 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
     console.error('💥 [PROCESS GUARD] Intercepted Uncaught Exception:', err?.message || err);
 });
+
+/* ==========================================================
+ *  CANDLE CACHE CLEANUP (on startup)
+ * ========================================================== */
+
+/**
+ * `candle_data` folder का सारा content delete करो (folder खुद रहेगा)।
+ * ये हर startup पर चलेगा ताकि stale cache से कोई गलत signal न हो।
+ */
+function clearCandleCacheOnStartup() {
+    console.log('==========================================================================');
+    console.log('🧹 [STARTUP CLEANUP] Clearing candle_data cache...');
+    console.log(`   Target: ${CANDLE_DATA_DIR}`);
+
+    try {
+        // अगर folder नहीं है, तो बना दो (empty)
+        if (!fs.existsSync(CANDLE_DATA_DIR)) {
+            fs.mkdirSync(CANDLE_DATA_DIR, { recursive: true });
+            console.log('   ✅ Folder was missing — created empty.');
+            return;
+        }
+
+        const entries = fs.readdirSync(CANDLE_DATA_DIR);
+        let deletedFiles = 0;
+        let deletedDirs = 0;
+
+        for (const entry of entries) {
+            const fullPath = path.join(CANDLE_DATA_DIR, entry);
+            try {
+                const stat = fs.statSync(fullPath);
+                if (stat.isDirectory()) {
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                    deletedDirs++;
+                } else {
+                    fs.unlinkSync(fullPath);
+                    deletedFiles++;
+                }
+            } catch (err) {
+                console.warn(`   ⚠️ Could not delete ${entry}: ${err.message}`);
+            }
+        }
+
+        console.log(`   ✅ Deleted ${deletedFiles} files, ${deletedDirs} sub-folders.`);
+        console.log('==========================================================================\n');
+    } catch (err) {
+        console.error(`   ❌ [CLEANUP ERROR] Failed to clear candle_data: ${err.message}`);
+        console.error('==========================================================================\n');
+        // Do not throw — let the system continue (folder may be re-created later)
+    }
+}
 
 /**
  * Start UI Dashboard Server.
@@ -146,9 +196,6 @@ function isOrderIgnored(result) {
     return String(result.status || '').toLowerCase() === 'ignored';
 }
 
-/**
- * Retry up to MAX_ORDER_ATTEMPTS times on failure.
- */
 async function processSignalWithRetry(signal, scrip) {
     for (let attempt = 1; attempt <= MAX_ORDER_ATTEMPTS; attempt++) {
         console.log(`📤 [MASTER SL] Attempt ${attempt}/${MAX_ORDER_ATTEMPTS} | Signal: ${signal.consensus}`);
@@ -311,9 +358,6 @@ async function runFifteenMinuteEvaluation() {
     }
 }
 
-/**
- * Schedule clock-aligned 15-minute loop.
- */
 function scheduleClockAlignedLoop(intervalMins = INTERVAL_MINUTES) {
     const getMsToNextBoundary = () => {
         const now = new Date();
@@ -338,7 +382,20 @@ function scheduleClockAlignedLoop(intervalMins = INTERVAL_MINUTES) {
         cycleTimer = setTimeout(runCycleAndScheduleNext, msToNext);
     };
 
-    runCycleAndScheduleNext();
+    // =========================================================
+    // STARTUP BEHAVIOR CHANGE:
+    // Startup पर पहला cycle तुरंत नहीं चलेगा।
+    // सिर्फ़ अगली 15-min clock boundary पर पहला cycle चलेगा।
+    // इससे fresh closed candle मिलेगी और stale signal से trade नहीं होगी।
+    // =========================================================
+    const msToFirstBoundary = getMsToNextBoundary();
+    const firstBoundaryStr = new Date(Date.now() + msToFirstBoundary).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+
+    console.log(`🕐 [STARTUP DELAY] First cycle will run at next 15-min boundary: ~${firstBoundaryStr} (in ${Math.round(msToFirstBoundary / 1000)}s)`);
+    console.log(`   (No immediate evaluation on startup — avoids stale-candle trades)`);
+
+    if (cycleTimer) clearTimeout(cycleTimer);
+    cycleTimer = setTimeout(runCycleAndScheduleNext, msToFirstBoundary);
 }
 
 /**
@@ -379,11 +436,20 @@ function startLiveTickStream() {
 
 /**
  * Start the Master System.
+ *
+ * STEP 0: candle_data cache clear
+ * STEP 1: token generation (max 10 retries)
+ * STEP 2: start UI / live tick / consensus loop
  */
 async function startMasterSystem() {
     console.log("==========================================================================");
     console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (15-MIN CLOCK-ALIGNED LOOP)");
     console.log("==========================================================================");
+
+    // =========================================================
+    // STEP 0: CLEAR CANDLE CACHE ON STARTUP
+    // =========================================================
+    clearCandleCacheOnStartup();
 
     // =========================================================
     // STEP 1: TOKEN GENERATION (HARD GATE — max 10 retries)
