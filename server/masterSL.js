@@ -5,13 +5,14 @@
  * Flow (on every BUY/SELL signal from Head Consensus Engine):
  *   1. Position check (server/position/dhan-position.js)  -> true = ignore signal
  *   2. Fund           (classoforder/founds/dhan-real-balance.js) -> real balance used directly
- *   3. Strike         (classoforder/strickprice/strike-price-selector.js) -> best strike for balance
- *   4. Lots           floor(balance / (LTP * lotSize))  -> 100% of fund
- *   5. Super Order    (classoforder/order/order-manager.js) with Entry, Target, SL, Trailing SL
+ *   3. Strike + Delta (classoforder/strickprice/strike-price-selector.js)
+ *   4. Delta-based Target/SL conversion (NIFTY points → Option premium points)
+ *   5. Super Order    (classoforder/order/order-manager.js)
  *
- * No live monitor. Trailing SL is handled by Dhan via Super Order trailingJump.
- * BUY signal -> buy CE, SELL signal -> buy PE.
- * Any API error stops the flow and is returned as-is.
+ * Delta-based Target/SL:
+ *   NIFTY target/sl points को option premium points में Delta से convert किया जाता है
+ *   Option Target = NIFTY Target × Delta
+ *   Option SL     = NIFTY SL × Delta
  */
 
 const configManager = require("./config_manager");
@@ -27,7 +28,6 @@ class MasterSL {
         this.lastTrade = null;
         this.lastEvent = null;
 
-        // Initial trade budget comes from main_config.json
         const cfg = configManager.getConfig();
         this.maxtread = Number(cfg.maxTradesPerRun ?? 3);
     }
@@ -82,7 +82,7 @@ class MasterSL {
             const balance = await dhanBalance.getBalance();
             this.log(`STEP 2 Balance: ₹${balance}`);
 
-            // STEP 3: BEST STRIKE FOR THIS BALANCE
+            // STEP 3: BEST STRIKE + DELTA
             const strike = await strikeSelector.getBestStrike(
                 {
                     securityId: scrip.securityId || 13,
@@ -96,8 +96,27 @@ class MasterSL {
             const entry = Number(strike.liveLtp);
             const lots = strike.lots;
             const lotSize = Number(strike.lotSize);
-            const targetPrice = Number((entry + cfg.targetPoints).toFixed(2));
-            const stopLossPrice = Number((entry - cfg.stopLossPoints).toFixed(2));
+
+            // Delta से NIFTY पॉइंट्स को Option premium पॉइंट्स में convert करो
+            const optionDelta = Number(strike.delta);
+
+            if (!Number.isFinite(optionDelta) || optionDelta <= 0 || optionDelta > 1) {
+                throw new Error(
+                    `[MASTER SL ERROR] Invalid Delta received from strike selector: ${strike.delta} (source=${strike.deltaSource || 'unknown'})`
+                );
+            }
+
+            const targetPremiumPoints = Number((cfg.targetPoints * optionDelta).toFixed(2));
+            const slPremiumPoints = Number((cfg.stopLossPoints * optionDelta).toFixed(2));
+
+            const targetPrice = Number((entry + targetPremiumPoints).toFixed(2));
+            const stopLossPrice = Number((entry - slPremiumPoints).toFixed(2));
+
+            this.log(
+                `STEP 3.5 Delta=${optionDelta} [${strike.deltaSource || 'LIVE'}] | ` +
+                `NIFTY Target=${cfg.targetPoints}pts → Option Target=${targetPremiumPoints}pts | ` +
+                `NIFTY SL=${cfg.stopLossPoints}pts → Option SL=${slPremiumPoints}pts`
+            );
 
             // STEP 4: PLACE SUPER ORDER
             const order = await orderManager.placeSuperOrder({
@@ -124,13 +143,15 @@ class MasterSL {
                 targetPrice,
                 currentSl: stopLossPrice,
                 trailingJump: cfg.trailingJumpPoints,
+                delta: optionDelta,
+                deltaSource: strike.deltaSource || 'LIVE',
                 status: "PLACED"
             };
 
             this.log(
                 `STEP 5 Order placed: ${order.orderId} | ${strike.symbol} | Qty ${order.quantity} | ` +
                 `Entry ₹${entry} | Target ₹${targetPrice} | SL ₹${stopLossPrice} | ` +
-                `Trailing ${cfg.trailingJumpPoints}`
+                `Delta ${optionDelta} | Trailing ${cfg.trailingJumpPoints}`
             );
 
             this.maxtread = this.maxtread - 1;

@@ -5,6 +5,6 @@
 
 module.exports = {
     CLIENT_ID: "1101323815",
-    ACCESS_TOKEN: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJ1c2VyUmVnaW9uIjoiUjEiLCJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzkxOTk0MjQ4LCJpYXQiOjE3OTE5MDc4NDgsInRva2VuQ29uc3VtZXJUeXBlIjoiQVBQIiwiZGhhbkNsaWVudElkIjoiMTEwMTMyMzgxNSJ9.40w6yGbfwj0ZA_HhA9z0TUe-KEQs0QdA5XQFePUqM5b_5MH0T8p4xwvGnUtXoBdPqo7eUbrkOt-Mj5ZHKPlTNQ",
+    ACCESS_TOKEN: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJ1c2VyUmVnaW9uIjoiUjEiLCJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzkxOTk3MzI2LCJpYXQiOjE3OTE5MTA5MjYsInRva2VuQ29uc3VtZXJUeXBlIjoiQVBQIiwiZGhhbkNsaWVudElkIjoiMTEwMTMyMzgxNSJ9.WahaS8CQ5hT_fQ1E0xKasbEadKqt1kBu-9XFVUrWjpzznlX2g0rClIDKqSeWh0D1g5MNX2Oo_bOrhS5-ca3b9w",
     BASE_URL: "https://api.dhan.co/v2"
 };

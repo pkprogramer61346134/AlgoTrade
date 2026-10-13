@@ -8,7 +8,9 @@
  * - Calculates Lot Quantity (lots * lotSize, e.g. 1 lot Nifty = 65 Qty).
  * - Selects exact ATM strike or closest budget-friendly near-ATM strike.
  * 
- * STRICT RULE: ZERO dummy/fallback data. Uses 100% real live Dhan API data.
+ * Delta handling:
+ * - Live market में Dhan से असली Delta आता है।
+ * - Market बंद / zero Greeks पर ATM-distance से estimate किया जाता है।
  */
 
 const { DhanMarketData } = require("../dhan-market-data");
@@ -16,6 +18,24 @@ const { DhanFunds } = require("../dhan-funds");
 
 let moduleOcCache = {};
 let moduleOcCacheTime = 0;
+
+/**
+ * Dhan response में delta 0 / missing हो तो ATM-distance से estimate करो।
+ * ये केवल fallback है — live market में असली Delta ही use होता है।
+ */
+function estimateDelta(strikePrice, spotPrice) {
+    const gap = Math.abs(strikePrice - spotPrice);
+
+    if (gap <= 50) return 0.50;
+    if (gap <= 100) return 0.45;
+    if (gap <= 150) return 0.40;
+    if (gap <= 200) return 0.35;
+    if (gap <= 300) return 0.30;
+    if (gap <= 400) return 0.25;
+    if (gap <= 500) return 0.20;
+    if (gap <= 700) return 0.15;
+    return 0.10;
+}
 
 class StrikeSelector {
     constructor(options = {}) {
@@ -32,18 +52,6 @@ class StrikeSelector {
         return res;
     }
 
-    /**
-     * Select Best Strike Price for trading options
-     * 
-     * @param {Object} params
-     * @param {number} [params.securityId=13] - Dhan Scrip ID (Default: 13 for Nifty 50)
-     * @param {string} [params.exchangeSegment="IDX_I"] - Exchange Segment (Default: IDX_I)
-     * @param {string} params.optionType - 'CE' or 'PE' (Required)
-     * @param {number} [params.lots=1] - Number of lots (Default: 1)
-     * @param {number} [params.lotSize=65] - Quantity per lot (Default: 65 for Nifty)
-     * @param {number} [params.maxBudget=null] - Max available capital in ₹ (Optional, auto-fetched if null)
-     * @returns {Promise<Object>} Selected Strike details
-     */
     async selectBestStrike(params = {}) {
         const securityId = Number(params.securityId || 13);
         const exchangeSegment = params.exchangeSegment || "IDX_I";
@@ -91,12 +99,11 @@ class StrikeSelector {
             };
         }
 
-        // 1. Resolve Available Budget (via amountPercent / amount% OR maxBudget OR auto 100% Dhan funds)
+        // 1. Resolve Available Budget
         let availableBudget = null;
         let usedPercent = null;
         let liveAccountBalance = null;
 
-        // Parse amountPercent or amount% if provided (e.g. "100%", "50%", 50, 100)
         let pctRaw = params.amountPercent !== undefined ? params.amountPercent : params["amount%"];
         if (pctRaw !== undefined && pctRaw !== null) {
             const parsedPct = parseFloat(String(pctRaw).replace("%", "").trim());
@@ -106,7 +113,6 @@ class StrikeSelector {
         }
 
         if (usedPercent !== null) {
-            // Fetch live Dhan balance and calculate percent of funds
             const fundRes = await this.funds.getFundLimits();
             if (fundRes.status !== "success" || !fundRes.data) {
                 throw new Error(`[STRIKE SELECTOR ERROR] Failed to fetch Dhan account funds: ${fundRes.message || "Unknown error"}`);
@@ -114,10 +120,8 @@ class StrikeSelector {
             liveAccountBalance = Number(fundRes.data.availabelBalance || fundRes.data.withdrawableBalance || 0);
             availableBudget = (liveAccountBalance * usedPercent) / 100;
         } else if (params.maxBudget !== undefined && params.maxBudget !== null) {
-            // Manual numeric budget passed (e.g. maxBudget: 6000 or 1000)
             availableBudget = Number(params.maxBudget);
         } else {
-            // Default: Auto-fetch 100% of Dhan account funds
             usedPercent = 100;
             const fundRes = await this.funds.getFundLimits();
             if (fundRes.status !== "success" || !fundRes.data) {
@@ -127,7 +131,7 @@ class StrikeSelector {
             availableBudget = liveAccountBalance;
         }
 
-        // 2. Fetch Option Chain Matrix (cached for 3 seconds for performance)
+        // 2. Fetch Option Chain Matrix (cached 3s)
         const now = Date.now();
         const cacheKey = `${securityId}_${exchangeSegment}`;
         let ocData = null;
@@ -171,28 +175,15 @@ class StrikeSelector {
             throw new Error("[STRIKE SELECTOR ERROR] Option Chain matrix is empty");
         }
 
-        // 4. Find ATM Strike (closest to Spot Price)
-        let atmIndex = 0;
-        let minDiff = Infinity;
-        allStrikes.forEach((item, idx) => {
-            const diff = Math.abs(item.strike - spotPrice);
-            if (diff < minDiff) {
-                minDiff = diff;
-                atmIndex = idx;
-            }
-        });
-
-        // Helper to extract option side data
         const getOptionSide = (strikeKey) => {
             const node = ocMap[strikeKey];
             if (!node) return null;
             return optionType === "CE" ? node.ce : node.pe;
         };
 
-        // Apply 15% Fee & STT Buffer to safe available budget to guarantee Dhan RMS acceptance
         const safeBudget = (availableBudget !== null && availableBudget > 0) ? Number((availableBudget * 0.85).toFixed(2)) : null;
 
-        // 5. Search all valid strikes in Option Chain that fit within safeBudget
+        // 5. Valid candidates within budget
         const validCandidates = [];
 
         for (const item of allStrikes) {
@@ -224,14 +215,12 @@ class StrikeSelector {
         let selectedReqMargin = 0;
 
         if (validCandidates.length > 0) {
-            // Prefer Near-ATM and ITM candidates within 500 points of Spot Price
             const nearAtmOrItmCandidates = validCandidates.filter(c => {
                 return c.distFromSpot <= 500 && (c.isItm || c.distFromSpot <= 50);
             });
 
             const poolToSearch = nearAtmOrItmCandidates.length > 0 ? nearAtmOrItmCandidates : validCandidates;
 
-            // Sort by highest reqMargin (best capital utilization <= safeBudget)
             poolToSearch.sort((a, b) => b.reqMargin - a.reqMargin);
 
             const bestCandidate = poolToSearch[0];
@@ -241,11 +230,9 @@ class StrikeSelector {
             selectedReqMargin = bestCandidate.reqMargin;
         }
 
-        // If no budget-friendly strike found at all (e.g. balance is insufficient for 1 lot + STT/brokerage fees), throw error
         if (!selectedItem || !selectedSide || !selectedSide.security_id) {
-            const reqMarginMsg = atmReqMargin > 0 ? `Required: ~₹${atmReqMargin.toFixed(2)} for ATM strike (${atmItem.strike} ${optionType} @ ₹${atmLtp})` : '';
             const availMsg = availableBudget ? `Available Balance: ₹${availableBudget.toFixed(2)} (Safe Trade Limit with STT/Fees Buffer: ₹${safeBudget || 0})` : 'No balance available';
-            throw new Error(`[STRIKE SELECTOR ERROR] Insufficient balance for ${lots} lot(s) (${totalQty} Qty) of ${optionType}! ${availMsg}. ${reqMarginMsg}. Please add funds to your Dhan account.`);
+            throw new Error(`[STRIKE SELECTOR ERROR] Insufficient balance for ${lots} lot(s) (${totalQty} Qty) of ${optionType}! ${availMsg}. Please add funds to your Dhan account.`);
         }
 
         const secId = String(selectedSide.security_id);
@@ -254,6 +241,24 @@ class StrikeSelector {
         const realContractLotSize = Number(selectedSide.lot_size || selectedSide.lotSize || lotSize || 65);
         const realTotalQty = lots * realContractLotSize;
         const finalReqMargin = selectedLtp * realTotalQty;
+
+        // Delta: live value → else estimate
+        const rawDelta = selectedSide.greeks?.delta;
+        const numericDelta = Number(rawDelta);
+        let finalDelta;
+        let deltaSource;
+
+        if (rawDelta === undefined || rawDelta === null || !Number.isFinite(numericDelta) || numericDelta === 0) {
+            finalDelta = estimateDelta(strikePrice, spotPrice);
+            deltaSource = 'ESTIMATED';
+            console.warn(
+                `[DELTA ESTIMATE] Dhan returned delta=${rawDelta} for ${strikePrice} ${optionType} ` +
+                `(ATM gap = ${Math.abs(strikePrice - spotPrice)}). Using estimate ${finalDelta}.`
+            );
+        } else {
+            finalDelta = numericDelta;
+            deltaSource = 'LIVE';
+        }
 
         return {
             status: "success",
@@ -276,12 +281,12 @@ class StrikeSelector {
             liveAccountBalance: liveAccountBalance !== null ? Number(liveAccountBalance.toFixed(2)) : null,
             bid: Number(selectedSide.top_bid_price || 0),
             ask: Number(selectedSide.top_ask_price || 0),
-            delta: Number(selectedSide.greeks?.delta || 0)
+            delta: finalDelta,
+            deltaSource
         };
     }
 }
 
-// Global helper function for quick one-line calling from any file
 async function selectBestStrike(params) {
     const selector = new StrikeSelector();
     return await selector.selectBestStrike(params);

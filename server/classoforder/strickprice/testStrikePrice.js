@@ -1,3 +1,10 @@
+/**
+ * Test script for Strike Price Selector
+ * Location: C:\AlgoTrade\server\classoforder\strickprice\testStrikePrice.js
+ *
+ * चलाओ: node server/classoforder/strickprice/testStrikePrice.js
+ */
+
 const strikeSelector = require('./strike-price-selector');
 
 async function testStrikePrice() {
@@ -9,7 +16,7 @@ async function testStrikePrice() {
 
         const amount = 14000;
         const optionType = 'CE';
-        const spotPrice = 25000;
+        const spotPrice = 22721;
 
         console.log('Testing Best Strike Price Selection...\n');
 
@@ -25,7 +32,12 @@ async function testStrikePrice() {
         console.log('Spot Price:', spotPrice);
         console.log('Option Type:', optionType);
         console.log('Budget:', `₹${amount}`);
+        console.log('---');
         console.log('Result:', result);
+        console.log('---');
+        console.log('Delta        :', result.delta);
+        console.log('Delta Source :', result.deltaSource || 'LIVE');
+        console.log('Selected     :', `${result.selectedStrike} ${result.optionType} @ ₹${result.liveLtp}`);
         console.log('Test Status: SUCCESS');
         console.log('=======================================');
     } catch (error) {
