@@ -50,6 +50,24 @@ let latestCycleInfo = { date: "--", time: "--" };
 
 let uiServerInstance = null;
 
+// ==========================================================
+//  TOKEN STATUS & SYSTEM HEALTH
+// ==========================================================
+let tokenStatus = {
+    state: "PENDING",           // PENDING | GENERATING | SUCCESS | FAILED
+    attempts: 0,
+    maxAttempts: MAX_TOKEN_ATTEMPTS,
+    message: "Waiting to start...",
+    lastAttemptTime: null,
+    successTime: null
+};
+
+let lastCycleStatus = {
+    state: "PENDING",           // PENDING | RUNNING | SUCCESS | ERROR
+    message: "No cycle yet",
+    time: null
+};
+
 // Process-Level Global Crash Protection Handlers
 process.on('unhandledRejection', (reason) => {
     console.error('⚠️ [PROCESS GUARD] Intercepted Unhandled Promise Rejection:', reason?.message || reason);
@@ -83,16 +101,30 @@ function getLiveMarketData() {
         : Number(mainCandle?.close || 0);
 
     const masterStat = masterSL.getStatus();
+    const uiRunning = Boolean(uiServerInstance);
+    const liveTickRunning = Boolean(livePriceTracker);
+    const consensusLoopRunning = Boolean(cycleTimer);
 
     return {
         cycle: {
             date: latestCycleInfo.date,
             time: latestCycleInfo.time,
-            isEvaluating
+            isEvaluating,
+            status: lastCycleStatus
         },
         realTradeEnabled: Boolean(mainConfig.getConfig().realTradeEnabled),
         consensus: latestConsensusResult,
-        masterSL: masterStat
+        masterSL: masterStat,
+
+        // System Health & Token Status
+        tokenStatus: tokenStatus,
+        health: {
+            uiServer: uiRunning,
+            liveTick: liveTickRunning,
+            consensusLoop: consensusLoopRunning,
+            uiPort: UI_PORT,
+            startedAt: tokenStatus.successTime || null
+        }
     };
 }
 
@@ -159,26 +191,32 @@ async function processSignalWithRetry(signal, scrip) {
  *  TOKEN GENERATION WITH RETRY (max 10 attempts)
  * ========================================================== */
 
-/**
- * Dhan token generation को maximum MAX_TOKEN_ATTEMPTS बार retry करो।
- * हर attempt के बीच TOKEN_RETRY_DELAY_MS का delay।
- * Success → return true
- * All attempts failed → return false
- */
 async function ensureTokenWithRetry() {
     console.log(`🔑 [TOKEN GATE] Ensuring valid Dhan token (max ${MAX_TOKEN_ATTEMPTS} attempts)...`);
 
+    tokenStatus.state = "GENERATING";
+    tokenStatus.attempts = 0;
+    tokenStatus.message = `Starting token generation (max ${MAX_TOKEN_ATTEMPTS} attempts)...`;
+    tokenStatus.lastAttemptTime = null;
+    tokenStatus.successTime = null;
+
     for (let attempt = 1; attempt <= MAX_TOKEN_ATTEMPTS; attempt++) {
+        tokenStatus.attempts = attempt;
+        tokenStatus.lastAttemptTime = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+
         try {
             console.log(`\n🔁 [TOKEN ATTEMPT ${attempt}/${MAX_TOKEN_ATTEMPTS}]`);
+            tokenStatus.message = `Attempt ${attempt}/${MAX_TOKEN_ATTEMPTS}: Generating...`;
             await ensureValidDhanToken();
+
             console.log(`✅ [TOKEN SUCCESS] Valid Dhan token obtained on attempt ${attempt}.`);
+            tokenStatus.state = "SUCCESS";
+            tokenStatus.message = `Token generated successfully on attempt ${attempt}/${MAX_TOKEN_ATTEMPTS}`;
+            tokenStatus.successTime = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
             return true;
         } catch (err) {
-            console.error(
-                `❌ [TOKEN FAILED] Attempt ${attempt}/${MAX_TOKEN_ATTEMPTS}:`,
-                err.message
-            );
+            console.error(`❌ [TOKEN FAILED] Attempt ${attempt}/${MAX_TOKEN_ATTEMPTS}:`, err.message);
+            tokenStatus.message = `Attempt ${attempt} failed: ${err.message}`;
 
             if (attempt < MAX_TOKEN_ATTEMPTS) {
                 console.log(`⏳ Waiting ${TOKEN_RETRY_DELAY_MS / 1000}s before next attempt...`);
@@ -187,9 +225,9 @@ async function ensureTokenWithRetry() {
         }
     }
 
-    console.error(
-        `\n🛑 [TOKEN RETRIES EXHAUSTED] All ${MAX_TOKEN_ATTEMPTS} token generation attempts failed.`
-    );
+    console.error(`\n🛑 [TOKEN RETRIES EXHAUSTED] All ${MAX_TOKEN_ATTEMPTS} token generation attempts failed.`);
+    tokenStatus.state = "FAILED";
+    tokenStatus.message = `All ${MAX_TOKEN_ATTEMPTS} attempts failed. Process will exit.`;
     return false;
 }
 
@@ -220,6 +258,10 @@ async function runFifteenMinuteEvaluation() {
 
         latestCycleInfo = { date: currentDateStr, time: currentTimeStr };
 
+        lastCycleStatus.state = "RUNNING";
+        lastCycleStatus.message = `Evaluating at ${currentDateStr} ${currentTimeStr}...`;
+        lastCycleStatus.time = `${currentDateStr} ${currentTimeStr}`;
+
         console.log(`\n--------------------------------------------------------------------------`);
         console.log(`⏰ [15-MIN CYCLE] ${currentDateStr} ${currentTimeStr}`);
         console.log(`📊 [SCRIP] ${scrip.symbol || scrip.securityId} | Interval: ${INTERVAL_MINUTES}m`);
@@ -243,6 +285,9 @@ async function runFifteenMinuteEvaluation() {
 
         console.log(`🧠 [CONSENSUS] ${consensusResult.consensus} | Strategy: ${consensusResult.strategyName || 'None'} | Entry: ₹${consensusResult.entry || 0}`);
 
+        lastCycleStatus.state = "SUCCESS";
+        lastCycleStatus.message = `Last cycle: ${consensusResult.consensus || 'NO_SIGNAL'}`;
+
         if (!cfg.realTradeEnabled) {
             console.log('⏸️ [TRADING DISABLED] Signal will not be submitted.');
             return;
@@ -258,6 +303,8 @@ async function runFifteenMinuteEvaluation() {
 
     } catch (err) {
         console.error("❌ [CYCLE ERROR]:", err.message);
+        lastCycleStatus.state = "ERROR";
+        lastCycleStatus.message = `Cycle error: ${err.message}`;
     } finally {
         isEvaluating = false;
         console.log('🔓 [CYCLE RELEASED] Ready for next scheduled cycle.');
@@ -332,11 +379,6 @@ function startLiveTickStream() {
 
 /**
  * Start the Master System.
- *
- * HARD GATE:
- *   - पहले token generation (max 10 attempts)
- *   - अगर token नहीं मिला → process.exit(1)
- *   - Token मिलने के बाद ही UI/live tick/consensus loop
  */
 async function startMasterSystem() {
     console.log("==========================================================================");

@@ -26,6 +26,7 @@ async function updateDashboard() {
         if (res.status !== "success") return;
         const data = res.data || {};
 
+        renderHealth(data.tokenStatus, data.health, data.cycle);
         renderCycle(data.cycle);
         renderConsensus(data.consensus);
         renderMasterSL(data.masterSL);
@@ -45,6 +46,98 @@ function renderCycle(cycle = {}) {
         const busy = Boolean(cycle.isEvaluating);
         pill.innerText = busy ? "EVALUATING" : "IDLE";
         pill.className = `status-pill ${busy ? 'badge-warning' : 'badge-neutral'}`;
+    }
+}
+
+/* ---------- SYSTEM HEALTH & TOKEN STATUS ---------- */
+function renderHealth(tokenStatus = {}, health = {}, cycle = {}) {
+    // Overall health pill
+    const pill = document.getElementById("health-overall-pill");
+    if (pill) {
+        const tokenOk = tokenStatus.state === "SUCCESS";
+        const uiOk = Boolean(health.uiServer);
+        const tickOk = Boolean(health.liveTick);
+        const loopOk = Boolean(health.consensusLoop);
+        const allOk = tokenOk && uiOk && tickOk && loopOk;
+
+        if (allOk) {
+            pill.innerText = "✅ ALL SYSTEMS OK";
+            pill.className = "status-pill badge-success";
+        } else if (tokenStatus.state === "FAILED") {
+            pill.innerText = "❌ TOKEN FAILED";
+            pill.className = "status-pill badge-danger";
+        } else if (tokenStatus.state === "GENERATING") {
+            pill.innerText = "⏳ GENERATING TOKEN...";
+            pill.className = "status-pill badge-warning";
+        } else {
+            pill.innerText = "⚠️ PARTIAL";
+            pill.className = "status-pill badge-warning";
+        }
+    }
+
+    // Token state
+    const stateEl = document.getElementById("health-token-state");
+    if (stateEl) {
+        const s = tokenStatus.state || "PENDING";
+        if (s === "SUCCESS") {
+            stateEl.innerText = "✅ GENERATED";
+            stateEl.className = "rev-val text-success";
+        } else if (s === "FAILED") {
+            stateEl.innerText = "❌ FAILED";
+            stateEl.className = "rev-val text-danger";
+        } else if (s === "GENERATING") {
+            stateEl.innerText = "⏳ GENERATING...";
+            stateEl.className = "rev-val text-warning";
+        } else {
+            stateEl.innerText = "⏸️ PENDING";
+            stateEl.className = "rev-val text-muted";
+        }
+    }
+
+    setText("health-token-attempts",
+        tokenStatus.attempts != null
+            ? `${tokenStatus.attempts}/${tokenStatus.maxAttempts || 10}`
+            : "--");
+
+    setText("health-token-time", tokenStatus.successTime || "--");
+
+    const msgEl = document.getElementById("health-token-message");
+    if (msgEl) {
+        msgEl.innerText = tokenStatus.message || "--";
+        if (tokenStatus.state === "SUCCESS") msgEl.className = "rev-val text-success";
+        else if (tokenStatus.state === "FAILED") msgEl.className = "rev-val text-danger";
+        else if (tokenStatus.state === "GENERATING") msgEl.className = "rev-val text-warning";
+        else msgEl.className = "rev-val text-muted";
+    }
+
+    // Runtime components
+    setStatusField("health-ui-server", health.uiServer);
+    setStatusField("health-live-tick", health.liveTick);
+    setStatusField("health-consensus-loop", health.consensusLoop);
+    setText("health-ui-port", health.uiPort != null ? `:${health.uiPort}` : "--");
+
+    // Last cycle status
+    const cycleStatus = cycle.status || {};
+    const cycleEl = document.getElementById("health-cycle-status");
+    if (cycleEl) {
+        const s = cycleStatus.state || "PENDING";
+        cycleEl.innerText = cycleStatus.message || "--";
+        if (s === "SUCCESS") cycleEl.className = "rev-val text-success";
+        else if (s === "ERROR") cycleEl.className = "rev-val text-danger";
+        else if (s === "RUNNING") cycleEl.className = "rev-val text-warning";
+        else cycleEl.className = "rev-val text-muted";
+    }
+}
+
+function setStatusField(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (value) {
+        el.innerText = "✅ RUNNING";
+        el.className = "rev-val text-success";
+    } else {
+        el.innerText = "❌ STOPPED";
+        el.className = "rev-val text-danger";
     }
 }
 
