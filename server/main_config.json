@@ -10,9 +10,9 @@
 
   "orderExchangeSegment": "NSE_FNO",
 
-  "targetPoints": 10,
-  "stopLossPoints": 3,
-  "trailingJumpPoints": 0,
+  "targetPoints": 15,
+  "stopLossPoints": 5,
+  "trailingJumpPoints": 2,
 
-  "maxTradesPerRun": 4
+  "maxTradesPerRun": 3
 }

@@ -8,6 +8,11 @@
  * 3. Strategy Consensus Engine (`utility/usedfull/Engines/consensusEngine.js`)
  * 4. MasterSL Real Trading Engine (`server/masterSL.js`)
  * 5. UI Dashboard Server (`server/ui_server.js`)
+ *
+ * Startup Gate:
+ *   - Dhan token generation को maximum 10 बार retry करता है
+ *   - 10 बार में भी fail → process.exit(1)
+ *   - Token मिलने के बाद ही UI / live tick / consensus loop शुरू होते हैं
  */
 
 const mainConfig = require('./server/config_manager');
@@ -20,6 +25,10 @@ const INTERVAL_MINUTES = 15;
 const UI_PORT = 3000;
 const MAX_ORDER_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1000;
+
+// Token generation retry settings
+const MAX_TOKEN_ATTEMPTS = 10;
+const TOKEN_RETRY_DELAY_MS = 3000;
 
 let latestLivePrice = 0;
 let latestTickTime = null;
@@ -52,7 +61,6 @@ process.on('uncaughtException', (err) => {
 
 /**
  * Start UI Dashboard Server.
- * Passes getLiveMarketData so ui_server.js does NOT require('../main').
  */
 function startUIServer(port = UI_PORT) {
     if (!uiServerInstance) {
@@ -62,7 +70,7 @@ function startUIServer(port = UI_PORT) {
 }
 
 /**
- * Canonical dashboard payload — exact shape expected by public/app.js.
+ * Canonical dashboard payload.
  */
 function getLiveMarketData() {
     const mainCandle = latestConsensusResult?.evaluatedCandle
@@ -108,9 +116,6 @@ function isOrderIgnored(result) {
 
 /**
  * Retry up to MAX_ORDER_ATTEMPTS times on failure.
- * - success -> return immediately
- * - ignored -> return immediately (retrying is pointless)
- * - error / unknown -> retry up to MAX_ORDER_ATTEMPTS
  */
 async function processSignalWithRetry(signal, scrip) {
     for (let attempt = 1; attempt <= MAX_ORDER_ATTEMPTS; attempt++) {
@@ -148,6 +153,44 @@ async function processSignalWithRetry(signal, scrip) {
         `This cycle will end; next scheduled cycle will continue normally.`
     );
     return { success: false, attempts: MAX_ORDER_ATTEMPTS };
+}
+
+/* ==========================================================
+ *  TOKEN GENERATION WITH RETRY (max 10 attempts)
+ * ========================================================== */
+
+/**
+ * Dhan token generation को maximum MAX_TOKEN_ATTEMPTS बार retry करो।
+ * हर attempt के बीच TOKEN_RETRY_DELAY_MS का delay।
+ * Success → return true
+ * All attempts failed → return false
+ */
+async function ensureTokenWithRetry() {
+    console.log(`🔑 [TOKEN GATE] Ensuring valid Dhan token (max ${MAX_TOKEN_ATTEMPTS} attempts)...`);
+
+    for (let attempt = 1; attempt <= MAX_TOKEN_ATTEMPTS; attempt++) {
+        try {
+            console.log(`\n🔁 [TOKEN ATTEMPT ${attempt}/${MAX_TOKEN_ATTEMPTS}]`);
+            await ensureValidDhanToken();
+            console.log(`✅ [TOKEN SUCCESS] Valid Dhan token obtained on attempt ${attempt}.`);
+            return true;
+        } catch (err) {
+            console.error(
+                `❌ [TOKEN FAILED] Attempt ${attempt}/${MAX_TOKEN_ATTEMPTS}:`,
+                err.message
+            );
+
+            if (attempt < MAX_TOKEN_ATTEMPTS) {
+                console.log(`⏳ Waiting ${TOKEN_RETRY_DELAY_MS / 1000}s before next attempt...`);
+                await sleep(TOKEN_RETRY_DELAY_MS);
+            }
+        }
+    }
+
+    console.error(
+        `\n🛑 [TOKEN RETRIES EXHAUSTED] All ${MAX_TOKEN_ATTEMPTS} token generation attempts failed.`
+    );
+    return false;
 }
 
 /* ==========================================================
@@ -223,7 +266,6 @@ async function runFifteenMinuteEvaluation() {
 
 /**
  * Schedule clock-aligned 15-minute loop.
- * Runs ~2 seconds past each 15-min boundary (00, 15, 30, 45) to guarantee candle close.
  */
 function scheduleClockAlignedLoop(intervalMins = INTERVAL_MINUTES) {
     const getMsToNextBoundary = () => {
@@ -290,20 +332,34 @@ function startLiveTickStream() {
 
 /**
  * Start the Master System.
+ *
+ * HARD GATE:
+ *   - पहले token generation (max 10 attempts)
+ *   - अगर token नहीं मिला → process.exit(1)
+ *   - Token मिलने के बाद ही UI/live tick/consensus loop
  */
 async function startMasterSystem() {
     console.log("==========================================================================");
     console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (15-MIN CLOCK-ALIGNED LOOP)");
     console.log("==========================================================================");
-    console.log("🔑 Checking Dhan Access Token...");
 
-    try {
-        await ensureValidDhanToken();
-        console.log("✅ [DHAN AUTH] Token check completed.");
-    } catch (authErr) {
-        console.warn(`⚠️ [DHAN AUTH WARN] Token refresh notice: ${authErr.message}`);
+    // =========================================================
+    // STEP 1: TOKEN GENERATION (HARD GATE — max 10 retries)
+    // =========================================================
+    const tokenOk = await ensureTokenWithRetry();
+
+    if (!tokenOk) {
+        console.error("\n==========================================================================");
+        console.error("⛔ [FATAL] Cannot obtain valid Dhan token after 10 attempts.");
+        console.error("   → No API calls, no consensus loop, no UI will start.");
+        console.error("   → Fix the Dhan token issue and restart the process.");
+        console.error("==========================================================================\n");
+        process.exit(1);
     }
 
+    // =========================================================
+    // STEP 2: NOW SAFE TO START EVERYTHING
+    // =========================================================
     startLiveTickStream();
 
     const cfg = mainConfig.getConfig();
@@ -315,7 +371,7 @@ async function startMasterSystem() {
         interval: "15"
     };
 
-    // 1. Start UI Server (so dashboard is available immediately)
+    // 1. Start UI Server
     startUIServer(UI_PORT);
 
     // 2. Start clock-aligned 15-min loop
