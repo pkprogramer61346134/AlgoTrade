@@ -52,15 +52,6 @@ class BacktestEngine {
     /**
      * Stream historical candles step-by-step, calling consensus engine
      * with ONLY (securityId, exchangeSegment, interval, date, time).
-     *
-     * Params:
-     *   fromDate, toDate        — YYYY-MM-DD (required)
-     *   fromTime, toTime        — HH:MM:SS   (optional; default full day)
-     *   interval                — default "15"
-     *   maxTradesPerDay         — default 3
-     *   slPoints, targetPoints  — optional overrides (passed through to engine)
-     *
-     * onCandleTick(payload) — optional progress callback
      */
     async streamHistoricalCandles(params = {}, onCandleTick = null) {
         const fromDate = params.fromDate;
@@ -131,18 +122,18 @@ class BacktestEngine {
             const tickSecs = toSeconds(tick.time);
             const dayKey = tick.date || "DEFAULT";
 
+            const isLastCandleOfDay = (
+                tickSecs >= EOD_CUTOFF_SECS ||
+                i === candles.length - 1 ||
+                (i < candles.length - 1 && candles[i + 1].date !== tick.date)
+            );
+
             let closedTradeThisTick = null;
             let consensusResult = null;
 
             // 1. Active position हो तो exit check करो — उसी candle की high/low से
             if (activePosition) {
                 const isBUY = activePosition.type === "BUY";
-
-                const isLastCandleOfDay = (
-                    tickSecs >= EOD_CUTOFF_SECS ||
-                    i === candles.length - 1 ||
-                    (i < candles.length - 1 && candles[i + 1].date !== tick.date)
-                );
 
                 let isTargetHit = false;
                 let isSLHit = false;
@@ -211,6 +202,7 @@ class BacktestEngine {
             }
 
             // 3. नया position खोलो — अगर signal BUY/SELL है, cutoff और cooldown pass हैं
+            // EOD candle पर entry block — क्योंकि उस candle पर ही exit हो जाता और 0-pt trade बनती
             const currentDayTrades = dailyTradeCountMap[dayKey] || 0;
             const lastExitSecs = lastTradeExitSecsMap[dayKey];
             const cooldownSatisfied = (lastExitSecs === undefined || lastExitSecs === null)
@@ -219,15 +211,22 @@ class BacktestEngine {
             if (
                 !activePosition &&
                 cooldownSatisfied &&
-                (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL") &&
+                !isLastCandleOfDay &&
                 tickSecs <= ENTRY_CUTOFF_SECS &&
-                currentDayTrades < maxTradesPerDay
+                currentDayTrades < maxTradesPerDay &&
+                (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")
             ) {
                 dailyTradeCountMap[dayKey] = currentDayTrades + 1;
 
                 const type = consensusResult.consensus;
-                const entryPrice = Number((consensusResult.entry || candleClose).toFixed(2));
 
+                // ---- Entry price: engine से, कोई fallback नहीं ----
+                if (consensusResult.entry === null || consensusResult.entry === undefined) {
+                    throw new Error(`[BACKTEST] Engine gave no entry at ${tick.date} ${tick.time}`);
+                }
+                const entryPrice = Number(Number(consensusResult.entry).toFixed(2));
+
+                // ---- SL: override > engine > error ----
                 let slPrice;
                 if (slPointsInput !== null) {
                     slPrice = type === "BUY" ? entryPrice - slPointsInput : entryPrice + slPointsInput;
@@ -237,6 +236,7 @@ class BacktestEngine {
                     throw new Error(`[BACKTEST] Engine gave no SL and no slPoints override at ${tick.date} ${tick.time}`);
                 }
 
+                // ---- Target: override > engine > error ----
                 let targetPrice;
                 if (targetPointsInput !== null) {
                     targetPrice = type === "BUY" ? entryPrice + targetPointsInput : entryPrice - targetPointsInput;
