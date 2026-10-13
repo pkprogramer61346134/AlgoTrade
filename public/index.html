@@ -119,10 +119,27 @@
                 </div>
 
                 <div class="glass-card">
-                    <div class="reversal-grid">
+                    <h3 class="sub-title" style="margin-bottom: 0.75rem;">Runtime</h3>
+                    <div class="reversal-grid" style="margin-bottom: 1.25rem;">
                         <div class="reversal-item">
                             <span class="rev-label">Processing</span>
                             <span class="rev-val" id="msl-processing">false</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Trades Left</span>
+                            <span class="rev-val text-warning" id="msl-maxtread">--</span>
+                        </div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;">
+                            <span class="rev-label">Last Event</span>
+                            <span class="rev-val" id="msl-last-event">--</span>
+                        </div>
+                    </div>
+
+                    <h3 class="sub-title" style="margin-bottom: 0.75rem;">⚙️ Config (from main_config.json)</h3>
+                    <div class="reversal-grid">
+                        <div class="reversal-item">
+                            <span class="rev-label">Real Trade Enabled</span>
+                            <span class="rev-val" id="msl-real-trade-enabled">--</span>
                         </div>
                         <div class="reversal-item">
                             <span class="rev-label">Target Points</span>
@@ -136,9 +153,33 @@
                             <span class="rev-label">Trailing Jump (pts)</span>
                             <span class="rev-val text-info" id="msl-trailing-jump">--</span>
                         </div>
-                        <div class="reversal-item" style="grid-column: 1 / -1;">
-                            <span class="rev-label">Last Event</span>
-                            <span class="rev-val" id="msl-last-event">--</span>
+                        <div class="reversal-item">
+                            <span class="rev-label">Max Trades / Run</span>
+                            <span class="rev-val" id="msl-max-trades">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Order Exchange Segment</span>
+                            <span class="rev-val" id="msl-order-exchange">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Symbol</span>
+                            <span class="rev-val" id="msl-symbol">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Security ID</span>
+                            <span class="rev-val" id="msl-security-id">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Exchange Segment</span>
+                            <span class="rev-val" id="msl-exchange-segment">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Instrument</span>
+                            <span class="rev-val" id="msl-instrument">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Interval</span>
+                            <span class="rev-val" id="msl-interval">--</span>
                         </div>
                     </div>
                 </div>

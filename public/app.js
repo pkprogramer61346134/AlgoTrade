@@ -103,10 +103,11 @@ function renderConsensus(c = {}) {
 /* ---------- MASTER SL ---------- */
 function renderMasterSL(msl = {}) {
     const cfg = msl.config || {};
+    const stock = cfg.selectedStock || {};
+
+    // Runtime
     setText("msl-processing", String(Boolean(msl.isProcessing)));
-    setText("msl-target-points", cfg.targetPoints != null ? cfg.targetPoints : "--");
-    setText("msl-sl-points", cfg.stopLossPoints != null ? cfg.stopLossPoints : "--");
-    setText("msl-trailing-jump", cfg.trailingJumpPoints != null ? cfg.trailingJumpPoints : "--");
+    setText("msl-maxtread", msl.maxtread != null ? msl.maxtread : "--");
 
     const ev = msl.lastEvent || {};
     setText("msl-last-event", ev.time ? `${ev.time} — ${ev.message || ''}` : "--");
@@ -117,6 +118,20 @@ function renderMasterSL(msl = {}) {
         pill.innerText = busy ? "PROCESSING" : "IDLE";
         pill.className = `status-pill ${busy ? 'badge-warning' : 'badge-neutral'}`;
     }
+
+    // Config (from main_config.json)
+    setText("msl-real-trade-enabled", cfg.realTradeEnabled != null ? String(cfg.realTradeEnabled) : "--");
+    setText("msl-target-points", cfg.targetPoints != null ? cfg.targetPoints : "--");
+    setText("msl-sl-points", cfg.stopLossPoints != null ? cfg.stopLossPoints : "--");
+    setText("msl-trailing-jump", cfg.trailingJumpPoints != null ? cfg.trailingJumpPoints : "--");
+    setText("msl-max-trades", cfg.maxTradesPerRun != null ? cfg.maxTradesPerRun : "--");
+    setText("msl-order-exchange", cfg.orderExchangeSegment || "--");
+
+    setText("msl-symbol", stock.symbol || "--");
+    setText("msl-security-id", stock.securityId != null ? String(stock.securityId) : "--");
+    setText("msl-exchange-segment", stock.exchangeSegment || "--");
+    setText("msl-instrument", stock.instrument || "--");
+    setText("msl-interval", stock.interval != null ? `${stock.interval}m` : "--");
 
     renderActivePosition(msl.activePosition);
 }
