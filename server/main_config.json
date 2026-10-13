@@ -6,5 +6,13 @@
     "symbol": "NIFTY",
     "instrument": "INDEX",
     "interval": "15"
-  }
+  },
+
+  "orderExchangeSegment": "NSE_FNO",
+
+  "targetPoints": 10,
+  "stopLossPoints": 3,
+  "trailingJumpPoints": 0,
+
+  "maxTradesPerRun": 6
 }

@@ -1,18 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlgoTrade Pro - Realtime Trading Dashboard</title>
-    <!-- Google Fonts -->
+    <title>AlgoTrade Pro - Live Process Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body class="dark-theme">
     <div class="app-container">
-        <!-- HEADER / NAVIGATION -->
         <header class="app-header">
             <div class="brand-section">
                 <div class="brand-logo">
@@ -21,56 +23,53 @@
                 </div>
                 <div class="server-status">
                     <span class="status-dot pulsing"></span>
-                    <span id="server-status-text">SYSTEM ONLINE</span>
+                    <span>SYSTEM ONLINE</span>
                 </div>
             </div>
 
             <div class="header-center">
                 <div class="clock-display" id="clock-display">00:00:00 AM</div>
                 <div class="market-scrip-badge">
-                    <span class="scrip-icon">📈</span>
-                    <span id="scrip-symbol">NIFTY 50: <strong id="header-live-price">₹0.00</strong></span>
+                    <span class="scrip-icon">🕒</span>
+                    <span>Cycle: <strong id="cycle-datetime">--</strong></span>
                 </div>
             </div>
 
-            <div class="header-controls" style="display: none;">
+            <div class="header-controls">
                 <div class="control-toggle-group">
-                    <span class="toggle-label danger-label">Real Trade</span>
-                    <label class="switch danger-switch">
-                        <input type="checkbox" id="real-toggle" onchange="toggleRealTrade(this.checked)">
-                        <span class="slider round"></span>
-                    </label>
+                    <span class="toggle-label">Evaluating</span>
+                    <span class="status-pill badge-neutral" id="eval-status-pill">IDLE</span>
                 </div>
-
-                <button class="nav-link-btn restart-btn" onclick="openRestartModal()">
-                    <span class="btn-icon">🔄</span> Restart Server
-                </button>
             </div>
         </header>
 
-        <!-- MAIN UNIFIED DASHBOARD CONTENT -->
         <main class="dashboard-main">
 
-            <!-- 1. CENTRAL STRATEGY CONSENSUS HEAD SECTION -->
-            <section class="section-container consensus-head-section">
+            <!-- 1. CONSENSUS ENGINE OUTPUT -->
+            <section class="section-container">
                 <div class="glass-card consensus-head-card">
                     <div class="consensus-head-header">
                         <div class="head-title-group">
-                            <h2>🧠 Central Strategy Consensus Head</h2>
-                            <span class="head-subtitle">Evaluates All Technical Strategies in Master Control Loop</span>
+                            <h2>🧠 Consensus Engine Output</h2>
+                            <span class="head-subtitle">Latest 15-minute cycle evaluation result</span>
                         </div>
                         <div class="consensus-badge-container">
-                            <span id="consensus-signal-badge" class="badge-neutral badge-xl">⚪ NO SIGNAL / WAITING</span>
+                            <span id="consensus-signal-badge" class="badge-neutral badge-xl">⚪ NO SIGNAL /
+                                WAITING</span>
                         </div>
                     </div>
 
                     <div class="consensus-metrics-row">
                         <div class="metric-box">
-                            <span class="m-label">Live NIFTY Spot</span>
-                            <span class="m-val highlight" id="consensus-live-spot">₹0.00</span>
+                            <span class="m-label">Consensus</span>
+                            <span class="m-val" id="consensus-value">--</span>
                         </div>
                         <div class="metric-box">
-                            <span class="m-label">Entry Price</span>
+                            <span class="m-label">Strategy</span>
+                            <span class="m-val" id="consensus-strategy">--</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="m-label">Entry</span>
                             <span class="m-val" id="consensus-entry">--</span>
                         </div>
                         <div class="metric-box">
@@ -82,45 +81,29 @@
                             <span class="m-val text-danger" id="consensus-sl">--</span>
                         </div>
                         <div class="metric-box">
-                            <span class="m-label">Signal Wait Timer</span>
-                            <span class="m-val text-warning" id="consensus-wait-timer">--</span>
+                            <span class="m-label">Confidence</span>
+                            <span class="m-val" id="consensus-confidence">--</span>
                         </div>
                     </div>
 
-                    <!-- PROCESSED CANDLE OHLC SUMMARY ROW -->
-                    <div class="candle-ohlc-banner">
-                        <div class="ohlc-header">
-                            <span class="ohlc-title">🕯️ Evaluated 5-Min Candle Data</span>
-                            <span class="ohlc-time-badge" id="candle-eval-time">Time: --</span>
-                        </div>
-                        <div class="ohlc-metrics-grid">
-                            <div class="ohlc-item"><span class="o-label">OPEN</span><span class="o-val" id="candle-eval-open">--</span></div>
-                            <div class="ohlc-item"><span class="o-label">HIGH</span><span class="o-val text-success" id="candle-eval-high">--</span></div>
-                            <div class="ohlc-item"><span class="o-label">LOW</span><span class="o-val text-danger" id="candle-eval-low">--</span></div>
-                            <div class="ohlc-item"><span class="o-label">CLOSE</span><span class="o-val highlight" id="candle-eval-close">--</span></div>
-                            <div class="ohlc-item"><span class="o-label">VOLUME</span><span class="o-val" id="candle-eval-vol">--</span></div>
-                            <div class="ohlc-item"><span class="o-label">WARMUP HISTORY</span><span class="o-val text-info" id="candle-eval-warmup">200 Candles</span></div>
-                        </div>
-                    </div>
-
-                    <!-- STRATEGY VOTING BREAKDOWN TABLE -->
                     <div class="strategy-votes-container">
                         <h3 class="sub-title">Strategy Votes Breakdown</h3>
                         <div class="table-responsive">
                             <table class="data-table compact-table">
                                 <thead>
                                     <tr>
-                                        <th>Strategy Name</th>
-                                        <th>Status</th>
-                                        <th>Vote Signal</th>
-                                        <th>Reason / Key Filter</th>
+                                        <th>Strategy</th>
+                                        <th>Vote</th>
+                                        <th>Reason</th>
                                         <th>Confidence</th>
-                                        <th>Target (TR)</th>
-                                        <th>Stop Loss (SL)</th>
+                                        <th>TR</th>
+                                        <th>SL</th>
                                     </tr>
                                 </thead>
                                 <tbody id="consensus-strategies-tbody">
-                                    <tr><td colspan="7" class="text-center text-muted">Awaiting Market Feed...</td></tr>
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">Waiting for first cycle...</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -128,128 +111,55 @@
                 </div>
             </section>
 
-            <!-- 2. REAL TRADING BROKER TERMINAL -->
-            <div class="trading-terminals-grid full-width-grid">
-                <section class="terminal-column">
-                    <div class="terminal-header">
-                        <h2 class="terminal-title">🔴 Real Account Broker Terminal</h2>
-                        <span class="status-pill badge-neutral" id="real-terminal-badge">DISABLED</span>
-                    </div>
-
-                    <!-- 15-MIN SL EXIT COOLDOWN BANNER CONTAINER -->
-                    <div id="sl-cooldown-banner-container"></div>
-
-                    <!-- REAL KPI GRID -->
-                    <div class="kpi-grid compact-kpi">
-                        <div class="kpi-card glass-card">
-                            <div class="kpi-header"><span class="kpi-title">Dhan Live Funds</span><span class="kpi-icon">💰</span></div>
-                            <div class="kpi-value text-success" id="real-available-funds">₹0.00</div>
-                            <div class="kpi-footer"><span class="kpi-subtext">Client ID: <span id="real-client-id">1101323815</span></span></div>
-                        </div>
-
-                        <div class="kpi-card glass-card border-danger">
-                            <div class="kpi-header"><span class="kpi-title">Broker Engine</span><span class="kpi-icon">🛑</span></div>
-                            <div class="kpi-value" id="real-engine-state">DISABLED</div>
-                            <div class="kpi-footer"><span class="kpi-subtext">Dhan Broker API</span></div>
-                        </div>
-
-                        <div class="kpi-card glass-card">
-                            <div class="kpi-header"><span class="kpi-title">Active Broker Position</span><span class="kpi-icon">📌</span></div>
-                            <div class="kpi-value" id="real-active-symbol">NONE</div>
-                            <div class="kpi-footer"><span class="kpi-subtext" id="real-active-pnl">PnL: ₹0.00</span></div>
-                        </div>
-                    </div>
-
-                    <!-- MASTERSL CENTRAL TRAILING ENGINE TELEMETRY CONTAINER -->
-                    <div id="mastersl-telemetry-container"></div>
-
-                    <!-- ACTIVE REAL POSITION CARD -->
-                    <div class="section-container">
-                        <h3 class="sub-title"><span class="title-icon">⚡</span> Active Real Capital Position</h3>
-                        <div id="real-active-position-card" class="active-trade-card glass-card empty-card">
-                            <div class="empty-state-message">
-                                <span class="empty-icon">🛡️</span>
-                                <p>Real Trading is currently disabled.</p>
-                                <span class="empty-subtext">Toggle Real Trade in top right corner to activate live execution.</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SL SHIFT TIMELINE & TRAILING AUDIT TRAIL CONTAINER -->
-                    <div class="section-container" id="sl-shift-timeline-section" style="display: none;">
-                        <h3 class="sub-title"><span class="title-icon">⏱️</span> Active Position SL Shift Timeline (Live Audit Trail)</h3>
-                        <div class="table-card glass-card">
-                            <div class="table-responsive">
-                                <table class="data-table compact-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Timestamp</th>
-                                            <th>Stage / Trigger</th>
-                                            <th>Trailed SL (₹)</th>
-                                            <th>Locked Profit (₹)</th>
-                                            <th>Status / Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="sl-shift-timeline-tbody">
-                                        <tr><td colspan="5" class="text-center text-muted">No SL shifts recorded yet.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- REAL TRADE AUDIT HISTORY TABLE -->
-                    <div class="section-container">
-                        <h3 class="sub-title"><span class="title-icon">📜</span> Real Trade Audit Logs</h3>
-                        <div class="table-card glass-card">
-                            <div class="table-responsive">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>ID</th>
-                                            <th>Time</th>
-                                            <th>Symbol</th>
-                                            <th>Type</th>
-                                            <th>Entry</th>
-                                            <th>Exit</th>
-                                            <th>Qty</th>
-                                            <th>Reason</th>
-                                            <th>PnL (₹)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="real-history-tbody">
-                                        <tr><td colspan="9" class="text-center text-muted">No real trades logged.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-        </main>
-    </div>
-
-    <!-- RESTART SERVER MODAL -->
-    <div id="restart-modal" class="modal-overlay" style="display: none;">
-        <div class="glass-card modal-card">
-            <div class="modal-header">
-                <h3>🔄 Restart Server</h3>
-                <button class="close-btn" onclick="closeRestartModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>Server restart karne ke liye Password enter karein:</p>
-                <div class="input-group">
-                    <input type="password" id="restart-password-input" placeholder="Enter Password..." autocomplete="current-password" onkeyup="if(event.key==='Enter') executeServerRestart()">
+            <!-- 2. MASTER SL STATUS -->
+            <section class="section-container">
+                <div class="terminal-header">
+                    <h2 class="terminal-title">🛡️ MasterSL Signal → Order Flow</h2>
+                    <span class="status-pill badge-neutral" id="mastersl-processing-pill">IDLE</span>
                 </div>
-                <div id="modal-error-msg" class="modal-error-text" style="display:none;"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeRestartModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="executeServerRestart()">Confirm Restart</button>
-            </div>
-        </div>
+
+                <div class="glass-card">
+                    <div class="reversal-grid">
+                        <div class="reversal-item">
+                            <span class="rev-label">Processing</span>
+                            <span class="rev-val" id="msl-processing">false</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Target Points</span>
+                            <span class="rev-val text-success" id="msl-target-points">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Stop Loss Points</span>
+                            <span class="rev-val text-danger" id="msl-sl-points">--</span>
+                        </div>
+                        <div class="reversal-item">
+                            <span class="rev-label">Trailing Jump (pts)</span>
+                            <span class="rev-val text-info" id="msl-trailing-jump">--</span>
+                        </div>
+                        <div class="reversal-item" style="grid-column: 1 / -1;">
+                            <span class="rev-label">Last Event</span>
+                            <span class="rev-val" id="msl-last-event">--</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. ACTIVE POSITION -->
+            <section class="section-container">
+                <h3 class="sub-title">📌 Active Position (MasterSL.lastTrade)</h3>
+                <div id="active-position-card" class="active-trade-card glass-card empty-card">
+                    <div class="empty-state-message">
+                        <span class="empty-icon">🛡️</span>
+                        <p>No active position.</p>
+                        <span class="empty-subtext">Waiting for BUY/SELL signal from consensus engine.</span>
+                    </div>
+                </div>
+            </section>
+
+        </main>
     </div>
 
     <script src="app.js"></script>
 </body>
+
 </html>

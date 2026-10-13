@@ -66,6 +66,9 @@ class DhanPosition {
             return {
                 status: "error",
                 message:
+                    (result?.errorMessage
+                        ? `${result.errorCode ? result.errorCode + " - " : ""}${result.errorMessage}`
+                        : null) ||
                     result?.remarks?.error_message ||
                     result?.message ||
                     "Dhan positions API failed"

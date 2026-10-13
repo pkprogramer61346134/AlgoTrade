@@ -1,7 +1,7 @@
 [
   {
     "id": "CANDLE_A_B_BREAKOUT",
-    "name": "🕯️ Reversed 15-Minute Candle B Close Strategy (Target 10 pts / SL 3 pts)",
+    "name": "🕯️ 15-Minute Candle B Close Breakout Strategy (Target 10 pts / SL 3 pts)",
     "winrate": "50.0%",
     "riskRewardRatio": 3.33,
     "indicators": {
@@ -14,22 +14,22 @@
       "buy": [
         {
           "target": "candleBreakout",
-          "condition": "closeBelowPrevLow"
+          "condition": "closeAbovePrevHigh"
         },
         {
           "target": "supportResistance",
-          "condition": "atSupportZone",
+          "condition": "atResistanceZone",
           "tolerance": 45
         }
       ],
       "sell": [
         {
           "target": "candleBreakout",
-          "condition": "closeAbovePrevHigh"
+          "condition": "closeBelowPrevLow"
         },
         {
           "target": "supportResistance",
-          "condition": "atResistanceZone",
+          "condition": "atSupportZone",
           "tolerance": 45
         }
       ]
