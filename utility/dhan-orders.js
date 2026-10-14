@@ -1,13 +1,18 @@
 /**
  * Dhan Orders & Execution Module
  * Location: C:\AlgoTrade\utility\dhan-orders.js
- * 
+ *
  * Supports:
  * - Regular Orders (place, modify, cancel, list, getById)
  * - Trade History (getTradeHistory, getTradeByOrderId)
  * - Slice Orders (placeSliceOrder)
- * - Super / Bracket Orders (placeSuperOrder, modifySuperOrder, cancelSuperOrder, getSuperOrders)
+ * - Super Orders (placeSuperOrder, modifySuperOrder, cancelSuperOrder, getSuperOrders)
  * - Forever / GTT Orders (placeForeverOrder, modifyForeverOrder, cancelForeverOrder, getForeverOrders)
+ *
+ * Dhan V2 Endpoints:
+ *   Regular : /orders
+ *   Super   : /superorder
+ *   Forever : /forever/orders
  */
 
 const config = require("./token/config");
@@ -65,26 +70,36 @@ class DhanOrders {
 
         try {
             const response = await fetch(url, fetchOptions);
-            const data = await response.json();
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (jsonErr) {
+                data = { rawText: await response.text().catch(() => "") };
+            }
 
             if (!response.ok) {
+                console.error(`[DHAN API ERROR] ${fetchOptions.method} ${endpoint} → HTTP ${response.status}`);
+                console.error(`[DHAN API ERROR BODY]`, JSON.stringify(data, null, 2));
                 return {
                     status: "error",
                     statusCode: response.status,
-                    message: data.remarks?.error_message || data.remarks || data.message || "API call failed",
+                    message: data?.remarks?.error_message || data?.errorMessage || data?.remarks || data?.message || `HTTP ${response.status} - API call failed`,
                     errorData: data
                 };
             }
+
             if (data && (data.orderStatus === "REJECTED" || data.orderStatus === "CANCELLED" || data.status === "FAILURE")) {
                 return {
                     status: "error",
                     statusCode: response.status,
-                    message: data.remarks?.error_message || data.remarks || data.message || `Order ${data.orderStatus || 'Failed'}`,
+                    message: data.remarks?.error_message || data.errorMessage || data.remarks || data.message || `Order ${data.orderStatus || 'Failed'}`,
                     errorData: data
                 };
             }
+
             return { status: "success", statusCode: response.status, data };
         } catch (error) {
+            console.error(`[DHAN API NETWORK ERROR] ${fetchOptions.method} ${endpoint} → ${error.message}`);
             return { status: "error", message: error.message || "Network error" };
         }
     }
@@ -182,17 +197,16 @@ class DhanOrders {
         });
     }
 
-    // --- Super / Bracket Orders ---
+    // --- Super Orders (Dhan V2: /superorder) ---
     async placeSuperOrder(params = {}) {
         const auth = this.getAuth();
-        return await this.request("/super/orders", {
+        return await this.request("/superorder", {
             method: "POST",
             body: {
                 dhanClientId: auth.clientId,
                 correlationId: params.correlationId || `SUPER_${Date.now()}`,
                 transactionType: params.transactionType,
                 exchangeSegment: params.exchangeSegment,
-                productType: params.productType || "INTRADAY",
                 orderType: params.orderType || "LIMIT",
                 securityId: params.securityId,
                 quantity: params.quantity,
@@ -229,18 +243,18 @@ class DhanOrders {
             }
         }
 
-        return await this.request(`/super/orders/${superOrderId}`, {
+        return await this.request(`/superorder/${superOrderId}`, {
             method: "PUT",
             body: bodyObj
         });
     }
 
     async cancelSuperOrder(superOrderId, legName = "ENTRY_LEG") {
-        return await this.request(`/super/orders/${superOrderId}/${legName}`, { method: "DELETE" });
+        return await this.request(`/superorder/${superOrderId}?legName=${legName}`, { method: "DELETE" });
     }
 
     async getSuperOrders() {
-        return await this.request("/super/orders", { method: "GET" });
+        return await this.request("/superorder", { method: "GET" });
     }
 
     // --- Forever / GTT Orders ---

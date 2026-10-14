@@ -2,18 +2,7 @@
  * Test MasterSL Signal -> Order Flow (with pending limit price)
  * Location: C:\AlgoTrade\server\testMasterSL.js
  *
- * पूरा MasterSL जैसा flow चलेगा:
- *   STEP 1: Position check
- *   STEP 2: Balance
- *   STEP 3: Best strike
- *   STEP 4: Target/SL (सीधे option premium पर)
- *   STEP 5: Super Order — पर price = LTP − 50 (order pending रहेगा, fill नहीं होगा)
- *   STEP 6: lastTrade record
- *
- * उद्देश्य:
- *   - Confirm करना कि पूरा flow काम करता है
- *   - Dhan API order accept कर रही है
- *   - Order pending में चला जाता है
+ * पूरा MasterSL जैसा flow चलेगा, बस order price = LTP − 10 (pending रहेगा)
  *
  * चलाओ: node C:\AlgoTrade\server\testMasterSL.js
  */
@@ -24,7 +13,6 @@ const dhanBalance = require('./classoforder/founds/dhan-real-balance');
 const strikeSelector = require('./classoforder/strickprice/strike-price-selector');
 const orderManager = require('./classoforder/order/order-manager');
 
-// अंतर: LTP से 50 रुपये नीचे limit price रखो (order pending रहे, fill न हो)
 const PENDING_OFFSET_RUPEES = 10;
 
 async function testMasterSL() {
@@ -32,7 +20,6 @@ async function testMasterSL() {
     console.log('🧪 MasterSL Full Flow Test (Pending Limit Price)');
     console.log('==========================================================\n');
 
-    // Config verify
     const cfg = configManager.getConfig();
     console.log('📋 Current Config:');
     console.log('   realTradeEnabled    :', cfg.realTradeEnabled);
@@ -44,9 +31,8 @@ async function testMasterSL() {
     console.log('');
     console.log('⚙️  Test Config:');
     console.log('   Pending Offset      : LTP − ₹' + PENDING_OFFSET_RUPEES);
-    console.log('   (Order price will be below market — order will remain PENDING, not filled)\n');
+    console.log('   (Order will remain PENDING, not filled)\n');
 
-    // Test signal — जैसा consensusEngine produce करता है
     const testSignal = {
         consensus: "BUY",
         type: "BUY",
@@ -72,9 +58,7 @@ async function testMasterSL() {
     console.log('   Scrip     :', testScrip.symbol, `(${testScrip.securityId})`);
     console.log('');
 
-    // =========================================================
     // STEP 1: POSITION CHECK
-    // =========================================================
     console.log('--- STEP 1: Position Check ---');
     const positionChecker = new PositionChecker();
     const hasPosition = await positionChecker.checkPosition();
@@ -84,16 +68,12 @@ async function testMasterSL() {
         return;
     }
 
-    // =========================================================
     // STEP 2: BALANCE
-    // =========================================================
     console.log('\n--- STEP 2: Balance ---');
     const balance = await dhanBalance.getBalance();
     console.log('   Balance: ₹' + balance);
 
-    // =========================================================
     // STEP 3: BEST STRIKE
-    // =========================================================
     console.log('\n--- STEP 3: Best Strike ---');
     const optionType = "CE";
     const strike = await strikeSelector.getBestStrike(
@@ -117,18 +97,14 @@ async function testMasterSL() {
     console.log('   Lot size   :', lotSize);
     console.log('   Entry LTP  : ₹' + entry);
 
-    // =========================================================
     // STEP 4: TARGET / SL
-    // =========================================================
     console.log('\n--- STEP 4: Target / SL ---');
     const targetPrice = Number((entry + cfg.targetPoints).toFixed(2));
     const stopLossPrice = Number((entry - cfg.stopLossPoints).toFixed(2));
     console.log(`   Target: ₹${entry} + ${cfg.targetPoints} = ₹${targetPrice}`);
     console.log(`   SL    : ₹${entry} − ${cfg.stopLossPoints} = ₹${stopLossPrice}`);
 
-    // =========================================================
-    // STEP 5: SUPER ORDER (with pending limit price)
-    // =========================================================
+    // STEP 5: SUPER ORDER (Pending Price)
     console.log('\n--- STEP 5: Super Order (Pending Limit Price) ---');
     const pendingPrice = Number((entry - PENDING_OFFSET_RUPEES).toFixed(2));
     console.log(`   Actual LTP       : ₹${entry}`);
@@ -145,20 +121,18 @@ async function testMasterSL() {
             transactionType: "BUY",
             lots,
             lotSize,
-            price: pendingPrice,             // ← यहाँ 50 rupees कम
+            price: pendingPrice,
             targetPrice,
             stopLossPrice,
             trailingJump: cfg.trailingJumpPoints
         });
     } catch (err) {
-        console.error('❌ Super Order failed:', err.message);
+        console.error('\n❌ Super Order failed:', err.message);
         console.error(err.stack);
         return;
     }
 
-    // =========================================================
     // STEP 6: RECORD LAST TRADE
-    // =========================================================
     console.log('\n--- STEP 6: Record Last Trade ---');
     const lastTrade = {
         symbol: strike.symbol,
@@ -176,9 +150,6 @@ async function testMasterSL() {
     };
     console.log(JSON.stringify(lastTrade, null, 2));
 
-    // =========================================================
-    // RESULT
-    // =========================================================
     console.log('\n==========================================================');
     console.log('📥 Test Result:');
     console.log('==========================================================');

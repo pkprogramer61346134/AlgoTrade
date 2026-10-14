@@ -3,7 +3,7 @@
  * Location: C:\AlgoTrade\utility\usedfull\smart-order-executor.js
  * 
  * Functions Provided:
- * 1. placeOptionOrder()   - Places Regular or Super/Bracket Order with Target (TR) & StopLoss (SL).
+ * 1. placeOptionOrder()   - Places Regular or Super Order with Target (TR) & StopLoss (SL).
  * 2. updateStopLoss()     - Updates active order Stop Loss price/points.
  * 3. updateTarget()       - Updates active order Target price/points.
  * 4. closePosition()      - Squares off active position / cancels active order.
@@ -21,25 +21,12 @@ class SmartOrderExecutor {
 
     /**
      * 1. Place Option Order (Supports Target TR & StopLoss SL)
-     * 
-     * @param {Object} params
-     * @param {string|number} params.securityId - Dhan Option Contract Security ID (e.g. "74003")
-     * @param {string} [params.exchangeSegment="NSE_FNO"] - Exchange Segment (Default: "NSE_FNO")
-     * @param {string} [params.transactionType="BUY"] - "BUY" or "SELL"
-     * @param {number} [params.lots=1] - Number of lots (Default: 1)
-     * @param {number} [params.lotSize=65] - Quantity per lot (Default: 65)
-     * @param {number} [params.price=0] - Limit price (0 for MARKET order)
-     * @param {number} [params.targetPrice=0] - Target / Take Profit Price (TR)
-     * @param {number} [params.targetPoints=0] - Target points above entry price
-     * @param {number} [params.stopLossPrice=0] - Stop Loss Price (SL)
-     * @param {number} [params.stopLossPoints=0] - Stop Loss points below entry price
-     * @returns {Promise<Object>} Order Placement Result
      */
     async placeOptionOrder(params = {}) {
         const securityId = String(params.securityId || "");
         const exchangeSegment = params.exchangeSegment || "NSE_FNO";
         const transactionType = String(params.transactionType || "BUY").toUpperCase();
-        
+
         if (!securityId || securityId === "undefined" || securityId === "null") {
             throw new Error("[ORDER EXECUTOR ERROR] securityId is required to place an order");
         }
@@ -57,24 +44,23 @@ class SmartOrderExecutor {
         const quantity = lots * lotSize;
         const price = Number(params.price || params.limitPrice || 0);
 
-        // Calculate Target Price
+        // Target Price
         let targetPrice = Number(params.targetPrice || 0);
         if (!targetPrice && params.targetPoints && price > 0) {
             targetPrice = Number((price + Number(params.targetPoints)).toFixed(2));
         }
 
-        // Calculate StopLoss Price
+        // StopLoss Price
         let stopLossPrice = Number(params.stopLossPrice || 0);
         if (!stopLossPrice && params.stopLossPoints && price > 0) {
             stopLossPrice = Number((price - Number(params.stopLossPoints)).toFixed(2));
         }
 
-        // If Target & StopLoss are specified, use Dhan Super/Bracket Order
+        // Super Order (Target & SL दोनों हैं)
         if (targetPrice > 0 && stopLossPrice > 0) {
             const superRes = await this.orders.placeSuperOrder({
                 transactionType,
                 exchangeSegment,
-                productType: "INTRADAY",
                 orderType: price > 0 ? "LIMIT" : "MARKET",
                 securityId,
                 quantity,
@@ -85,7 +71,8 @@ class SmartOrderExecutor {
             });
 
             if (!superRes || superRes.status !== "success" || !superRes.data?.orderId || superRes.data?.orderStatus === "REJECTED" || superRes.data?.orderStatus === "CANCELLED") {
-                const errMsg = superRes?.data?.omsErrorDescription || superRes?.message || superRes?.rawResponse?.remarks || superRes?.remarks || "Dhan Super Order placement rejected/failed";
+                console.error('[SUPER ORDER FULL RESPONSE]', JSON.stringify(superRes, null, 2));
+                const errMsg = superRes?.data?.omsErrorDescription || superRes?.data?.errorMessage || superRes?.message || superRes?.rawResponse?.remarks || superRes?.remarks || "Dhan Super Order placement rejected/failed";
                 throw new Error(`[ORDER EXECUTOR ERROR] ${errMsg}`);
             }
 
@@ -105,7 +92,7 @@ class SmartOrderExecutor {
             };
         }
 
-        // Otherwise place Regular Order
+        // Regular Order (कोई Target/SL नहीं)
         const regRes = await this.orders.placeOrder({
             transactionType,
             exchangeSegment,
@@ -117,6 +104,7 @@ class SmartOrderExecutor {
         });
 
         if (!regRes || regRes.status !== "success" || !regRes.data?.orderId || regRes.data?.orderStatus === "REJECTED" || regRes.data?.orderStatus === "CANCELLED") {
+            console.error('[REGULAR ORDER FULL RESPONSE]', JSON.stringify(regRes, null, 2));
             const errMsg = regRes?.data?.omsErrorDescription || regRes?.message || regRes?.remarks || "Dhan Regular Order placement rejected/failed";
             throw new Error(`[ORDER EXECUTOR ERROR] ${errMsg}`);
         }
@@ -138,14 +126,7 @@ class SmartOrderExecutor {
     }
 
     /**
-     * 2. Update Stop Loss (SL) for an Active Order
-     * 
-     * @param {Object} params
-     * @param {string|number} params.orderId - Super Order ID or Order ID
-     * @param {number} params.newStopLossPrice - New SL Price
-     * @param {number} params.quantity - Order Quantity
-     * @param {number} [params.price] - Current price
-     * @returns {Promise<Object>} Modification Result
+     * 2. Update Stop Loss
      */
     async updateStopLoss(params = {}) {
         const orderId = String(params.orderId || params.superOrderId || "");
@@ -185,13 +166,7 @@ class SmartOrderExecutor {
     }
 
     /**
-     * 3. Update Target (TR) for an Active Order
-     * 
-     * @param {Object} params
-     * @param {string|number} params.orderId - Super Order ID or Order ID
-     * @param {number} params.newTargetPrice - New Target Price
-     * @param {number} params.quantity - Order Quantity
-     * @returns {Promise<Object>} Modification Result
+     * 3. Update Target
      */
     async updateTarget(params = {}) {
         const orderId = String(params.orderId || params.superOrderId || "");
@@ -231,13 +206,6 @@ class SmartOrderExecutor {
 
     /**
      * 4. Close Position / Exit Order
-     * 
-     * @param {Object} params
-     * @param {string|number} [params.orderId] - Super Order ID or Order ID to cancel
-     * @param {string|number} [params.securityId] - Option Security ID to square off
-     * @param {number} params.quantity - Exit quantity
-     * @param {string} [params.exchangeSegment="NSE_FNO"] - Exchange Segment
-     * @returns {Promise<Object>} Close Position Result
      */
     async closePosition(params = {}) {
         const orderId = params.orderId || params.superOrderId;
@@ -245,20 +213,18 @@ class SmartOrderExecutor {
         const quantity = Number(params.quantity);
         const exchangeSegment = params.exchangeSegment || "NSE_FNO";
 
-        // Step 1: If orderId is provided, attempt to cancel any pending legs (e.g. STOP_LOSS_LEG, TARGET_LEG)
         if (orderId && !String(orderId).startsWith("MASTER_SL")) {
             try {
                 await this.orders.cancelSuperOrder(orderId, "STOP_LOSS_LEG");
-            } catch (err) {}
+            } catch (err) { }
             try {
                 await this.orders.cancelSuperOrder(orderId, "TARGET_LEG");
-            } catch (err) {}
+            } catch (err) { }
             try {
                 await this.orders.cancelOrder(orderId);
-            } catch (err) {}
+            } catch (err) { }
         }
 
-        // Step 2: Market Exit SELL Order for Security ID
         if (securityId && quantity > 0) {
             const exitRes = await this.orders.placeOrder({
                 transactionType: "SELL",
@@ -296,10 +262,7 @@ class SmartOrderExecutor {
     }
 
     /**
-     * 5. Get Live Active Positions & Dhan Server Unrealized PnL
-     * 
-     * @param {string|number} [securityId] - Security ID to filter active position (Optional)
-     * @returns {Promise<Object>} Live Position details
+     * 5. Get Live Active Position
      */
     async getLiveActivePosition(securityId = null) {
         const posRes = await this.positions.getPosition();
