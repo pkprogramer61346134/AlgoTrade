@@ -74,7 +74,7 @@ class SmartOrderExecutor {
             const superRes = await this.orders.placeSuperOrder({
                 transactionType,
                 exchangeSegment,
-                productType: "INTRADAY",
+             
                 orderType: price > 0 ? "LIMIT" : "MARKET",
                 securityId,
                 quantity,
