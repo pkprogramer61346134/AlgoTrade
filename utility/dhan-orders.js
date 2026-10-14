@@ -197,16 +197,16 @@ class DhanOrders {
         });
     }
 
-    // --- Super Orders (Dhan V2: /superorder) ---
     async placeSuperOrder(params = {}) {
         const auth = this.getAuth();
-        return await this.request("/superorder", {
+        return await this.request("/super/orders", {
             method: "POST",
             body: {
                 dhanClientId: auth.clientId,
                 correlationId: params.correlationId || `SUPER_${Date.now()}`,
                 transactionType: params.transactionType,
                 exchangeSegment: params.exchangeSegment,
+                productType: params.productType || "INTRADAY",
                 orderType: params.orderType || "LIMIT",
                 securityId: params.securityId,
                 quantity: params.quantity,
