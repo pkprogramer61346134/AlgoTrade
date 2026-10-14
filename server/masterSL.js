@@ -2,17 +2,11 @@
  * MasterSL - Signal -> Order Flow
  * Location: C:\AlgoTrade\server\masterSL.js
  *
- * Flow (on every BUY/SELL signal from Head Consensus Engine):
- *   1. Position check (server/position/dhan-position.js)  -> true = ignore signal
- *   2. Fund           (classoforder/founds/dhan-real-balance.js) -> real balance used directly
- *   3. Strike         (classoforder/strickprice/strike-price-selector.js)
- *   4. Target/SL      (NIFTY points, same as backtest)
- *   5. Super Order    (classoforder/order/order-manager.js)
- *
- * Target/SL:
- *   NIFTY target/sl points को सीधे option premium price पर apply किया जाता है
- *   Option Target = entry + targetPoints
- *   Option SL     = entry - stopLossPoints
+ * Token Handling:
+ *   - MasterSL token generate नहीं करता।
+ *   - अगर किसी Dhan API call में token error आए, तो { status: "token_expired" }
+ *     return करेगा — main.js इसे पकड़कर token refresh करवाएगा,
+ *     और MasterSL.processSignal को दोबारा call करेगा।
  */
 
 const configManager = require("./config_manager");
@@ -20,6 +14,24 @@ const PositionChecker = require("./position/dhan-position");
 const dhanBalance = require("./classoforder/founds/dhan-real-balance");
 const strikeSelector = require("./classoforder/strickprice/strike-price-selector");
 const orderManager = require("./classoforder/order/order-manager");
+
+/**
+ * Detect token-related errors from Dhan API responses
+ */
+function isTokenError(error) {
+    if (!error) return false;
+    const msg = String(error.message || error).toLowerCase();
+    return (
+        msg.includes("invalid token") ||
+        msg.includes("token is expired") ||
+        msg.includes("token expired") ||
+        msg.includes("unauthorized") ||
+        msg.includes("dh-901") ||
+        msg.includes("dh-906") ||
+        msg.includes("authentication") ||
+        msg.includes("401")
+    );
+}
 
 class MasterSL {
     constructor() {
@@ -97,13 +109,12 @@ class MasterSL {
             const lots = strike.lots;
             const lotSize = Number(strike.lotSize);
 
-            // STEP 4: TARGET / SL (सीधे NIFTY points, कोई Delta नहीं)
+            // STEP 4: TARGET / SL
             const targetPrice = Number((entry + cfg.targetPoints).toFixed(2));
             const stopLossPrice = Number((entry - cfg.stopLossPoints).toFixed(2));
 
             this.log(
-                `STEP 4 Target/SL | NIFTY Target=${cfg.targetPoints}pts → Option Target=+${cfg.targetPoints} | ` +
-                `NIFTY SL=${cfg.stopLossPoints}pts → Option SL=-${cfg.stopLossPoints}`
+                `STEP 4 Target/SL | Target=+${cfg.targetPoints} | SL=-${cfg.stopLossPoints}`
             );
 
             // STEP 5: PLACE SUPER ORDER
@@ -136,16 +147,24 @@ class MasterSL {
 
             this.log(
                 `STEP 6 Order placed: ${order.orderId} | ${strike.symbol} | Qty ${order.quantity} | ` +
-                `Entry ₹${entry} | Target ₹${targetPrice} | SL ₹${stopLossPrice} | ` +
-                `Trailing ${cfg.trailingJumpPoints}`
+                `Entry ₹${entry} | Target ₹${targetPrice} | SL ₹${stopLossPrice}`
             );
 
             this.maxtread = this.maxtread - 1;
 
             return { status: "success", order, strike };
+
         } catch (error) {
+            // Token error → signal main.js to refresh token
+            if (isTokenError(error)) {
+                this.log(`TOKEN ERROR detected: ${error.message} → signaling main.js to refresh`);
+                return { status: "token_expired", message: error.message };
+            }
+
+            // Non-token error → return as error
             this.log(`FLOW STOPPED: ${error.message}`);
             return { status: "error", message: error.message };
+
         } finally {
             this.isProcessing = false;
         }

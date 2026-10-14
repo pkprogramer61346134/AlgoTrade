@@ -7,6 +7,12 @@
  *   2. फिर Dhan token generation (max 10 retries)
  *   3. 10 बार में भी fail → process.exit(1)
  *   4. Token मिलने के बाद ही UI / live tick / consensus loop शुरू होते हैं
+ *
+ * Token Handling:
+ *   - MasterSL कोई token generate नहीं करता।
+ *   - अगर MasterSL से { status: "token_expired" } आए, तो main.js खुद
+ *     ensureValidDhanToken() call करके token refresh करता है,
+ *     और MasterSL.processSignal को दोबारा call करता है।
  */
 
 const fs = require('fs');
@@ -26,6 +32,9 @@ const RETRY_DELAY_MS = 1000;
 // Token generation retry settings
 const MAX_TOKEN_ATTEMPTS = 10;
 const TOKEN_RETRY_DELAY_MS = 3000;
+
+// Token refresh during order flow
+const MAX_TOKEN_REFRESH_ROUNDS = 3;
 
 // Candle cache folder to clear on every startup
 const CANDLE_DATA_DIR = path.join(__dirname, 'candle_data');
@@ -81,17 +90,12 @@ process.on('uncaughtException', (err) => {
  *  CANDLE CACHE CLEANUP (on startup)
  * ========================================================== */
 
-/**
- * `candle_data` folder का सारा content delete करो (folder खुद रहेगा)।
- * ये हर startup पर चलेगा ताकि stale cache से कोई गलत signal न हो।
- */
 function clearCandleCacheOnStartup() {
     console.log('==========================================================================');
     console.log('🧹 [STARTUP CLEANUP] Clearing candle_data cache...');
     console.log(`   Target: ${CANDLE_DATA_DIR}`);
 
     try {
-        // अगर folder नहीं है, तो बना दो (empty)
         if (!fs.existsSync(CANDLE_DATA_DIR)) {
             fs.mkdirSync(CANDLE_DATA_DIR, { recursive: true });
             console.log('   ✅ Folder was missing — created empty.');
@@ -123,7 +127,6 @@ function clearCandleCacheOnStartup() {
     } catch (err) {
         console.error(`   ❌ [CLEANUP ERROR] Failed to clear candle_data: ${err.message}`);
         console.error('==========================================================================\n');
-        // Do not throw — let the system continue (folder may be re-created later)
     }
 }
 
@@ -166,7 +169,6 @@ function getLiveMarketData() {
         consensus: latestConsensusResult,
         masterSL: masterStat,
 
-        // System Health & Token Status
         tokenStatus: tokenStatus,
         health: {
             uiServer: uiRunning,
@@ -196,8 +198,21 @@ function isOrderIgnored(result) {
     return String(result.status || '').toLowerCase() === 'ignored';
 }
 
+function isTokenExpiredSignal(result) {
+    if (!result || typeof result !== 'object') return false;
+    return String(result.status || '').toLowerCase() === 'token_expired';
+}
+
+/**
+ * Retry up to MAX_ORDER_ATTEMPTS times on failure.
+ * Token expired → refresh token, retry same attempt (attempt count does not increase).
+ */
 async function processSignalWithRetry(signal, scrip) {
-    for (let attempt = 1; attempt <= MAX_ORDER_ATTEMPTS; attempt++) {
+    let attempt = 0;
+    let tokenRefreshCount = 0;
+
+    while (attempt < MAX_ORDER_ATTEMPTS) {
+        attempt++;
         console.log(`📤 [MASTER SL] Attempt ${attempt}/${MAX_ORDER_ATTEMPTS} | Signal: ${signal.consensus}`);
 
         let result;
@@ -209,6 +224,33 @@ async function processSignalWithRetry(signal, scrip) {
             continue;
         }
 
+        // ---- Token expired → refresh and retry (do not count as order attempt) ----
+        if (isTokenExpiredSignal(result)) {
+            tokenRefreshCount++;
+            console.warn(
+                `🔑 [TOKEN EXPIRED] Detected on attempt ${attempt}. ` +
+                `Refresh round ${tokenRefreshCount}/${MAX_TOKEN_REFRESH_ROUNDS}`
+            );
+
+            if (tokenRefreshCount > MAX_TOKEN_REFRESH_ROUNDS) {
+                console.error(`🛑 [TOKEN REFRESH EXHAUSTED] ${MAX_TOKEN_REFRESH_ROUNDS} refresh rounds failed. Giving up.`);
+                return { success: false, tokenExpired: true, attempts: attempt };
+            }
+
+            try {
+                await ensureValidDhanToken();
+                console.log(`✅ [TOKEN REFRESHED] Retrying MasterSL flow...`);
+            } catch (refreshErr) {
+                console.error(`❌ [TOKEN REFRESH FAILED]:`, refreshErr.message);
+                await sleep(RETRY_DELAY_MS);
+            }
+
+            // Do NOT increment attempt — retry same signal with new token
+            attempt--;
+            continue;
+        }
+
+        // ---- Normal outcomes ----
         if (isOrderSuccessful(result)) {
             console.log(`✅ [ORDER SUCCESS] Attempt ${attempt}/${MAX_ORDER_ATTEMPTS}`);
             return { success: true, attempts: attempt, result };
@@ -358,6 +400,10 @@ async function runFifteenMinuteEvaluation() {
     }
 }
 
+/**
+ * Schedule clock-aligned 15-minute loop.
+ * Startup पर पहला cycle तुरंत नहीं चलेगा — अगली 15-min boundary पर।
+ */
 function scheduleClockAlignedLoop(intervalMins = INTERVAL_MINUTES) {
     const getMsToNextBoundary = () => {
         const now = new Date();
@@ -382,12 +428,6 @@ function scheduleClockAlignedLoop(intervalMins = INTERVAL_MINUTES) {
         cycleTimer = setTimeout(runCycleAndScheduleNext, msToNext);
     };
 
-    // =========================================================
-    // STARTUP BEHAVIOR CHANGE:
-    // Startup पर पहला cycle तुरंत नहीं चलेगा।
-    // सिर्फ़ अगली 15-min clock boundary पर पहला cycle चलेगा।
-    // इससे fresh closed candle मिलेगी और stale signal से trade नहीं होगी।
-    // =========================================================
     const msToFirstBoundary = getMsToNextBoundary();
     const firstBoundaryStr = new Date(Date.now() + msToFirstBoundary).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
 
@@ -436,24 +476,16 @@ function startLiveTickStream() {
 
 /**
  * Start the Master System.
- *
- * STEP 0: candle_data cache clear
- * STEP 1: token generation (max 10 retries)
- * STEP 2: start UI / live tick / consensus loop
  */
 async function startMasterSystem() {
     console.log("==========================================================================");
     console.log("🚀 ALGOTRADE MASTER CONTROL SYSTEM (15-MIN CLOCK-ALIGNED LOOP)");
     console.log("==========================================================================");
 
-    // =========================================================
-    // STEP 0: CLEAR CANDLE CACHE ON STARTUP
-    // =========================================================
+    // STEP 0: Clear candle cache
     clearCandleCacheOnStartup();
 
-    // =========================================================
-    // STEP 1: TOKEN GENERATION (HARD GATE — max 10 retries)
-    // =========================================================
+    // STEP 1: Token generation (max 10 retries, hard gate)
     const tokenOk = await ensureTokenWithRetry();
 
     if (!tokenOk) {
@@ -465,9 +497,7 @@ async function startMasterSystem() {
         process.exit(1);
     }
 
-    // =========================================================
-    // STEP 2: NOW SAFE TO START EVERYTHING
-    // =========================================================
+    // STEP 2: Now safe to start everything
     startLiveTickStream();
 
     const cfg = mainConfig.getConfig();
@@ -479,10 +509,8 @@ async function startMasterSystem() {
         interval: "15"
     };
 
-    // 1. Start UI Server
     startUIServer(UI_PORT);
 
-    // 2. Start clock-aligned 15-min loop
     console.log(`⏱️ Starting clock-aligned 15-minute consensus loop for ${scrip.symbol} (${scrip.securityId})...\n`);
     scheduleClockAlignedLoop(INTERVAL_MINUTES);
 }
