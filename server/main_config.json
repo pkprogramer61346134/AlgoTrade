@@ -7,12 +7,9 @@
     "instrument": "INDEX",
     "interval": "15"
   },
-
   "orderExchangeSegment": "NSE_FNO",
-
-  "targetPoints": 15,
-  "stopLossPoints": 5,
-  "trailingJumpPoints": 2,
-
+  "targetPoints": 20,
+  "stopLossPoints": 10,
+  "trailingJumpPoints": 3,
   "maxTradesPerRun": 3
 }
