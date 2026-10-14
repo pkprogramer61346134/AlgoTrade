@@ -2,8 +2,8 @@
  * Strike Price Selector
  * Location: C:\AlgoTrade\server\classoforder\strickprice\strike-price-selector.js
  *
- * select-best-strike.js से best strike + Delta लाता है।
- * अगर Delta live नहीं मिली, तो वहाँ estimate हो जाती है और deltaSource='ESTIMATED' आता है।
+ * selectBestOptionStrike से best strike लाता है।
+ * Delta validate नहीं करता — MasterSL अब Delta use नहीं करता।
  */
 
 const { selectBestOptionStrike } = require('../../../utility/usedfull/select-best-strike');
@@ -19,14 +19,6 @@ class StrikePriceSelector {
 
         if (!strikeInfo || strikeInfo.status !== 'success' || !strikeInfo.securityId) {
             throw new Error('[STRIKE PRICE SELECTOR] No suitable strike price found within the given amount');
-        }
-
-        // Delta होना अनिवार्य है (LIVE या ESTIMATED, दोनों में से कोई एक)
-        const delta = Number(strikeInfo.delta);
-        if (!Number.isFinite(delta) || delta <= 0 || delta > 1) {
-            throw new Error(
-                `[STRIKE PRICE SELECTOR] Invalid Delta received: ${strikeInfo.delta} (source=${strikeInfo.deltaSource || 'unknown'})`
-            );
         }
 
         return strikeInfo;
