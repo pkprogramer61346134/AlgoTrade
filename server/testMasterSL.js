@@ -25,7 +25,7 @@ const strikeSelector = require('./classoforder/strickprice/strike-price-selector
 const orderManager = require('./classoforder/order/order-manager');
 
 // अंतर: LTP से 50 रुपये नीचे limit price रखो (order pending रहे, fill न हो)
-const PENDING_OFFSET_RUPEES = 50;
+const PENDING_OFFSET_RUPEES = 10;
 
 async function testMasterSL() {
     console.log('==========================================================');
