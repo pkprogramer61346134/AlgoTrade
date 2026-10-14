@@ -8,9 +8,7 @@
  * - Calculates Lot Quantity (lots * lotSize, e.g. 1 lot Nifty = 65 Qty).
  * - Selects exact ATM strike or closest budget-friendly near-ATM strike.
  * 
- * Delta handling:
- * - Live market में Dhan से असली Delta आता है।
- * - Market बंद / zero Greeks पर ATM-distance से estimate किया जाता है।
+ * NOTE: Delta को हटा दिया गया है — MasterSL अब Delta use नहीं करता।
  */
 
 const { DhanMarketData } = require("../dhan-market-data");
@@ -18,24 +16,6 @@ const { DhanFunds } = require("../dhan-funds");
 
 let moduleOcCache = {};
 let moduleOcCacheTime = 0;
-
-/**
- * Dhan response में delta 0 / missing हो तो ATM-distance से estimate करो।
- * ये केवल fallback है — live market में असली Delta ही use होता है।
- */
-function estimateDelta(strikePrice, spotPrice) {
-    const gap = Math.abs(strikePrice - spotPrice);
-
-    if (gap <= 50) return 0.50;
-    if (gap <= 100) return 0.45;
-    if (gap <= 150) return 0.40;
-    if (gap <= 200) return 0.35;
-    if (gap <= 300) return 0.30;
-    if (gap <= 400) return 0.25;
-    if (gap <= 500) return 0.20;
-    if (gap <= 700) return 0.15;
-    return 0.10;
-}
 
 class StrikeSelector {
     constructor(options = {}) {
@@ -94,8 +74,7 @@ class StrikeSelector {
                 usedPercent: null,
                 liveAccountBalance: null,
                 bid: ltp,
-                ask: ltp,
-                delta: 0.5
+                ask: ltp
             };
         }
 
@@ -242,24 +221,6 @@ class StrikeSelector {
         const realTotalQty = lots * realContractLotSize;
         const finalReqMargin = selectedLtp * realTotalQty;
 
-        // Delta: live value → else estimate
-        const rawDelta = selectedSide.greeks?.delta;
-        const numericDelta = Number(rawDelta);
-        let finalDelta;
-        let deltaSource;
-
-        if (rawDelta === undefined || rawDelta === null || !Number.isFinite(numericDelta) || numericDelta === 0) {
-            finalDelta = estimateDelta(strikePrice, spotPrice);
-            deltaSource = 'ESTIMATED';
-            console.warn(
-                `[DELTA ESTIMATE] Dhan returned delta=${rawDelta} for ${strikePrice} ${optionType} ` +
-                `(ATM gap = ${Math.abs(strikePrice - spotPrice)}). Using estimate ${finalDelta}.`
-            );
-        } else {
-            finalDelta = numericDelta;
-            deltaSource = 'LIVE';
-        }
-
         return {
             status: "success",
             underlyingSecurityId: securityId,
@@ -280,9 +241,7 @@ class StrikeSelector {
             usedPercent: usedPercent !== null ? `${usedPercent}%` : null,
             liveAccountBalance: liveAccountBalance !== null ? Number(liveAccountBalance.toFixed(2)) : null,
             bid: Number(selectedSide.top_bid_price || 0),
-            ask: Number(selectedSide.top_ask_price || 0),
-            delta: finalDelta,
-            deltaSource
+            ask: Number(selectedSide.top_ask_price || 0)
         };
     }
 }
