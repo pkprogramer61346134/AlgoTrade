@@ -5,14 +5,14 @@
  * Flow (on every BUY/SELL signal from Head Consensus Engine):
  *   1. Position check (server/position/dhan-position.js)  -> true = ignore signal
  *   2. Fund           (classoforder/founds/dhan-real-balance.js) -> real balance used directly
- *   3. Strike + Delta (classoforder/strickprice/strike-price-selector.js)
- *   4. Delta-based Target/SL conversion (NIFTY points → Option premium points)
+ *   3. Strike         (classoforder/strickprice/strike-price-selector.js)
+ *   4. Target/SL      (NIFTY points, same as backtest)
  *   5. Super Order    (classoforder/order/order-manager.js)
  *
- * Delta-based Target/SL:
- *   NIFTY target/sl points को option premium points में Delta से convert किया जाता है
- *   Option Target = NIFTY Target × Delta
- *   Option SL     = NIFTY SL × Delta
+ * Target/SL:
+ *   NIFTY target/sl points को सीधे option premium price पर apply किया जाता है
+ *   Option Target = entry + targetPoints
+ *   Option SL     = entry - stopLossPoints
  */
 
 const configManager = require("./config_manager");
@@ -82,7 +82,7 @@ class MasterSL {
             const balance = await dhanBalance.getBalance();
             this.log(`STEP 2 Balance: ₹${balance}`);
 
-            // STEP 3: BEST STRIKE + DELTA
+            // STEP 3: BEST STRIKE
             const strike = await strikeSelector.getBestStrike(
                 {
                     securityId: scrip.securityId || 13,
@@ -97,28 +97,16 @@ class MasterSL {
             const lots = strike.lots;
             const lotSize = Number(strike.lotSize);
 
-            // Delta से NIFTY पॉइंट्स को Option premium पॉइंट्स में convert करो
-            const optionDelta = Number(strike.delta);
-
-            if (!Number.isFinite(optionDelta) || optionDelta <= 0 || optionDelta > 1) {
-                throw new Error(
-                    `[MASTER SL ERROR] Invalid Delta received from strike selector: ${strike.delta} (source=${strike.deltaSource || 'unknown'})`
-                );
-            }
-
-            const targetPremiumPoints = Number((cfg.targetPoints * optionDelta).toFixed(2));
-            const slPremiumPoints = Number((cfg.stopLossPoints * optionDelta).toFixed(2));
-
-            const targetPrice = Number((entry + targetPremiumPoints).toFixed(2));
-            const stopLossPrice = Number((entry - slPremiumPoints).toFixed(2));
+            // STEP 4: TARGET / SL (सीधे NIFTY points, कोई Delta नहीं)
+            const targetPrice = Number((entry + cfg.targetPoints).toFixed(2));
+            const stopLossPrice = Number((entry - cfg.stopLossPoints).toFixed(2));
 
             this.log(
-                `STEP 3.5 Delta=${optionDelta} [${strike.deltaSource || 'LIVE'}] | ` +
-                `NIFTY Target=${cfg.targetPoints}pts → Option Target=${targetPremiumPoints}pts | ` +
-                `NIFTY SL=${cfg.stopLossPoints}pts → Option SL=${slPremiumPoints}pts`
+                `STEP 4 Target/SL | NIFTY Target=${cfg.targetPoints}pts → Option Target=+${cfg.targetPoints} | ` +
+                `NIFTY SL=${cfg.stopLossPoints}pts → Option SL=-${cfg.stopLossPoints}`
             );
 
-            // STEP 4: PLACE SUPER ORDER
+            // STEP 5: PLACE SUPER ORDER
             const order = await orderManager.placeSuperOrder({
                 securityId: strike.securityId,
                 exchangeSegment: cfg.orderExchangeSegment,
@@ -131,7 +119,7 @@ class MasterSL {
                 trailingJump: cfg.trailingJumpPoints
             });
 
-            // STEP 5: RECORD LAST TRADE
+            // STEP 6: RECORD LAST TRADE
             this.lastTrade = {
                 symbol: strike.symbol,
                 securityId: String(strike.securityId),
@@ -143,15 +131,13 @@ class MasterSL {
                 targetPrice,
                 currentSl: stopLossPrice,
                 trailingJump: cfg.trailingJumpPoints,
-                delta: optionDelta,
-                deltaSource: strike.deltaSource || 'LIVE',
                 status: "PLACED"
             };
 
             this.log(
-                `STEP 5 Order placed: ${order.orderId} | ${strike.symbol} | Qty ${order.quantity} | ` +
+                `STEP 6 Order placed: ${order.orderId} | ${strike.symbol} | Qty ${order.quantity} | ` +
                 `Entry ₹${entry} | Target ₹${targetPrice} | SL ₹${stopLossPrice} | ` +
-                `Delta ${optionDelta} | Trailing ${cfg.trailingJumpPoints}`
+                `Trailing ${cfg.trailingJumpPoints}`
             );
 
             this.maxtread = this.maxtread - 1;
