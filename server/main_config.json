@@ -12,7 +12,7 @@
 
   "targetPoints": 15,
   "stopLossPoints": 5,
-  "trailingJumpPoints": 0,
+  "trailingJumpPoints": 2,
 
   "maxTradesPerRun": 3
 }

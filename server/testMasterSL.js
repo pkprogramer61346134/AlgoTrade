@@ -1,10 +1,6 @@
 /**
  * Test MasterSL Signal -> Order Flow (with pending limit price)
  * Location: C:\AlgoTrade\server\testMasterSL.js
- *
- * पूरा MasterSL जैसा flow चलेगा, बस order price = LTP − 10 (pending रहेगा)
- *
- * चलाओ: node C:\AlgoTrade\server\testMasterSL.js
  */
 
 const configManager = require('./config_manager');
@@ -97,20 +93,17 @@ async function testMasterSL() {
     console.log('   Lot size   :', lotSize);
     console.log('   Entry LTP  : ₹' + entry);
 
-    // STEP 4: TARGET / SL
-    console.log('\n--- STEP 4: Target / SL ---');
-    const targetPrice = Number((entry + cfg.targetPoints).toFixed(2));
-    const stopLossPrice = Number((entry - cfg.stopLossPoints).toFixed(2));
-    console.log(`   Target: ₹${entry} + ${cfg.targetPoints} = ₹${targetPrice}`);
-    console.log(`   SL    : ₹${entry} − ${cfg.stopLossPoints} = ₹${stopLossPrice}`);
-
-    // STEP 5: SUPER ORDER (Pending Price)
-    console.log('\n--- STEP 5: Super Order (Pending Limit Price) ---');
+    // STEP 4: PENDING PRICE + TARGET / SL (सब pending price के हिसाब से)
+    console.log('\n--- STEP 4: Pending Price + Target / SL ---');
     const pendingPrice = Number((entry - PENDING_OFFSET_RUPEES).toFixed(2));
-    console.log(`   Actual LTP       : ₹${entry}`);
-    console.log(`   Pending Price    : ₹${pendingPrice} (LTP − ₹${PENDING_OFFSET_RUPEES})`);
-    console.log(`   Target (absolute): ₹${targetPrice}`);
-    console.log(`   SL (absolute)    : ₹${stopLossPrice}`);
+    const targetPrice = Number((pendingPrice + cfg.targetPoints).toFixed(2));
+    const stopLossPrice = Number((pendingPrice - cfg.stopLossPoints).toFixed(2));
+
+    console.log(`   Actual LTP    : ₹${entry}`);
+    console.log(`   Pending Price : ₹${pendingPrice} (LTP − ₹${PENDING_OFFSET_RUPEES})`);
+    console.log(`   Target        : ₹${pendingPrice} + ${cfg.targetPoints} = ₹${targetPrice}`);
+    console.log(`   SL            : ₹${pendingPrice} − ${cfg.stopLossPoints} = ₹${stopLossPrice}`);
+    console.log(`   ⚠️ SL < Price < Target? ${stopLossPrice} < ${pendingPrice} < ${targetPrice}`);
     console.log(`   ⚠️ Order will remain PENDING (not filled)\n`);
 
     let order;
