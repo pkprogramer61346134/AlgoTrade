@@ -137,8 +137,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const toDate = toDateInput.value;
         const interval = intervalSelect.value;
         const maxTradesPerDay = document.getElementById('maxTradesPerDay') ? document.getElementById('maxTradesPerDay').value : 3;
-        const slPoints = document.getElementById('slPoints') ? document.getElementById('slPoints').value : 5;
-        const targetPoints = document.getElementById('targetPoints') ? document.getElementById('targetPoints').value : 10;
+        const slPoints = document.getElementById('slPoints') ? document.getElementById('slPoints').value : 10;
+        const targetPoints = document.getElementById('targetPoints') ? document.getElementById('targetPoints').value : 50;
+        // ⬇️ NEW: Trailing Jump Points
+        const trailingJumpPoints = document.getElementById('trailingJumpPoints') ? document.getElementById('trailingJumpPoints').value : 0;
 
         // Update Server Status
         setRunningState(true);
@@ -153,8 +155,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </tr>
         `;
 
-        // Construct SSE stream URL
-        const streamUrl = `/api/stream?fromDate=${fromDate}&toDate=${toDate}&interval=${interval}&maxTradesPerDay=${maxTradesPerDay}&slPoints=${slPoints}&targetPoints=${targetPoints}`;
+        // Construct SSE stream URL (with trailingJumpPoints)
+        const streamUrl = `/api/stream?fromDate=${fromDate}&toDate=${toDate}&interval=${interval}&maxTradesPerDay=${maxTradesPerDay}&slPoints=${slPoints}&targetPoints=${targetPoints}&trailingJumpPoints=${trailingJumpPoints}`;
         const eventSource = new EventSource(streamUrl);
 
         eventSource.addEventListener('progress', (e) => {
@@ -164,13 +166,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressBarFill.style.width = `${percent}%`;
                 progressPercent.textContent = `${percent}%`;
                 progressStatusText.textContent = `Processing candle ${data.index} of ${data.total} (${data.tick.date} ${data.tick.time})`;
-                
+
                 let activeText = `Spot: ${data.tick.close} | Trades Evaluated: ${data.tradeCount || 0}`;
                 if (data.activePosition) {
-                    activeText += ` | 🟡 OPEN ${data.activePosition.symbol} (Entry Spot: ${data.activePosition.entryPrice})`;
+                    const pos = data.activePosition;
+                    const slInfo = pos.trailingActivated
+                        ? ` | 🔒 Trailing SL: ${pos.slPrice}`
+                        : ` | 🛑 Initial SL: ${pos.slPrice}`;
+                    activeText += ` | 🟡 OPEN ${pos.type} (Entry: ${pos.entryPrice}${slInfo})`;
                 }
                 liveTickerText.innerHTML = `<span class="ticker-dot"></span> ${activeText}`;
-            } catch (err) {}
+            } catch (err) { }
         });
 
         eventSource.addEventListener('complete', (e) => {
@@ -179,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.report) {
                     renderReport(data.report);
                 }
-            } catch (err) {}
+            } catch (err) { }
             eventSource.close();
             setRunningState(false);
             progressSection.style.display = 'none';
@@ -271,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const filtered = allTrades.filter(t => {
             const isPass = t.result === 'PASS' || (t.points || 0) > 0;
-            const matchesFilter = 
+            const matchesFilter =
                 currentFilter === 'ALL' ||
                 (currentFilter === 'WIN' && isPass) ||
                 (currentFilter === 'LOSS' && !isPass) ||
@@ -296,20 +302,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tradesTableBody.innerHTML = filtered.map(t => {
             const isPass = t.result === 'PASS' || (t.points || 0) > 0;
-            const typeBadge = t.optionType === 'CE' 
-                ? `<span class="badge badge-success">BUY (CE)</span>` 
+            const typeBadge = t.optionType === 'CE'
+                ? `<span class="badge badge-success">BUY (CE)</span>`
                 : `<span class="badge badge-danger">SELL (PE)</span>`;
 
             let reasonBadge = `<span class="badge badge-neutral">${t.exitReason}</span>`;
             if (t.exitReason === 'TARGET_HIT') {
                 reasonBadge = `<span class="badge badge-success">🎯 TARGET HIT</span>`;
-            } else if (t.exitReason === 'STOP_LOSS_HIT' || (t.exitReason && t.exitReason.includes('SL'))) {
-                reasonBadge = `<span class="badge badge-danger">🛑 STOP LOSS HIT</span>`;
+            } else if (t.exitReason === 'TRAILING_SL_HIT') {
+                reasonBadge = `<span class="badge badge-warning">🔒 TRAILING SL HIT</span>`;
+            } else if (t.exitReason === 'INITIAL_SL_HIT' || (t.exitReason && t.exitReason.includes('SL'))) {
+                reasonBadge = `<span class="badge badge-danger">🛑 INITIAL SL HIT</span>`;
             } else if (t.exitReason === 'EOD_SQUARE_OFF') {
                 reasonBadge = `<span class="badge badge-neutral">⏰ EOD EXIT</span>`;
             }
 
-            const resultBadge = isPass 
+            const resultBadge = isPass
                 ? `<span class="badge badge-success">PASS 🟢 (${(t.points || 0) >= 0 ? '+' : ''}${t.points} pts)</span>`
                 : `<span class="badge badge-danger">LOSS 🔴 (${t.points} pts)</span>`;
 

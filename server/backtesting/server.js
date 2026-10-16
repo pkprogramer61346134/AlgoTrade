@@ -124,7 +124,8 @@ app.get('/api/stream', async (req, res) => {
         interval: req.query.interval || "15",
         maxTradesPerDay: Number(req.query.maxTradesPerDay || 3),
         slPoints: req.query.slPoints ? Number(req.query.slPoints) : undefined,
-        targetPoints: req.query.targetPoints ? Number(req.query.targetPoints) : undefined
+        targetPoints: req.query.targetPoints ? Number(req.query.targetPoints) : undefined,
+        trailingJumpPoints: req.query.trailingJumpPoints ? Number(req.query.trailingJumpPoints) : 0   // ⬅️ NEW
     };
 
     sendEvent('start', { message: 'Backtest started', params });

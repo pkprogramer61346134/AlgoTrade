@@ -5,8 +5,8 @@
  * Flow — बिल्कुल main.js जैसा:
  *   1. getCachedCandles() से fromDate..toDate की सारी 15-min candles लाओ (एक बार)
  *   2. हर candle पर step-by-step:
- *        a. Active position हो → उस candle की high/low से target/SL/EOD check करो
- *        b. उस candle के (date, time) engine को भेजो — candle array नहीं, सिर्फ़ options object
+ *        a. Active position हो → trailing SL update करो, फिर target/SL/EOD check करो
+ *        b. उस candle के (date, time) engine को भेजो
  *        c. Engine के output से नया position खोलो (अगर signal आया)
  *   3. End में stats + daily breakdown + trades
  *
@@ -70,11 +70,16 @@ class BacktestEngine {
         const targetPointsInput = (params.targetPoints !== undefined && !isNaN(Number(params.targetPoints)) && Number(params.targetPoints) > 0)
             ? Number(params.targetPoints) : null;
 
+        // ⬇️ NEW: Trailing Jump points (0 = trailing disabled)
+        const trailingJumpPoints = (params.trailingJumpPoints !== undefined && !isNaN(Number(params.trailingJumpPoints)) && Number(params.trailingJumpPoints) > 0)
+            ? Number(params.trailingJumpPoints) : 0;
+
         console.log("==========================================================================");
         console.log(`🧪 [BACKTEST] Range: ${fromDate} → ${toDate} | Interval: ${interval}m`);
         console.log(` Config: maxTradesPerDay=${maxTradesPerDay}` +
             (fromTime ? ` | fromTime=${fromTime}` : "") +
             (toTime ? ` | toTime=${toTime}` : ""));
+        console.log(` Risk: SL=${slPointsInput ?? "engine"}pts | Target=${targetPointsInput ?? "engine"}pts | TrailingJump=${trailingJumpPoints}pts${trailingJumpPoints > 0 ? " ✅" : " (off)"}`);
         console.log(" Engine call shape: { securityId, exchangeSegment, interval, date, time }");
         console.log("==========================================================================\n");
 
@@ -131,15 +136,47 @@ class BacktestEngine {
             let closedTradeThisTick = null;
             let consensusResult = null;
 
-            // 1. Active position हो तो exit check करो — उसी candle की high/low से
+            // ============================================================
+            // 1. Active position हो तो पहले TRAILING SL update करो
+            //    फिर target/SL/EOD exit check करो — उसी candle की high/low से
+            // ============================================================
             if (activePosition) {
                 const isBUY = activePosition.type === "BUY";
 
+                // ---------- TRAILING SL UPDATE (NEW) ----------
+                if (activePosition.trailingJump > 0) {
+                    const jump = activePosition.trailingJump;
+                    const entry = activePosition.entryPrice;
+
+                    if (isBUY) {
+                        // candleHigh ने entry से कितना favourable move किया?
+                        const maxFavorable = candleHigh - entry;
+                        if (maxFavorable >= jump) {
+                            const candidate = entry + (maxFavorable - jump);
+                            if (candidate > activePosition.slPrice) {
+                                activePosition.slPrice = Number(candidate.toFixed(2));
+                                activePosition.trailingActivated = true;
+                            }
+                        }
+                    } else {
+                        const maxFavorable = entry - candleLow;
+                        if (maxFavorable >= jump) {
+                            const candidate = entry - (maxFavorable - jump);
+                            if (candidate < activePosition.slPrice) {
+                                activePosition.slPrice = Number(candidate.toFixed(2));
+                                activePosition.trailingActivated = true;
+                            }
+                        }
+                    }
+                }
+
+                // ---------- EXIT CHECK ----------
                 let isTargetHit = false;
                 let isSLHit = false;
                 let isEODSquareOff = false;
 
                 if (isBUY) {
+                    // Target पहले check करो (अगर same candle में दोनों hit हुए तो optimistic)
                     if (candleHigh >= activePosition.targetPrice) isTargetHit = true;
                     else if (candleLow <= activePosition.slPrice) isSLHit = true;
                     else if (isLastCandleOfDay) isEODSquareOff = true;
@@ -153,9 +190,18 @@ class BacktestEngine {
                     const exitPrice = isTargetHit
                         ? activePosition.targetPrice
                         : (isSLHit ? activePosition.slPrice : candleClose);
-                    const exitReason = isTargetHit
-                        ? "TARGET_HIT"
-                        : (isSLHit ? "INITIAL_SL_HIT" : "EOD_SQUARE_OFF");
+
+                    // Exit reason — अगर SL hit हुआ और trailing active था → TRAILING_SL_HIT
+                    let exitReason;
+                    if (isTargetHit) exitReason = "TARGET_HIT";
+                    else if (isSLHit) {
+                        exitReason = activePosition.trailingActivated
+                            ? "TRAILING_SL_HIT"
+                            : "INITIAL_SL_HIT";
+                    } else {
+                        exitReason = "EOD_SQUARE_OFF";
+                    }
+
                     const pts = isBUY
                         ? (exitPrice - activePosition.entryPrice)
                         : (activePosition.entryPrice - exitPrice);
@@ -176,6 +222,8 @@ class BacktestEngine {
                         sl: activePosition.slPrice,
                         tr: activePosition.targetPrice,
                         targetPrice: activePosition.targetPrice,
+                        trailingJump: activePosition.trailingJump,
+                        trailingActivated: !!activePosition.trailingActivated,
                         exitDate: tick.date,
                         exitTime: tick.time,
                         exitPrice: Number(exitPrice.toFixed(2)),
@@ -202,7 +250,6 @@ class BacktestEngine {
             }
 
             // 3. नया position खोलो — अगर signal BUY/SELL है, cutoff और cooldown pass हैं
-            // EOD candle पर entry block — क्योंकि उस candle पर ही exit हो जाता और 0-pt trade बनती
             const currentDayTrades = dailyTradeCountMap[dayKey] || 0;
             const lastExitSecs = lastTradeExitSecsMap[dayKey];
             const cooldownSatisfied = (lastExitSecs === undefined || lastExitSecs === null)
@@ -256,7 +303,9 @@ class BacktestEngine {
                     entryPrice,
                     initialSl: slPrice,
                     slPrice,
-                    targetPrice
+                    targetPrice,
+                    trailingJump: trailingJumpPoints,        // ⬅️ NEW
+                    trailingActivated: false                 // ⬅️ NEW
                 };
             }
 
@@ -293,12 +342,14 @@ class BacktestEngine {
         let grossLossPoints = 0;
         let trHitsCount = 0;
         let slHitsCount = 0;
+        let trailingSlHitsCount = 0;   // ⬅️ NEW
         let eodCount = 0;
 
         const formattedTrades = tradesHistory.map(t => {
             const isWin = t.points >= 0;
             if (t.exitReason === "TARGET_HIT") trHitsCount++;
             else if (t.exitReason === "INITIAL_SL_HIT") slHitsCount++;
+            else if (t.exitReason === "TRAILING_SL_HIT") trailingSlHitsCount++;   // ⬅️ NEW
             else if (t.exitReason === "EOD_SQUARE_OFF") eodCount++;
 
             if (isWin) grossWinPoints += t.points;
@@ -326,7 +377,7 @@ class BacktestEngine {
             if (!dailyMap[key]) {
                 dailyMap[key] = {
                     date: key, totalTrades: 0, winningTrades: 0, losingTrades: 0,
-                    trHits: 0, slHits: 0, netPoints: 0
+                    trHits: 0, slHits: 0, trailingSlHits: 0, netPoints: 0
                 };
             }
             const d = dailyMap[key];
@@ -335,6 +386,7 @@ class BacktestEngine {
             if (t.points >= 0) d.winningTrades += 1; else d.losingTrades += 1;
             if (t.exitReason === "TARGET_HIT") d.trHits += 1;
             if (t.exitReason === "INITIAL_SL_HIT") d.slHits += 1;
+            if (t.exitReason === "TRAILING_SL_HIT") d.trailingSlHits += 1;
         });
 
         const dailyBreakdown = Object.values(dailyMap).map(d => ({
@@ -359,12 +411,16 @@ class BacktestEngine {
                 losingTrades: losingTradesCount,
                 trHits: trHitsCount,
                 slHits: slHitsCount,
+                trailingSlHits: trailingSlHitsCount,     // ⬅️ NEW
                 eodExits: eodCount,
                 winrate: winrateStr,
                 netPoints: netPointsFormatted,
                 avgTradePoints: avgTradePointsFormatted,
                 profitFactor: profitFactorStr,
-                maxTradesPerDay
+                maxTradesPerDay,
+                slPoints: slPointsInput,
+                targetPoints: targetPointsInput,
+                trailingJumpPoints                                // ⬅️ NEW
             },
             dailyBreakdown,
             trades: formattedTrades
@@ -374,7 +430,7 @@ class BacktestEngine {
         this.saveReport(completeReport);
 
         console.log("\n==========================================================================");
-        console.log(`🎉 BACKTEST COMPLETE: Trades ${totalTrades} | W ${winningTradesCount} | L ${losingTradesCount} | TR ${trHitsCount} | SL ${slHitsCount} | WR ${winrateStr} | Net ${netPointsFormatted >= 0 ? '+' : ''}${netPointsFormatted}`);
+        console.log(`🎉 BACKTEST COMPLETE: Trades ${totalTrades} | W ${winningTradesCount} | L ${losingTradesCount} | TR ${trHitsCount} | SL ${slHitsCount} | TrailSL ${trailingSlHitsCount} | WR ${winrateStr} | Net ${netPointsFormatted >= 0 ? '+' : ''}${netPointsFormatted}`);
         console.log("==========================================================================\n");
 
         return { candles, report: completeReport };

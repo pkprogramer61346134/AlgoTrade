@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,12 +8,15 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div class="app-container">
 
@@ -41,14 +45,14 @@
 
         <!-- MAIN LAYOUT GRID -->
         <main class="main-content">
-            
+
             <!-- BACKTEST CONTROL FORM CARD -->
             <section class="card control-card">
                 <div class="card-header">
                     <h2><i class="fa-solid fa-sliders"></i> Backtest Configuration</h2>
                     <span class="badge badge-outline">NIFTY INDEX</span>
                 </div>
-                
+
                 <form id="backtestForm" class="control-grid">
                     <div class="form-group">
                         <label for="fromDate"><i class="fa-regular fa-calendar"></i> From Date</label>
@@ -74,12 +78,22 @@
 
                     <div class="form-group">
                         <label for="slPoints"><i class="fa-solid fa-shield-halved"></i> SL Points</label>
-                        <input type="number" id="slPoints" name="slPoints" value="5" min="1" max="500" step="1" placeholder="e.g. 5">
+                        <input type="number" id="slPoints" name="slPoints" value="10" min="1" max="500" step="1"
+                            placeholder="e.g. 10">
                     </div>
 
                     <div class="form-group">
                         <label for="targetPoints"><i class="fa-solid fa-bullseye"></i> Target Points</label>
-                        <input type="number" id="targetPoints" name="targetPoints" value="10" min="1" max="1000" step="1" placeholder="e.g. 10">
+                        <input type="number" id="targetPoints" name="targetPoints" value="50" min="1" max="1000"
+                            step="1" placeholder="e.g. 50">
+                    </div>
+
+                    <!-- ⬇️ NEW: Trailing Jump SL -->
+                    <div class="form-group">
+                        <label for="trailingJumpPoints"><i class="fa-solid fa-arrow-up-long"></i> Trailing Jump
+                            (pts)</label>
+                        <input type="number" id="trailingJumpPoints" name="trailingJumpPoints" value="18" min="0"
+                            max="100" step="1" placeholder="0 = off">
                     </div>
 
                     <div class="form-group btn-group">
@@ -106,7 +120,7 @@
 
             <!-- KPI METRICS SUMMARY GRID -->
             <section class="kpi-grid">
-                
+
                 <!-- TOTAL TRADES CARD -->
                 <div class="kpi-card">
                     <div class="kpi-header">
@@ -179,7 +193,8 @@
             <section class="card results-card">
                 <div class="tab-nav">
                     <button class="tab-btn active" data-tab="tradesTab">
-                        <i class="fa-solid fa-list-check"></i> Executed Trades Audit Log (<span id="tabTradesCount">0</span>)
+                        <i class="fa-solid fa-list-check"></i> Executed Trades Audit Log (<span
+                            id="tabTradesCount">0</span>)
                     </button>
                     <button class="tab-btn" data-tab="dailyTab">
                         <i class="fa-solid fa-calendar-days"></i> Daily Trades Breakdown
@@ -194,7 +209,8 @@
                     <div class="table-filter-bar">
                         <div class="search-box">
                             <i class="fa-solid fa-magnifying-glass"></i>
-                            <input type="text" id="tradeSearchInput" placeholder="Filter by Trade ID, Date, Exit Reason...">
+                            <input type="text" id="tradeSearchInput"
+                                placeholder="Filter by Trade ID, Date, Exit Reason...">
                         </div>
                         <div class="filter-btn-group">
                             <button class="filter-btn active" data-filter="ALL">All</button>
@@ -223,7 +239,8 @@
                             </thead>
                             <tbody id="tradesTableBody">
                                 <tr class="empty-row">
-                                    <td colspan="10">No trades executed yet. Click "Run Backtest" to evaluate market history.</td>
+                                    <td colspan="10">No trades executed yet. Click "Run Backtest" to evaluate market
+                                        history.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -258,22 +275,29 @@
                     <div class="rules-container">
                         <div class="rule-box">
                             <h3><i class="fa-solid fa-brain"></i> Consensus Head Strategy Engine</h3>
-                            <p>Combines multi-indicator confirmation (Supertrend, VWAP, RSI, ADX, EMA, Candle Patterns) with 200 candle warmup before generating buy/sell signals.</p>
+                            <p>Combines multi-indicator confirmation (Supertrend, VWAP, RSI, ADX, EMA, Candle Patterns)
+                                with 200 candle warmup before generating buy/sell signals.</p>
                         </div>
 
                         <div class="rule-box">
                             <h3><i class="fa-solid fa-shield-halved"></i> Active Trade Block Guard</h3>
-                            <p>When an active position is <strong>OPEN</strong>, all subsequent signals are automatically blocked and ignored until the current position triggers its target or stop-loss.</p>
+                            <p>When an active position is <strong>OPEN</strong>, all subsequent signals are
+                                automatically blocked and ignored until the current position triggers its target or
+                                stop-loss.</p>
                         </div>
 
                         <div class="rule-box">
-                            <h3><i class="fa-solid fa-strikethrough"></i> MasterSL Trailing SL Rules</h3>
+                            <h3><i class="fa-solid fa-arrow-up-long"></i> Trailing Jump SL Rules</h3>
                             <ul>
-                                <li><strong>Initial Risk</strong>: Entry Spot \(\pm\) Risk Points (SL).</li>
-                                <li><strong>TR1 (1:1 Hit)</strong>: Trailed to <em>Cost-to-Cost (Entry Spot)</em>. Zero risk!</li>
-                                <li><strong>TR2 (1:2 Hit)</strong>: Trailed to <em>TR1 Target Level</em>.</li>
-                                <li><strong>TR3 (1:3 Hit)</strong>: Trailed to <em>TR2 Target Level</em>.</li>
-                                <li><strong>TR4 Target (1:4 Hit)</strong>: Exit trade at full target 1:4 profit!</li>
+                                <li><strong>Initial SL</strong>: Entry ± SL Points (default -10 pts).</li>
+                                <li><strong>Trailing Jump</strong>: SL तभी move होगा जब price, entry से <em>Trailing
+                                        Jump Points</em> (default 18) के बराबर favourable move करे।</li>
+                                <li><strong>Breathing Space</strong>: छोटे ऊपर-नीचे fluctuations (जैसे 5-15 points) में
+                                    SL नहीं हिलेगा — trade जल्दी नहीं कटेगी।</li>
+                                <li><strong>Trail Lock</strong>: हर नए favourable move पर SL =
+                                    <code>Entry + (MaxFavorable - Jump)</code> पर shift होता है।
+                                </li>
+                                <li><strong>Exit</strong>: Target hit हो या SL hit हो — trade बंद।</li>
                             </ul>
                         </div>
                     </div>
@@ -293,4 +317,5 @@
     <!-- Application Script -->
     <script src="app.js"></script>
 </body>
+
 </html>
