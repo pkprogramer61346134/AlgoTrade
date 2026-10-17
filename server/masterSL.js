@@ -94,13 +94,24 @@ class MasterSL {
             const balance = await dhanBalance.getBalance();
             this.log(`STEP 2 Balance: ₹${balance}`);
 
+            // ⬇️ NEW LOGIC: Balance ko 11,000 tak limit karo
+            const MAX_ALLOWED_BUDGET = 11000;
+            let budgetToSend = balance;
+
+            if (balance > MAX_ALLOWED_BUDGET) {
+                budgetToSend = MAX_ALLOWED_BUDGET;
+                this.log(`STEP 2.1 Budget capped at ₹${MAX_ALLOWED_BUDGET} (Available: ₹${balance})`);
+            } else {
+                this.log(`STEP 2.1 Using full available balance: ₹${balance}`);
+            }
+
             // STEP 3: BEST STRIKE
             const strike = await strikeSelector.getBestStrike(
                 {
                     securityId: scrip.securityId || 13,
                     exchangeSegment: scrip.exchangeSegment || "IDX_I"
                 },
-                balance,
+                budgetToSend,  // 👈 balance नहीं, budgetToSend यूज़ करें
                 optionType,
                 Number(signal.entry || 0)
             );
