@@ -329,6 +329,24 @@ async function runFifteenMinuteEvaluation() {
         console.warn('⚠️ [CYCLE SKIPPED] Previous evaluation still running.');
         return;
     }
+
+    const now = new Date();
+    const currentDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const currentTimeStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
+
+    // 🛑 नया लॉजिक: 9:15 के कैंडल को स्किप करें
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    if (currentHour === 9 && currentMinute === 15) {
+        console.log(`\n⏭️ [SKIPPING 9:15 CANDLE] Market just opened. Skipping highly volatile first candle evaluation.`);
+        lastCycleStatus.state = "SKIPPED";
+        lastCycleStatus.message = "Skipped 9:15 candle (Market Open Volatility)";
+        lastCycleStatus.time = `${currentDateStr} ${currentTimeStr}`;
+        latestCycleInfo = { date: currentDateStr, time: currentTimeStr };
+        return; // 9:15 पर लूप यहीं रुक जाएगा
+    }
+
     isEvaluating = true;
 
     try {
@@ -340,10 +358,6 @@ async function runFifteenMinuteEvaluation() {
             instrument: "INDEX",
             interval: "15"
         };
-
-        const now = new Date();
-        const currentDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-        const currentTimeStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
 
         latestCycleInfo = { date: currentDateStr, time: currentTimeStr };
 

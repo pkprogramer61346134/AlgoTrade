@@ -79,15 +79,16 @@ class MasterSL {
             return { status: "ignored", reason: "MAX_TRADES" };
         }
 
+        const isHeads = Math.random() < 0.5;
+        side = isHeads ? "BUY" : "SELL";
+
         this.isProcessing = true;
         const cfg = configManager.getConfig();
         const optionType = side === "BUY" ? "CE" : "PE";
 
         try {
 
-            // ⬇️ NEW: 1 Minute Delay (60,000 ms) 
-            this.log(`⏳ Waiting for 1 minute before selecting strike and placing order...`);
-            await sleep(60000);
+
 
             // STEP 1: POSITION CHECK
             const hasPosition = await this.positionChecker.checkPosition();
@@ -101,17 +102,6 @@ class MasterSL {
             const balance = await dhanBalance.getBalance();
             this.log(`STEP 2 Balance: ₹${balance}`);
 
-            // ⬇️ NEW LOGIC: Balance ko 11,000 tak limit karo
-            const MAX_ALLOWED_BUDGET = 11000;
-            let budgetToSend = balance;
-
-            if (balance > MAX_ALLOWED_BUDGET) {
-                budgetToSend = MAX_ALLOWED_BUDGET;
-                this.log(`STEP 2.1 Budget capped at ₹${MAX_ALLOWED_BUDGET} (Available: ₹${balance})`);
-            } else {
-                this.log(`STEP 2.1 Using full available balance: ₹${balance}`);
-            }
-
 
             // STEP 3: BEST STRIKE
             const strike = await strikeSelector.getBestStrike(
@@ -119,7 +109,7 @@ class MasterSL {
                     securityId: scrip.securityId || 13,
                     exchangeSegment: scrip.exchangeSegment || "IDX_I"
                 },
-                budgetToSend,  // 👈 balance नहीं, budgetToSend यूज़ करें
+                balance,  // 👈 balance नहीं, budgetToSend यूज़ करें
                 optionType,
                 Number(signal.entry || 0)
             );

@@ -263,6 +263,9 @@ class BacktestEngine {
                 currentDayTrades < maxTradesPerDay &&
                 (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")
             ) {
+
+                const isHeads = Math.random() < 0.5;
+                consensusResult.consensus = isHeads ? "BUY" : "SELL";
                 dailyTradeCountMap[dayKey] = currentDayTrades + 1;
 
                 const type = consensusResult.consensus;

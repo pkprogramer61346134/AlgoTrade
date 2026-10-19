@@ -14,8 +14,8 @@ async function testStrikePrice() {
             exchangeSegment: 'IDX_I'
         };
 
-        const amount = 14000;
-        const optionType = 'CE';
+        const amount = 10000;
+        const optionType = 'PE';
         const spotPrice = 22721;
 
         console.log('Testing Best Strike Price Selection...\n');
