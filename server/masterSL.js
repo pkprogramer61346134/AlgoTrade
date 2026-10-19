@@ -18,6 +18,8 @@ const orderManager = require("./classoforder/order/order-manager");
 /**
  * Detect token-related errors from Dhan API responses
  */
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function isTokenError(error) {
     if (!error) return false;
     const msg = String(error.message || error).toLowerCase();
@@ -82,6 +84,11 @@ class MasterSL {
         const optionType = side === "BUY" ? "CE" : "PE";
 
         try {
+
+            // ⬇️ NEW: 1 Minute Delay (60,000 ms) 
+            this.log(`⏳ Waiting for 1 minute before selecting strike and placing order...`);
+            await sleep(60000);
+
             // STEP 1: POSITION CHECK
             const hasPosition = await this.positionChecker.checkPosition();
             this.log(`STEP 1 Position check: ${hasPosition}`);
@@ -104,6 +111,7 @@ class MasterSL {
             } else {
                 this.log(`STEP 2.1 Using full available balance: ₹${balance}`);
             }
+
 
             // STEP 3: BEST STRIKE
             const strike = await strikeSelector.getBestStrike(
