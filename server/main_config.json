@@ -8,8 +8,8 @@
     "interval": "15"
   },
   "orderExchangeSegment": "NSE_FNO",
-  "targetPoints": 50,
+  "targetPoints": 100,
   "stopLossPoints": 10,
-  "trailingJumpPoints": 3,
+  "trailingJumpPoints": 4,
   "maxTradesPerRun": 3
 }
