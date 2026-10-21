@@ -63,7 +63,7 @@ class MasterSL {
     }
 
     async processSignal(signal, scrip = {}) {
-        const side = signal?.consensus;
+        let side = signal?.consensus;
 
         if (side !== "BUY" && side !== "SELL") {
             return { status: "ignored", reason: "NO_SIGNAL" };

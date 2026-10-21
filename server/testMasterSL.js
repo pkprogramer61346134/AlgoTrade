@@ -69,9 +69,12 @@ async function testMasterSL() {
     const balance = await dhanBalance.getBalance();
     console.log('   Balance: ₹' + balance);
 
-    // STEP 3: BEST STRIKE
+    const isHeads = Math.random() < 0.5;
+    const optionType = isHeads ? "CE" : "PE";
+    console.log('   Option Type: ' + optionType);
+
     console.log('\n--- STEP 3: Best Strike ---');
-    const optionType = "CE";
+    //const optionType = "CE";
     const strike = await strikeSelector.getBestStrike(
         {
             securityId: testScrip.securityId,
