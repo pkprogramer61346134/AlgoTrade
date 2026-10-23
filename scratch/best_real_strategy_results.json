@@ -1,0 +1,1070 @@
+{
+  "meta": {
+    "candles": 1000,
+    "days": 40,
+    "trainFrom": "2026-08-24",
+    "trainTo": "2026-09-25",
+    "testFrom": "2026-09-28",
+    "testTo": "2026-10-21",
+    "evaluated": 116856,
+    "trainWinners": 23781,
+    "survivedTest": 18711
+  },
+  "robust": [
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "CBRK"
+      ],
+      "sl": 30,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 90,
+        "winrate": 45.6,
+        "net": 1369.2,
+        "pf": 1.96,
+        "avg": 15.21,
+        "maxDD": 220
+      },
+      "train": {
+        "trades": 48,
+        "winrate": 45.8,
+        "net": 619.1,
+        "pf": 1.81,
+        "avg": 12.9,
+        "maxDD": 120
+      },
+      "test": {
+        "trades": 42,
+        "winrate": 45.2,
+        "net": 750.1,
+        "pf": 2.14,
+        "avg": 17.86,
+        "maxDD": 180
+      }
+    },
+    {
+      "names": [
+        "RSI50",
+        "MACD",
+        "RVOL"
+      ],
+      "sl": 40,
+      "tp": 60,
+      "mt": 3,
+      "all": {
+        "trades": 102,
+        "winrate": 56.9,
+        "net": 1447.8,
+        "pf": 1.84,
+        "avg": 14.19,
+        "maxDD": 274
+      },
+      "train": {
+        "trades": 58,
+        "winrate": 55.2,
+        "net": 594.7,
+        "pf": 1.59,
+        "avg": 10.25,
+        "maxDD": 274
+      },
+      "test": {
+        "trades": 44,
+        "winrate": 59.1,
+        "net": 853.1,
+        "pf": 2.21,
+        "avg": 19.39,
+        "maxDD": 120
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "CBRK"
+      ],
+      "sl": 30,
+      "tp": 60,
+      "mt": 3,
+      "all": {
+        "trades": 97,
+        "winrate": 48.5,
+        "net": 1178.2,
+        "pf": 1.82,
+        "avg": 12.15,
+        "maxDD": 132.6
+      },
+      "train": {
+        "trades": 54,
+        "winrate": 48.1,
+        "net": 548.6,
+        "pf": 1.68,
+        "avg": 10.16,
+        "maxDD": 132.6
+      },
+      "test": {
+        "trades": 43,
+        "winrate": 48.8,
+        "net": 629.7,
+        "pf": 2,
+        "avg": 14.64,
+        "maxDD": 120
+      }
+    },
+    {
+      "names": [
+        "MACD",
+        "WICK",
+        "RVOL"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 87,
+        "winrate": 47.1,
+        "net": 995.7,
+        "pf": 1.58,
+        "avg": 11.44,
+        "maxDD": 200
+      },
+      "train": {
+        "trades": 50,
+        "winrate": 48,
+        "net": 535.8,
+        "pf": 1.55,
+        "avg": 10.72,
+        "maxDD": 194
+      },
+      "test": {
+        "trades": 37,
+        "winrate": 45.9,
+        "net": 459.9,
+        "pf": 1.63,
+        "avg": 12.43,
+        "maxDD": 200
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "RSI50",
+        "MACD"
+      ],
+      "sl": 30,
+      "tp": 60,
+      "mt": 3,
+      "all": {
+        "trades": 103,
+        "winrate": 45.6,
+        "net": 917.3,
+        "pf": 1.55,
+        "avg": 8.91,
+        "maxDD": 300.5
+      },
+      "train": {
+        "trades": 58,
+        "winrate": 46.6,
+        "net": 467.3,
+        "pf": 1.51,
+        "avg": 8.06,
+        "maxDD": 300.5
+      },
+      "test": {
+        "trades": 45,
+        "winrate": 44.4,
+        "net": 450,
+        "pf": 1.6,
+        "avg": 10,
+        "maxDD": 270
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "CBRK"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 86,
+        "winrate": 47.7,
+        "net": 1128.7,
+        "pf": 1.66,
+        "avg": 13.12,
+        "maxDD": 299.6
+      },
+      "train": {
+        "trades": 45,
+        "winrate": 48.9,
+        "net": 463.5,
+        "pf": 1.52,
+        "avg": 10.3,
+        "maxDD": 139.6
+      },
+      "test": {
+        "trades": 41,
+        "winrate": 46.3,
+        "net": 665.2,
+        "pf": 1.81,
+        "avg": 16.22,
+        "maxDD": 240
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "WICK"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 2,
+      "all": {
+        "trades": 67,
+        "winrate": 49.3,
+        "net": 808.7,
+        "pf": 1.64,
+        "avg": 12.07,
+        "maxDD": 280
+      },
+      "train": {
+        "trades": 40,
+        "winrate": 50,
+        "net": 462.3,
+        "pf": 1.62,
+        "avg": 11.56,
+        "maxDD": 280
+      },
+      "test": {
+        "trades": 27,
+        "winrate": 48.1,
+        "net": 346.4,
+        "pf": 1.66,
+        "avg": 12.83,
+        "maxDD": 160
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "WICK"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 75,
+        "winrate": 50.7,
+        "net": 929.5,
+        "pf": 1.68,
+        "avg": 12.39,
+        "maxDD": 207.3
+      },
+      "train": {
+        "trades": 43,
+        "winrate": 53.5,
+        "net": 589.4,
+        "pf": 1.79,
+        "avg": 13.71,
+        "maxDD": 207.3
+      },
+      "test": {
+        "trades": 32,
+        "winrate": 46.9,
+        "net": 340.1,
+        "pf": 1.55,
+        "avg": 10.63,
+        "maxDD": 200
+      }
+    },
+    {
+      "names": [
+        "RSI50",
+        "MACD"
+      ],
+      "sl": 40,
+      "tp": 60,
+      "mt": 3,
+      "all": {
+        "trades": 103,
+        "winrate": 55.3,
+        "net": 1307.8,
+        "pf": 1.73,
+        "avg": 12.7,
+        "maxDD": 374
+      },
+      "train": {
+        "trades": 59,
+        "winrate": 52.5,
+        "net": 454.7,
+        "pf": 1.42,
+        "avg": 7.71,
+        "maxDD": 374
+      },
+      "test": {
+        "trades": 44,
+        "winrate": 59.1,
+        "net": 853.1,
+        "pf": 2.21,
+        "avg": 19.39,
+        "maxDD": 120
+      }
+    },
+    {
+      "names": [
+        "RSI50",
+        "MACD",
+        "CBRK"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 82,
+        "winrate": 48.8,
+        "net": 1033.8,
+        "pf": 1.64,
+        "avg": 12.61,
+        "maxDD": 208.7
+      },
+      "train": {
+        "trades": 42,
+        "winrate": 52.4,
+        "net": 448.6,
+        "pf": 1.56,
+        "avg": 10.68,
+        "maxDD": 208.7
+      },
+      "test": {
+        "trades": 40,
+        "winrate": 45,
+        "net": 585.2,
+        "pf": 1.72,
+        "avg": 14.63,
+        "maxDD": 200
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "RSI50",
+        "CBRK"
+      ],
+      "sl": 30,
+      "tp": 60,
+      "mt": 3,
+      "all": {
+        "trades": 102,
+        "winrate": 45.1,
+        "net": 1017.9,
+        "pf": 1.62,
+        "avg": 9.98,
+        "maxDD": 147.3
+      },
+      "train": {
+        "trades": 57,
+        "winrate": 43.9,
+        "net": 448.2,
+        "pf": 1.47,
+        "avg": 7.86,
+        "maxDD": 147.3
+      },
+      "test": {
+        "trades": 45,
+        "winrate": 46.7,
+        "net": 569.7,
+        "pf": 1.83,
+        "avg": 12.66,
+        "maxDD": 120
+      }
+    },
+    {
+      "names": [
+        "MACD",
+        "RVOL"
+      ],
+      "sl": 40,
+      "tp": 60,
+      "mt": 3,
+      "all": {
+        "trades": 111,
+        "winrate": 50.5,
+        "net": 1057.5,
+        "pf": 1.51,
+        "avg": 9.53,
+        "maxDD": 371
+      },
+      "train": {
+        "trades": 63,
+        "winrate": 49.2,
+        "net": 439.1,
+        "pf": 1.37,
+        "avg": 6.97,
+        "maxDD": 371
+      },
+      "test": {
+        "trades": 48,
+        "winrate": 52.1,
+        "net": 618.4,
+        "pf": 1.7,
+        "avg": 12.88,
+        "maxDD": 220
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "WICK"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 86,
+        "winrate": 48.8,
+        "net": 883,
+        "pf": 1.53,
+        "avg": 10.27,
+        "maxDD": 338.7
+      },
+      "train": {
+        "trades": 49,
+        "winrate": 51,
+        "net": 554.2,
+        "pf": 1.61,
+        "avg": 11.31,
+        "maxDD": 207.3
+      },
+      "test": {
+        "trades": 37,
+        "winrate": 45.9,
+        "net": 328.9,
+        "pf": 1.43,
+        "avg": 8.89,
+        "maxDD": 280
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "RSI50",
+        "MACD"
+      ],
+      "sl": 30,
+      "tp": 60,
+      "mt": 2,
+      "all": {
+        "trades": 76,
+        "winrate": 46.1,
+        "net": 759.1,
+        "pf": 1.63,
+        "avg": 9.99,
+        "maxDD": 334.1
+      },
+      "train": {
+        "trades": 45,
+        "winrate": 46.7,
+        "net": 429.1,
+        "pf": 1.61,
+        "avg": 9.54,
+        "maxDD": 334.1
+      },
+      "test": {
+        "trades": 31,
+        "winrate": 45.2,
+        "net": 330,
+        "pf": 1.65,
+        "avg": 10.65,
+        "maxDD": 150
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "WICK",
+        "RVOL"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 85,
+        "winrate": 49.4,
+        "net": 909.8,
+        "pf": 1.56,
+        "avg": 10.7,
+        "maxDD": 338.7
+      },
+      "train": {
+        "trades": 48,
+        "winrate": 52.1,
+        "net": 581,
+        "pf": 1.67,
+        "avg": 12.1,
+        "maxDD": 167.3
+      },
+      "test": {
+        "trades": 37,
+        "winrate": 45.9,
+        "net": 328.9,
+        "pf": 1.43,
+        "avg": 8.89,
+        "maxDD": 280
+      }
+    }
+  ],
+  "topByTrain": [
+    {
+      "names": [
+        "MACD",
+        "WICK",
+        "RVOL"
+      ],
+      "sl": 25,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 100,
+        "winrate": 40,
+        "net": 1175.5,
+        "pf": 1.81,
+        "avg": 11.75,
+        "maxDD": 225
+      },
+      "train": {
+        "trades": 60,
+        "winrate": 43.3,
+        "net": 763.8,
+        "pf": 1.91,
+        "avg": 12.73,
+        "maxDD": 225
+      },
+      "test": {
+        "trades": 40,
+        "winrate": 35,
+        "net": 411.7,
+        "pf": 1.68,
+        "avg": 10.29,
+        "maxDD": 141.8
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "WICK"
+      ],
+      "sl": 30,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 82,
+        "winrate": 42.7,
+        "net": 732.8,
+        "pf": 1.54,
+        "avg": 8.94,
+        "maxDD": 270
+      },
+      "train": {
+        "trades": 48,
+        "winrate": 52.1,
+        "net": 726.3,
+        "pf": 2.09,
+        "avg": 15.13,
+        "maxDD": 147.3
+      },
+      "test": {
+        "trades": 34,
+        "winrate": 29.4,
+        "net": 6.5,
+        "pf": 1.01,
+        "avg": 0.19,
+        "maxDD": 270
+      }
+    },
+    {
+      "names": [
+        "MACD",
+        "WICK",
+        "RVOL"
+      ],
+      "sl": 30,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 95,
+        "winrate": 40,
+        "net": 893.3,
+        "pf": 1.55,
+        "avg": 9.4,
+        "maxDD": 181.8
+      },
+      "train": {
+        "trades": 56,
+        "winrate": 44.6,
+        "net": 676.6,
+        "pf": 1.74,
+        "avg": 12.08,
+        "maxDD": 167.1
+      },
+      "test": {
+        "trades": 39,
+        "winrate": 33.3,
+        "net": 216.7,
+        "pf": 1.3,
+        "avg": 5.56,
+        "maxDD": 181.8
+      }
+    },
+    {
+      "names": [
+        "MACD",
+        "WICK"
+      ],
+      "sl": 25,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 101,
+        "winrate": 39.6,
+        "net": 1150.5,
+        "pf": 1.78,
+        "avg": 11.39,
+        "maxDD": 236.4
+      },
+      "train": {
+        "trades": 60,
+        "winrate": 41.7,
+        "net": 658.8,
+        "pf": 1.76,
+        "avg": 10.98,
+        "maxDD": 236.4
+      },
+      "test": {
+        "trades": 41,
+        "winrate": 36.6,
+        "net": 491.7,
+        "pf": 1.81,
+        "avg": 11.99,
+        "maxDD": 141.8
+      }
+    },
+    {
+      "names": [
+        "WICK",
+        "SR",
+        "ADX20"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "mt": 2,
+      "all": {
+        "trades": 68,
+        "winrate": 36.8,
+        "net": 50.7,
+        "pf": 1.03,
+        "avg": 0.75,
+        "maxDD": 708.3
+      },
+      "train": {
+        "trades": 36,
+        "winrate": 52.8,
+        "net": 651,
+        "pf": 2.07,
+        "avg": 18.08,
+        "maxDD": 160
+      },
+      "test": {
+        "trades": 32,
+        "winrate": 18.8,
+        "net": -600.3,
+        "pf": 0.41,
+        "avg": -18.76,
+        "maxDD": 640.3
+      }
+    },
+    {
+      "names": [
+        "CBRK"
+      ],
+      "sl": 25,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 110,
+        "winrate": 34.5,
+        "net": 1024.1,
+        "pf": 1.59,
+        "avg": 9.31,
+        "maxDD": 215
+      },
+      "train": {
+        "trades": 63,
+        "winrate": 36.5,
+        "net": 624.1,
+        "pf": 1.66,
+        "avg": 9.91,
+        "maxDD": 187.3
+      },
+      "test": {
+        "trades": 47,
+        "winrate": 31.9,
+        "net": 400,
+        "pf": 1.5,
+        "avg": 8.51,
+        "maxDD": 195
+      }
+    },
+    {
+      "names": [
+        "CBRK",
+        "RVOL"
+      ],
+      "sl": 25,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 110,
+        "winrate": 34.5,
+        "net": 1024.1,
+        "pf": 1.59,
+        "avg": 9.31,
+        "maxDD": 215
+      },
+      "train": {
+        "trades": 63,
+        "winrate": 36.5,
+        "net": 624.1,
+        "pf": 1.66,
+        "avg": 9.91,
+        "maxDD": 187.3
+      },
+      "test": {
+        "trades": 47,
+        "winrate": 31.9,
+        "net": 400,
+        "pf": 1.5,
+        "avg": 8.51,
+        "maxDD": 195
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "RVOL"
+      ],
+      "sl": 30,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 105,
+        "winrate": 43.8,
+        "net": 1389,
+        "pf": 1.78,
+        "avg": 13.23,
+        "maxDD": 267.7
+      },
+      "train": {
+        "trades": 60,
+        "winrate": 43.3,
+        "net": 621.6,
+        "pf": 1.61,
+        "avg": 10.36,
+        "maxDD": 267.7
+      },
+      "test": {
+        "trades": 45,
+        "winrate": 44.4,
+        "net": 767.3,
+        "pf": 2.02,
+        "avg": 17.05,
+        "maxDD": 210
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "WICK"
+      ],
+      "sl": 25,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 86,
+        "winrate": 39.5,
+        "net": 742.1,
+        "pf": 1.58,
+        "avg": 8.63,
+        "maxDD": 225
+      },
+      "train": {
+        "trades": 52,
+        "winrate": 46.2,
+        "net": 620.6,
+        "pf": 1.9,
+        "avg": 11.94,
+        "maxDD": 164.8
+      },
+      "test": {
+        "trades": 34,
+        "winrate": 29.4,
+        "net": 121.5,
+        "pf": 1.21,
+        "avg": 3.57,
+        "maxDD": 225
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "CBRK"
+      ],
+      "sl": 30,
+      "tp": 80,
+      "mt": 3,
+      "all": {
+        "trades": 90,
+        "winrate": 45.6,
+        "net": 1369.2,
+        "pf": 1.96,
+        "avg": 15.21,
+        "maxDD": 220
+      },
+      "train": {
+        "trades": 48,
+        "winrate": 45.8,
+        "net": 619.1,
+        "pf": 1.81,
+        "avg": 12.9,
+        "maxDD": 120
+      },
+      "test": {
+        "trades": 42,
+        "winrate": 45.2,
+        "net": 750.1,
+        "pf": 2.14,
+        "avg": 17.86,
+        "maxDD": 180
+      }
+    }
+  ],
+  "robustRules": [
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "CBRK"
+      ],
+      "sl": 30,
+      "tp": 80,
+      "maxTradesPerDay": 3,
+      "rules": {
+        "buy": [
+          {
+            "target": "vwap",
+            "condition": "above"
+          },
+          {
+            "target": "macd",
+            "condition": "bullishCross"
+          },
+          {
+            "target": "candleBreakout",
+            "condition": "closeAbovePrevHigh"
+          }
+        ],
+        "sell": [
+          {
+            "target": "vwap",
+            "condition": "below"
+          },
+          {
+            "target": "macd",
+            "condition": "bearishCross"
+          },
+          {
+            "target": "candleBreakout",
+            "condition": "closeBelowPrevLow"
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "RSI50",
+        "MACD",
+        "RVOL"
+      ],
+      "sl": 40,
+      "tp": 60,
+      "maxTradesPerDay": 3,
+      "rules": {
+        "buy": [
+          {
+            "target": "rsi",
+            "condition": "gte",
+            "value": 50
+          },
+          {
+            "target": "macd",
+            "condition": "bullishCross"
+          },
+          {
+            "target": "rvol",
+            "condition": "gte",
+            "value": 1.1
+          }
+        ],
+        "sell": [
+          {
+            "target": "rsi",
+            "condition": "lte",
+            "value": 50
+          },
+          {
+            "target": "macd",
+            "condition": "bearishCross"
+          },
+          {
+            "target": "rvol",
+            "condition": "gte",
+            "value": 1.1
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "MACD",
+        "CBRK"
+      ],
+      "sl": 30,
+      "tp": 60,
+      "maxTradesPerDay": 3,
+      "rules": {
+        "buy": [
+          {
+            "target": "vwap",
+            "condition": "above"
+          },
+          {
+            "target": "macd",
+            "condition": "bullishCross"
+          },
+          {
+            "target": "candleBreakout",
+            "condition": "closeAbovePrevHigh"
+          }
+        ],
+        "sell": [
+          {
+            "target": "vwap",
+            "condition": "below"
+          },
+          {
+            "target": "macd",
+            "condition": "bearishCross"
+          },
+          {
+            "target": "candleBreakout",
+            "condition": "closeBelowPrevLow"
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "MACD",
+        "WICK",
+        "RVOL"
+      ],
+      "sl": 40,
+      "tp": 80,
+      "maxTradesPerDay": 3,
+      "rules": {
+        "buy": [
+          {
+            "target": "macd",
+            "condition": "bullishCross"
+          },
+          {
+            "target": "priceAction",
+            "condition": "lowerWickRejection"
+          },
+          {
+            "target": "rvol",
+            "condition": "gte",
+            "value": 1.1
+          }
+        ],
+        "sell": [
+          {
+            "target": "macd",
+            "condition": "bearishCross"
+          },
+          {
+            "target": "priceAction",
+            "condition": "upperWickRejection"
+          },
+          {
+            "target": "rvol",
+            "condition": "gte",
+            "value": 1.1
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "VWAP",
+        "RSI50",
+        "MACD"
+      ],
+      "sl": 30,
+      "tp": 60,
+      "maxTradesPerDay": 3,
+      "rules": {
+        "buy": [
+          {
+            "target": "vwap",
+            "condition": "above"
+          },
+          {
+            "target": "rsi",
+            "condition": "gte",
+            "value": 50
+          },
+          {
+            "target": "macd",
+            "condition": "bullishCross"
+          }
+        ],
+        "sell": [
+          {
+            "target": "vwap",
+            "condition": "below"
+          },
+          {
+            "target": "rsi",
+            "condition": "lte",
+            "value": 50
+          },
+          {
+            "target": "macd",
+            "condition": "bearishCross"
+          }
+        ]
+      }
+    }
+  ]
+}

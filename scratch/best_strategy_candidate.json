@@ -1,0 +1,24 @@
+{
+  "id": "vwap_macd_candle_breakout",
+  "name": "🏆 VWAP + MACD + Candle Breakout (real-data validated)",
+  "enabled": true,
+  "winrate": "48.0%",
+  "riskRewardRatio": 2.0,
+  "indicators": {
+    "slPoints": 30,
+    "targetPoints": 60,
+    "maxTradesPerDay": 3
+  },
+  "rules": {
+    "buy": [
+      { "target": "vwap", "condition": "above" },
+      { "target": "macd", "condition": "bullishCross" },
+      { "target": "candleBreakout", "condition": "closeAbovePrevHigh" }
+    ],
+    "sell": [
+      { "target": "vwap", "condition": "below" },
+      { "target": "macd", "condition": "bearishCross" },
+      { "target": "candleBreakout", "condition": "closeBelowPrevLow" }
+    ]
+  }
+}

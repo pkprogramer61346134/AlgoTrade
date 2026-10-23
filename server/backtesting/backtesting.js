@@ -176,13 +176,14 @@ class BacktestEngine {
                 let isEODSquareOff = false;
 
                 if (isBUY) {
-                    // Target पहले check करो (अगर same candle में दोनों hit हुए तो optimistic)
-                    if (candleHigh >= activePosition.targetPrice) isTargetHit = true;
-                    else if (candleLow <= activePosition.slPrice) isSLHit = true;
+                    // SL पहले check करो — अगर same candle में दोनों hit हुए तो conservative (SL मानो),
+                    // क्योंकि candle के अंदर का order पता नहीं होता; optimistic मानने से backtest inflate होता है।
+                    if (candleLow <= activePosition.slPrice) isSLHit = true;
+                    else if (candleHigh >= activePosition.targetPrice) isTargetHit = true;
                     else if (isLastCandleOfDay) isEODSquareOff = true;
                 } else {
-                    if (candleLow <= activePosition.targetPrice) isTargetHit = true;
-                    else if (candleHigh >= activePosition.slPrice) isSLHit = true;
+                    if (candleHigh >= activePosition.slPrice) isSLHit = true;
+                    else if (candleLow <= activePosition.targetPrice) isTargetHit = true;
                     else if (isLastCandleOfDay) isEODSquareOff = true;
                 }
 
@@ -264,8 +265,7 @@ class BacktestEngine {
                 (consensusResult.consensus === "BUY" || consensusResult.consensus === "SELL")
             ) {
 
-                const isHeads = Math.random() < 0.5;
-                consensusResult.consensus = isHeads ? "BUY" : "SELL";
+                // NOTE: direction comes ONLY from the consensus engine (random BUY/SELL coin-flip removed).
                 dailyTradeCountMap[dayKey] = currentDayTrades + 1;
 
                 const type = consensusResult.consensus;

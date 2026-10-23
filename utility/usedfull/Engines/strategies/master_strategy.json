@@ -1,44 +1,40 @@
 {
-  "id": "trend_pullback_confluence",
-  "name": "🔄 Trend Pullback Confluence",
+  "id": "vwap_macd_candle_breakout",
+  "name": "🏆 VWAP + MACD + Candle Breakout",
   "enabled": true,
-  "winrate": "65.0%",
+  "winrate": "49.0%",
   "riskRewardRatio": 2.0,
   "indicators": {
-    "slPoints": 15,
-    "targetPoints": 30,
-    "rvolMin": 1.0,
-    "adxMin": 20
+    "slPoints": 30,
+    "targetPoints": 60
   },
   "rules": {
     "buy": [
-      {
-        "target": "supertrend",
-        "condition": "bullish"
-      },
       {
         "target": "vwap",
         "condition": "above"
       },
       {
-        "target": "rsi",
-        "condition": "gte",
-        "value": 40
+        "target": "macd",
+        "condition": "bullishCross"
+      },
+      {
+        "target": "candleBreakout",
+        "condition": "closeAbovePrevHigh"
       }
     ],
     "sell": [
-      {
-        "target": "supertrend",
-        "condition": "bearish"
-      },
       {
         "target": "vwap",
         "condition": "below"
       },
       {
-        "target": "rsi",
-        "condition": "lte",
-        "value": 60
+        "target": "macd",
+        "condition": "bearishCross"
+      },
+      {
+        "target": "candleBreakout",
+        "condition": "closeBelowPrevLow"
       }
     ]
   }

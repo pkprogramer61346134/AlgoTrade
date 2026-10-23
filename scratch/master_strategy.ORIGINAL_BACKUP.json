@@ -1,0 +1,54 @@
+{
+  "id": "sr_liquidity_sweep_pro",
+  "name": "💎 S/R Liquidity Sweep & Quality Zone",
+  "enabled": true,
+  "winrate": "68.0%",
+  "riskRewardRatio": 2.0,
+  "indicators": {
+    "slPoints": 15,
+    "targetPoints": 30,
+    "rvolMin": 1.1,
+    "adxMin": 15,
+    "srTolerance": 25
+  },
+  "rules": {
+    "buy": [
+      {
+        "target": "support",
+        "tolerance": 25
+      },
+      {
+        "target": "liquiditySweep",
+        "condition": "bullishSweep"
+      },
+      {
+        "target": "priceAction",
+        "condition": "lowerWickRejection"
+      },
+      {
+        "target": "rvol",
+        "condition": "gte",
+        "value": 1.1
+      }
+    ],
+    "sell": [
+      {
+        "target": "resistance",
+        "tolerance": 25
+      },
+      {
+        "target": "liquiditySweep",
+        "condition": "bearishSweep"
+      },
+      {
+        "target": "priceAction",
+        "condition": "upperWickRejection"
+      },
+      {
+        "target": "rvol",
+        "condition": "gte",
+        "value": 1.1
+      }
+    ]
+  }
+}
