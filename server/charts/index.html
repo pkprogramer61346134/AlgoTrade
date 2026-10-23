@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="hi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIFTY Fibonacci BUY Indicator</title>
+    <script src="https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js"></script>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        #status {
+            position: absolute;
+            z-index: 10;
+            top: 8px;
+            left: 8px;
+            padding: 6px 10px;
+            background: #ffffff;
+            border: 1px solid #dddddd;
+            border-radius: 4px;
+            font: 12px Arial, sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Loading historical candles...</div>
+    <div id="chart"></div>
+
+    <script>
+        const container = document.getElementById('chart');
+        const status = document.getElementById('status');
+
+        const chart = LightweightCharts.createChart(container, {
+            width: container.clientWidth,
+            height: container.clientHeight,
+
+            layout: {
+                background: {
+                    type: LightweightCharts.ColorType.Solid,
+                    color: '#ffffff'
+                },
+                textColor: '#333333'
+            },
+
+            grid: {
+                vertLines: { visible: false },
+                horzLines: { visible: false }
+            },
+
+            rightPriceScale: {
+                borderColor: '#dddddd'
+            },
+
+            timeScale: {
+                borderColor: '#dddddd',
+                timeVisible: true,
+                secondsVisible: false
+            },
+
+            localization: {
+                timeFormatter: timestamp =>
+                    new Intl.DateTimeFormat('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }).format(new Date(timestamp * 1000))
+            }
+        });
+
+        const candleSeries = chart.addSeries(
+            LightweightCharts.CandlestickSeries,
+            {
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350'
+            }
+        );
+
+        function drawLine(
+            startTime,
+            endTime,
+            price,
+            color,
+            width = 1,
+            style = LightweightCharts.LineStyle.Solid
+        ) {
+            if (
+                !Number.isFinite(startTime) ||
+                !Number.isFinite(endTime) ||
+                !Number.isFinite(price)
+            ) {
+                return;
+            }
+
+            const lineSeries = chart.addSeries(
+                LightweightCharts.LineSeries,
+                {
+                    color,
+                    lineWidth: width,
+                    lineStyle: style,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                    crosshairMarkerVisible: false
+                }
+            );
+
+            lineSeries.setData([
+                { time: startTime, value: price },
+                {
+                    time: endTime > startTime ? endTime : startTime + 60,
+                    value: price
+                }
+            ]);
+        }
+
+        // Existing Fibonacci levels: 0.44, 0.50 and 0.56.
+        function drawFib(fib, endTime, color) {
+            if (!fib || !fib.levels) return;
+
+            drawLine(
+                fib.time,
+                endTime,
+                fib.levels['0.44'],
+                color,
+                2
+            );
+
+            drawLine(
+                fib.time,
+                endTime,
+                fib.levels['0.5'],
+                color,
+                1,
+                LightweightCharts.LineStyle.Dashed
+            );
+
+            drawLine(
+                fib.time,
+                endTime,
+                fib.levels['0.56'],
+                color,
+                2
+            );
+        }
+
+        // Existing 12:15–12:45 Fibonacci: PURPLE.
+        // Its existing line length remains unchanged.
+        function drawThirtyMinuteFib(fib) {
+            if (!fib || !fib.levels) return;
+
+            const extendedEndTime = fib.endTime + (30 * 60 * 60);
+
+            drawFib(
+                fib,
+                extendedEndTime,
+                '#8e44ad'
+            );
+        }
+
+        // Convert candle timestamp to Indian market time.
+        function getIndianTime(timestamp) {
+            return new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23'
+            }).format(new Date(timestamp * 1000));
+        }
+
+        // NEW: Build the combined candle from 15:15, 15:20 and 15:25.
+        function calculateFifteenMinuteFib(dayCandles) {
+            const requiredTimes = ['15:15', '15:20', '15:25'];
+
+            const selected = requiredTimes.map(requiredTime =>
+                dayCandles.find(
+                    candle => getIndianTime(candle.time) === requiredTime
+                )
+            );
+
+            // Only calculate when all three candles are available.
+            if (selected.some(candle => !candle)) {
+                return null;
+            }
+
+            // Verify the candles are consecutive 5-minute candles.
+            for (let i = 1; i < selected.length; i++) {
+                if (selected[i].time - selected[i - 1].time !== 300) {
+                    return null;
+                }
+            }
+
+            const first = selected[0];
+            const last = selected[2];
+
+            const open = first.open;
+            const close = last.close;
+            const high = Math.max(...selected.map(candle => candle.high));
+            const low = Math.min(...selected.map(candle => candle.low));
+
+            const range = high - low;
+
+            if (!Number.isFinite(range) || range <= 0) {
+                return null;
+            }
+
+            // Same formula: Green from bottom to top; Red from top to bottom.
+            const isGreen = close >= open;
+
+            const levels = isGreen
+                ? {
+                    '0.44': low + range * 0.44,
+                    '0.5': low + range * 0.50,
+                    '0.56': low + range * 0.56
+                }
+                : {
+                    '0.44': high - range * 0.44,
+                    '0.5': high - range * 0.50,
+                    '0.56': high - range * 0.56
+                };
+
+            for (const key of Object.keys(levels)) {
+                levels[key] = Number(levels[key].toFixed(2));
+            }
+
+            return {
+                time: first.time,
+                endTime: last.time + 300,
+                isGreen,
+                levels
+            };
+        }
+
+        // NEW: Only the 15:15–15:30 Fibonacci extends 30 hours.
+        function drawFifteenMinuteFib(fib) {
+            if (!fib || !fib.levels) return;
+
+            const extendedEndTime = fib.endTime + (300 * 60 * 60);
+
+            drawFib(
+                fib,
+                extendedEndTime,
+                '#e67e22'
+            );
+        }
+
+        async function loadChart() {
+            try {
+                const response = await fetch('/api/nifty');
+
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (!Array.isArray(data.candles) || !data.candles.length) {
+                    throw new Error('No historical candles returned');
+                }
+
+                candleSeries.setData(data.candles);
+
+                const days = {};
+
+                for (const candle of data.candles) {
+                    if (!days[candle.date]) {
+                        days[candle.date] = [];
+                    }
+
+                    days[candle.date].push(candle);
+                }
+
+                for (const date of Object.keys(days)) {
+                    days[date].sort((a, b) => a.time - b.time);
+                }
+
+                // 1. Opening Fibonacci: GREEN.
+                for (const fib of (data.firstCandleFibs || [])) {
+                    const dayCandles = days[fib.date] || [];
+                    if (!dayCandles.length) continue;
+
+                    drawFib(
+                        fib,
+                        dayCandles[dayCandles.length - 1].time,
+                        '#20a440'
+                    );
+                }
+
+                // 2. Second red candle Fibonacci: RED.
+                for (const fib of (data.secondRedCandleFibs || [])) {
+                    const dayCandles = days[fib.date] || [];
+                    if (!dayCandles.length) continue;
+
+                    drawFib(
+                        fib,
+                        dayCandles[dayCandles.length - 1].time,
+                        '#ef5350'
+                    );
+                }
+
+                // 3. 10:45 AM Fibonacci: BLUE.
+                for (const fib of (data.tenFortyFiveFibs || [])) {
+                    const dayCandles = days[fib.date] || [];
+                    if (!dayCandles.length) continue;
+
+                    drawFib(
+                        fib,
+                        dayCandles[dayCandles.length - 1].time,
+                        '#1976d2'
+                    );
+                }
+
+                // 4. Existing 12:15–12:45 Fibonacci: PURPLE.
+                for (const fib of (data.thirtyMinuteFibs || [])) {
+                    drawThirtyMinuteFib(fib);
+                }
+
+                // 5. NEW 15:15–15:30 Fibonacci: ORANGE, 30-hour extension.
+                for (const date of Object.keys(days)) {
+                    const fib = calculateFifteenMinuteFib(days[date]);
+
+                    if (fib) {
+                        drawFifteenMinuteFib(fib);
+                    }
+                }
+
+                // Existing BUY markers and labels remain unchanged.
+                const signals = data.signals || [];
+
+                markers.sort((a, b) => a.time - b.time);
+
+                LightweightCharts.createSeriesMarkers(
+                    candleSeries,
+                    markers
+                );
+
+                chart.timeScale().fitContent();
+
+                status.textContent =
+                    `Candles: ${data.candles.length}` +
+                    ` | 10:45 Fibs: ${(data.tenFortyFiveFibs || []).length}` +
+                    ` | 12:15-12:45 Fibs: ${(data.thirtyMinuteFibs || []).length}`;
+
+            } catch (error) {
+                console.error('Chart loading error:', error);
+                status.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        loadChart();
+
+        window.addEventListener('resize', () => {
+            chart.applyOptions({
+                width: container.clientWidth,
+                height: container.clientHeight
+            });
+        });
+    </script>
+</body>
+
+</html>

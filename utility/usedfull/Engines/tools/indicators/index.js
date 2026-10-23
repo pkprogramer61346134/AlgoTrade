@@ -16,6 +16,9 @@ const { calculateSupertrend } = require('./trend/supertrend');
 const { calculateADX } = require('./trend/adx');
 const { calculateDirectionalIndicators } = require('./trend/di');
 
+// Fibonacci (Newly Added)
+const { calculateFibonacci, isInGoldenZone } = require('./trend/fibonacci');
+
 // Price Action
 const { analyzeMarketStructure } = require('./price_action/market_structure');
 const { identifySwings } = require('./price_action/higher_high_lower_high');
@@ -123,7 +126,10 @@ module.exports = {
         calculateVWAP,
         calculateSupertrend,
         calculateADX,
-        calculateDirectionalIndicators
+        calculateDirectionalIndicators,
+        calculateFibonacci,      // <-- Added here
+        isNearFibLevel,          // <-- Added here
+        isInGoldenZone
     },
 
     // Price Action

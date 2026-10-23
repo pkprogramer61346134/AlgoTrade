@@ -1,40 +1,21 @@
 {
-  "id": "vwap_macd_candle_breakout",
-  "name": "🏆 VWAP + MACD + Candle Breakout",
+  "id": "first_5m_fib_strategy",
+  "name": "First 5M Candle Fibonacci Strategy",
   "enabled": true,
-  "winrate": "49.0%",
+  "winrate": "80.0%",
   "riskRewardRatio": 2.0,
   "indicators": {
-    "slPoints": 30,
-    "targetPoints": 60
+    "fibTolerance": 5
   },
   "rules": {
     "buy": [
       {
-        "target": "vwap",
-        "condition": "above"
-      },
-      {
-        "target": "macd",
-        "condition": "bullishCross"
-      },
-      {
-        "target": "candleBreakout",
-        "condition": "closeAbovePrevHigh"
+        "target": "fibonacci"
       }
     ],
     "sell": [
       {
-        "target": "vwap",
-        "condition": "below"
-      },
-      {
-        "target": "macd",
-        "condition": "bearishCross"
-      },
-      {
-        "target": "candleBreakout",
-        "condition": "closeBelowPrevLow"
+        "target": "fibonacci"
       }
     ]
   }

@@ -21,6 +21,7 @@
   "description": "",
   "dependencies": {
     "express": "^5.2.1",
+    "openchart-js": "^0.1.2",
     "ws": "^8.21.3"
   }
 }

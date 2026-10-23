@@ -1,40 +1,23 @@
 /**
- * Clean & Lightweight Multi-Strategy Consensus Engine with Auto-Warmup
+ * Fibonacci-Only Consensus Engine (First 5M Candle Strategy)
  * Location: C:\AlgoTrade\utility\usedfull\Engines\consensusEngine.js
  * 
  * Features:
  * - Pure Input -> Output Evaluation: Accepts Candle Data -> Returns Strategy Output Signal.
- * - Auto-Warmup via cached-historical-data.js: If input candles < 200, automatically fetches
- *   prior 200/400 candles up to the input candle's date and time for 100% accurate indicators!
- * - Output fields: { consensus, type, entry, sl, tr, confidence, strategyId, strategyName, triggeredSignals, warmupCandleCount }
+ * - Auto-Warmup via cached-historical-data.js
+ * - Only uses Fibonacci Golden Zone (0.44, 0.50, 0.56) based on First 5M Candle.
  */
 
 const fs = require('fs');
 const path = require('path');
 const { getCachedCandles } = require('../cached-historical-data');
 
-// Fixed paths inside C:\AlgoTrade\utility\usedfull\Engines
-const INDICATORS_PATH = path.join(__dirname, 'tools/indicators');
 const CONFIG_PATH = path.join(__dirname, 'consensus_master_head.json');
 
-let indicators;
-try {
-    indicators = require(INDICATORS_PATH);
-} catch (e) {
-    try {
-        indicators = require('./tools/indicators');
-    } catch (e2) {
-        try {
-            indicators = require('../../../indicators');
-        } catch (e3) {
-            indicators = require('../../indicators');
-        }
-    }
-}
+// ==========================================
+// 🛠️ हेल्पर फंक्शन्स
+// ==========================================
 
-/**
- * Auto-loads strategy JSON configuration from consensus_master_head.json
- */
 function loadStrategyConfig(configName = "consensus_master_head.json") {
     try {
         const primaryPath = path.join(__dirname, configName);
@@ -52,14 +35,8 @@ function loadStrategyConfig(configName = "consensus_master_head.json") {
 
 const STRATEGIES_DIR = path.join(__dirname, 'strategies');
 
-/**
- * Resolves and loads all active strategies from strategy group JSON files
- * listed in config.strategies (or config.strategyFiles) with `true` toggle flags.
- */
 function resolveAllStrategies(config = {}) {
     const loadedStrategies = [];
-
-    // 1. Check if config.strategies or config.strategyFiles is an object mapping strategy files -> boolean OR { enabled, minVotes }
     const fileMap = config.strategyFiles || (config.strategies && typeof config.strategies === 'object' && !Array.isArray(config.strategies) ? config.strategies : null);
 
     if (fileMap && typeof fileMap === 'object') {
@@ -92,348 +69,119 @@ function resolveAllStrategies(config = {}) {
             }
         }
     }
-
-    // 2. Fallback / Array support if config.strategies is an array
-    if (Array.isArray(config.strategies)) {
-        for (const item of config.strategies) {
-            if (typeof item === 'string' && item.endsWith('.json')) {
-                const cleanFileName = item.replace(/^(\.\/|strategies[/\\])+/i, '');
-                const filePath = path.isAbsolute(item) ? item : path.join(STRATEGIES_DIR, cleanFileName);
-                if (fs.existsSync(filePath)) {
-                    try {
-                        const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-                        const list = Array.isArray(content) ? content : (content.strategies || []);
-                        for (const s of list) {
-                            if (s && s.enabled !== false) loadedStrategies.push(s);
-                        }
-                    } catch (e) {
-                        console.error(`❌ [CONSENSUS ENGINE] Error loading strategy file ${item}: ${e.message}`);
-                    }
-                }
-            } else if (item && typeof item === 'object') {
-                if (item.enabled !== false) {
-                    loadedStrategies.push(item);
-                }
-            }
-        }
-    }
-
     return loadedStrategies;
 }
 
 /**
- * Compute technical indicators across candle dataset
+ * 📊 Fibonacci लाइनें कैलकुलेट करने का फंक्शन
  */
-function computeIndicators(candles, cfg = {}) {
-    if (!candles || !Array.isArray(candles) || candles.length === 0) return {};
+function calculateFibLevels(firstCandle) {
+    const firstOpen = Number(firstCandle.open || firstCandle.candleOpen);
+    const firstClose = Number(firstCandle.close || firstCandle.candleClose);
+    const firstHigh = Number(firstCandle.high || firstCandle.candleHigh);
+    const firstLow = Number(firstCandle.low || firstCandle.candleLow);
 
-    const vwap = indicators.trend.calculateVWAP(candles);
-    const supertrend = indicators.trend.calculateSupertrend(candles, cfg.supertrendPeriod || 10, cfg.supertrendMultiplier || 3);
-    const rvol = indicators.volume.calculateRelativeVolume(candles, cfg.rvolPeriod || 20);
-    const rsi = indicators.momentum.calculateRSI(candles, cfg.rsiPeriod || 14);
-    const adx = indicators.trend.calculateADX(candles, cfg.adxPeriod || 14);
-    const atr = indicators.volatility.calculateATR(candles, cfg.atrPeriod || 14);
-    const ema10 = indicators.trend.calculateEMA(candles, 10);
-    const emaFast = indicators.trend.calculateEMA(candles, cfg.emaFastPeriod || 20);
-    const emaSlow = indicators.trend.calculateEMA(candles, cfg.emaSlowPeriod || 50);
-    const macd = indicators.momentum.calculateMACD ? indicators.momentum.calculateMACD(candles, 12, 26, 9) : null;
-    const bollinger = indicators.volatility.calculateBollingerBands ? indicators.volatility.calculateBollingerBands(candles, 20, 2) : null;
+    const isFirstGreen = firstClose > firstOpen;
+    const diff = firstHigh - firstLow;
+    const levels = {};
 
-    const donchian = [];
-    if (candles && Array.isArray(candles)) {
-        const period = cfg.donchianPeriod || 20;
-        for (let idx = 0; idx < candles.length; idx++) {
-            if (idx < period) { donchian.push(null); continue; }
-            const slice = candles.slice(idx - period, idx);
-            const upper = Math.max(...slice.map(c => c.high || c.candleHigh || c.close));
-            const lower = Math.min(...slice.map(c => c.low || c.candleLow || c.close));
-            donchian.push({ upper, lower });
+    // 0.44, 0.50, 0.56 का कैलकुलेशन
+    const targetRatios = { "0.44": 0.44, "0.50": 0.50, "0.56": 0.56 };
+    for (const [key, ratio] of Object.entries(targetRatios)) {
+        if (isFirstGreen) {
+            // ग्रीन है तो नीचे से ऊपर (Low to High)
+            levels[key] = Number((firstHigh - (diff * ratio)).toFixed(2));
+        } else {
+            // रेड है तो ऊपर से नीचे (High to Low)
+            levels[key] = Number((firstLow + (diff * ratio)).toFixed(2));
         }
     }
 
-    const orbMap = {};
-    const prevDayMap = {};
-    if (candles && candles.length > 0) {
-        const candlesByDate = {};
-        for (const c of candles) {
-            const d = c.date || 'DEFAULT';
-            if (!candlesByDate[d]) candlesByDate[d] = [];
-            candlesByDate[d].push(c);
-        }
-        const fnORB = indicators.getOpeningRange || (indicators.marketContext && indicators.marketContext.getOpeningRange);
-        for (const [d, dateCandles] of Object.entries(candlesByDate)) {
-            if (fnORB) {
-                const candleInterval = Number(cfg.interval || (dateCandles[0]?.interval) || 15);
-                const res = fnORB(dateCandles, 15, candleInterval);
-                orbMap[d] = { high: res ? res.orbHigh : null, low: res ? res.orbLow : null };
-            }
-        }
-        const dates = Object.keys(candlesByDate);
-        for (let dIdx = 1; dIdx < dates.length; dIdx++) {
-            const prevDate = dates[dIdx - 1];
-            const currentDate = dates[dIdx];
-            const prevCandles = candlesByDate[prevDate];
-            if (prevCandles && prevCandles.length > 0) {
-                const high = Math.max(...prevCandles.map(c => c.high || c.candleHigh || c.close));
-                const low = Math.min(...prevCandles.map(c => c.low || c.candleLow || c.close));
-                const lastPrev = prevCandles[prevCandles.length - 1];
-                const close = Number(lastPrev.close || lastPrev.candleClose || lastPrev.price || 0);
-                prevDayMap[currentDate] = { pdh: high, pdl: low, pdc: close };
-            }
-        }
-    }
-
-    const fnWicks = indicators.analyzeWicks || (indicators.priceAction && indicators.priceAction.analyzeWicks);
-    const wicks = (candles && Array.isArray(candles)) ? candles.map(c => fnWicks ? fnWicks(c) : null) : [];
-
-    return { vwap, supertrend, rvol, rsi, adx, atr, ema10, emaFast, emaSlow, macd, bollinger, donchian, orb: orbMap, prevDay: prevDayMap, wicks };
+    return { isFirstGreen, levels };
 }
 
-/**
- * Evaluate a single strategy against a candle
- */
-function evaluateSingleStrategy(c, i, candles, strat, computed, options = {}) {
+// ==========================================
+// 🟢 मुख्य स्ट्रेटेजी लॉजिक (Fib Only)
+// ==========================================
+function evaluateSingleStrategy(c, i, candles, strat, options = {}) {
     if (!c) return null;
-    const spotPrice = Number(c.close || c.candleClose || c.price || c.ltp || c.liveLtp || 0);
+    const spotPrice = Number(c.close || c.candleClose || c.price || c.ltp || 0);
     if (!spotPrice || isNaN(spotPrice) || spotPrice <= 0) return null;
-    const vwapVal = computed.vwap ? computed.vwap[i] : null;
-    const stObj = computed.supertrend ? computed.supertrend[i] : null;
-    const rvolVal = computed.rvol ? computed.rvol[i] : null;
-    const rsiVal = computed.rsi ? computed.rsi[i] : null;
-    const adxObj = computed.adx ? computed.adx[i] : null;
-    const adxVal = (adxObj && adxObj.adx !== undefined) ? adxObj.adx : null;
-    const rawAtr = computed.atr ? computed.atr[i] : null;
-    const atrVal = (rawAtr && typeof rawAtr === 'object' && rawAtr.atr !== undefined) ? Number(rawAtr.atr) : (typeof rawAtr === 'number' && !isNaN(rawAtr) ? rawAtr : null);
-
-    const candleHigh = c.high || c.candleHigh || spotPrice;
-    const candleLow = c.low || c.candleLow || spotPrice;
-    const candleRange = Math.abs(candleHigh - candleLow);
-    const safeAtr = (atrVal !== null && atrVal > 0) ? atrVal : Math.max(0.1, candleRange);
-
-    const e10 = computed.ema10 ? computed.ema10[i] : null;
-    const eFast = computed.emaFast ? computed.emaFast[i] : null;
-    const eSlow = computed.emaSlow ? computed.emaSlow[i] : null;
-    const orbObj = computed.orb ? (computed.orb[c.date] || computed.orb['DEFAULT']) : null;
-    const prevDayObj = computed.prevDay ? (computed.prevDay[c.date] || null) : null;
-    const wickObj = computed.wicks ? computed.wicks[i] : null;
-    const macdObj = computed.macd ? computed.macd[i] : null;
-    const bbObj = computed.bollinger ? computed.bollinger[i] : null;
-    const donchianObj = computed.donchian ? computed.donchian[i] : null;
-
-    const lookbackM = Math.min(i, 12);
-    let swingHigh = null;
-    let swingLow = null;
-    if (lookbackM >= 3 && candles && Array.isArray(candles)) {
-        const priorSlice = candles.slice(i - lookbackM, i);
-        swingHigh = Math.max(...priorSlice.map(x => Number(x.high || x.candleHigh || x.close || 0)));
-        swingLow = Math.min(...priorSlice.map(x => Number(x.low || x.candleLow || x.close || 999999)));
-    }
-
-    const isStBull = stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY");
-    const isStBear = stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL");
-
-    const isLowerWickRej = wickObj && (wickObj.rejection === "BUYING_REJECTION" || wickObj.lowerWickRatio >= 40);
-    const isUpperWickRej = wickObj && (wickObj.rejection === "SELLING_REJECTION" || wickObj.upperWickRatio >= 40);
-
-    const cfgInds = strat.indicators || {};
-    const minRvol = cfgInds.rvolMin || 1.20;
-    const minAdx = cfgInds.adxMin || 18;
-    const atrMult = cfgInds.atrMultiplier || 1.8;
-
-    const effectiveRvol = (rvolVal !== null && rvolVal <= 1.15 && ((adxVal !== null && adxVal >= 18) || (rsiVal !== null && Math.abs(rsiVal - 50) >= 3))) ? 1.50 : rvolVal;
 
     let signalType = "NONE";
+    let customSl = null;
+    let strategyReason = "";
 
-    const candlePatterns = (indicators.priceAction && typeof indicators.priceAction.detectCandlestickPatterns === "function") 
-        ? indicators.priceAction.detectCandlestickPatterns(candles.slice(0, i + 1)) 
-        : [];
+    // उस दिन की सारी कैंडल्स निकालें
+    const todayCandles = candles.filter(x => x.date === c.date);
 
-    const trendlineObj = (indicators.priceAction && typeof indicators.priceAction.detectTrendlineBreakout === "function")
-        ? indicators.priceAction.detectTrendlineBreakout(candles.slice(0, i + 1))
-        : null;
+    // अगर पहली कैंडल है या कोई कैंडल नहीं है, तो वेट करें
+    if (todayCandles.length >= 2) {
+        const firstCandle = todayCandles[0];
+        const { isFirstGreen, levels } = calculateFibLevels(firstCandle);
 
-    if (strat.rules) {
-        let buyMatch = Array.isArray(strat.rules.buy) && strat.rules.buy.length > 0;
-        let sellMatch = Array.isArray(strat.rules.sell) && strat.rules.sell.length > 0;
+        const lvl44 = levels["0.44"];
+        const lvl50 = levels["0.50"];
+        const lvl56 = levels["0.56"];
 
-        if (buyMatch) {
-            for (const r of strat.rules.buy) {
-                if (r.target === "supertrend" && r.condition === "bullish" && !isStBull) buyMatch = false;
-                if (r.target === "vwap" && r.condition === "above" && (vwapVal === null || spotPrice <= vwapVal)) buyMatch = false;
-                if (r.target === "rvol" && r.condition === "gte" && (effectiveRvol === null || effectiveRvol < (r.value || minRvol))) buyMatch = false;
-                if (r.target === "rsi" && r.condition === "gte" && (rsiVal === null || rsiVal < (r.value || 50))) buyMatch = false;
-                if (r.target === "adx" && r.condition === "gte" && (adxVal === null || adxVal < (r.value || minAdx))) buyMatch = false;
-                if (r.target === "orb" && r.condition === "aboveHigh" && (!orbObj || orbObj.high === null || spotPrice <= orbObj.high)) buyMatch = false;
-                if (r.target === "ema" && r.condition === "goldenCross" && (eFast === null || eSlow === null || eFast <= eSlow)) buyMatch = false;
-                if (r.target === "tripleEMA" && r.condition === "bullishStack" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) buyMatch = false;
-                if (r.target === "priceAction" && r.condition === "lowerWickRejection" && !isLowerWickRej) buyMatch = false;
-                if ((r.target === "candlestickPattern" || r.target === "candlestick") && !candlePatterns.some(p => p.name === (r.pattern || r.condition || r.value) || (r.condition === "bullish" && p.type === "BULLISH"))) buyMatch = false;
-                if (r.target === "trendline" && r.condition === "bullishBreakout" && (!trendlineObj || !trendlineObj.bullishBreakout)) buyMatch = false;
-                if (r.target === "macd" && r.condition === "bullishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd <= macdObj.signal)) buyMatch = false;
-                if (r.target === "donchian" && r.condition === "upperBreak" && (!donchianObj || donchianObj.upper === null || spotPrice <= donchianObj.upper)) buyMatch = false;
-                if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) buyMatch = false;
-                if (r.target === "prevDay" && r.condition === "abovePDH" && (!prevDayObj || !prevDayObj.pdh || spotPrice <= prevDayObj.pdh)) buyMatch = false;
-                if (r.target === "bollinger" && r.condition === "upperBandBreak" && (!bbObj || !bbObj.upper || spotPrice <= bbObj.upper)) buyMatch = false;
-                if (r.target === "marketStructure" && r.condition === "swingHighBreak" && (!swingHigh || spotPrice <= swingHigh)) buyMatch = false;
-                if (r.target === "liquiditySweep" && r.condition === "bullishSweep") {
-                    let isBullSweep = false;
-                    if (i >= 5 && candles && Array.isArray(candles)) {
-                        const prior5 = candles.slice(i - 5, i);
-                        const priorLow = Math.min(...prior5.map(x => Number(x.low || x.close || 999999)));
-                        const openP = Number(c.open || c.candleOpen || c.close);
-                        const closeP = Number(c.close || c.candleClose || c.price);
-                        const lowP = Number(c.low || c.candleLow || c.close);
-                        const highP = Number(c.high || c.candleHigh || c.close);
-                        const rangeP = highP - lowP;
-                        const lowerWickP = Math.min(openP, closeP) - lowP;
-                        const ratioP = rangeP > 0 ? (lowerWickP / rangeP) : 0;
-                        isBullSweep = (lowP < priorLow && closeP > openP && closeP > priorLow && ratioP >= 0.40);
-                    }
-                    if (!isBullSweep) buyMatch = false;
+        const currentClose = Number(c.close || c.candleClose);
+        const currentOpen = Number(c.open || c.candleOpen);
+        const isCurrentGreen = currentClose > currentOpen;
+
+        const prevCandle = todayCandles[todayCandles.length - 2];
+        const prevClose = Number(prevCandle.close || prevCandle.candleClose);
+
+        // टॉलरेंस (स्ट्रेटेजी में सेट कर सकते हैं, डिफॉल्ट 5)
+        const tolerance = strat.indicators?.fibTolerance || 5;
+
+        // 🟢 BUY (कॉल) का लॉजिक
+        if (strat.rules.buy && strat.rules.buy.some(r => r.target === "fibonacci" || r.target === "fib")) {
+            if (isFirstGreen) {
+                const isNearSupport = (Number(c.low) <= (lvl56 + tolerance) && currentClose > lvl56);
+                if (isNearSupport && isCurrentGreen) {
+                    signalType = "BUY";
+                    customSl = lvl56; // नीचे वाली लाइन का SL
+                    strategyReason = `Fib Support (0.56) Bounce`;
                 }
-                if (r.target === "supportResistance" || r.target === "supportZone" || r.target === "support") {
-                    const pdl = prevDayObj ? prevDayObj.pdl : null;
-                    const orbLow = orbObj ? orbObj.low : null;
-                    const bbLower = bbObj ? bbObj.lower : null;
-                    const donchianLower = donchianObj ? donchianObj.lower : null;
-
-                    let pivotS1 = null, pivotS2 = null;
-                    if (prevDayObj && prevDayObj.pdh && prevDayObj.pdl && prevDayObj.pdc) {
-                        const P = (prevDayObj.pdh + prevDayObj.pdl + prevDayObj.pdc) / 3;
-                        pivotS1 = 2 * P - prevDayObj.pdh;
-                        pivotS2 = P - (prevDayObj.pdh - prevDayObj.pdl);
-                    }
-
-                    const levels = [pdl, orbLow, swingLow, pivotS1, pivotS2, donchianLower, bbLower].filter(v => v !== null && v !== undefined && !isNaN(v));
-                    const tolerance = r.tolerance || r.threshold || cfgInds.srTolerance || 35;
-
-                    const isAtSupport = levels.some(lvl => {
-                        return Math.abs(spotPrice - lvl) <= tolerance || Math.abs(candleLow - lvl) <= tolerance || (spotPrice >= (lvl - tolerance) && spotPrice <= (lvl + tolerance));
-                    });
-
-                    if (!isAtSupport) buyMatch = false;
-                }
-                if (r.target === "candleBreakout") {
-                    if (i >= 1 && candles && Array.isArray(candles)) {
-                        const prevCandleA = candles[i - 1];
-                        const prevHighA = Number(prevCandleA.high || prevCandleA.candleHigh || prevCandleA.close);
-                        const prevLowA = Number(prevCandleA.low || prevCandleA.candleLow || prevCandleA.close);
-
-                        const maxRange = r.maxCandleARange || r.candleARange || r.maxRange || cfgInds.maxCandleARange || cfgInds.candleARange;
-                        if (maxRange && (prevHighA - prevLowA) > maxRange) {
-                            buyMatch = false;
-                        }
-
-                        if (r.condition === "closeAbovePrevHigh" || r.condition === "abovePrevHigh" || r.condition === "openAbovePrevHigh" || r.condition === "openAndCloseAbovePrevHigh") {
-                            if (spotPrice <= prevHighA) buyMatch = false;
-                        } else if (r.condition === "closeBelowPrevLow" || r.condition === "belowPrevLow" || r.condition === "openBelowPrevLow" || r.condition === "openAndCloseBelowPrevLow") {
-                            if (spotPrice >= prevLowA) buyMatch = false;
-                        }
-                    } else {
-                        buyMatch = false;
-                    }
+                else if (currentClose > lvl44 && prevClose <= lvl44) {
+                    signalType = "BUY";
+                    customSl = lvl50;
+                    strategyReason = `Fib Breakout (Above 0.44)`;
                 }
             }
         }
 
-        if (sellMatch) {
-            for (const r of strat.rules.sell) {
-                if (r.target === "supportResistance" || r.target === "resistanceZone" || r.target === "resistance") {
-                    const pdh = prevDayObj ? prevDayObj.pdh : null;
-                    const orbHigh = orbObj ? orbObj.high : null;
-                    const bbUpper = bbObj ? bbObj.upper : null;
-                    const donchianUpper = donchianObj ? donchianObj.upper : null;
-
-                    let pivotR1 = null, pivotR2 = null;
-                    if (prevDayObj && prevDayObj.pdh && prevDayObj.pdl && prevDayObj.pdc) {
-                        const P = (prevDayObj.pdh + prevDayObj.pdl + prevDayObj.pdc) / 3;
-                        pivotR1 = 2 * P - prevDayObj.pdl;
-                        pivotR2 = P + (prevDayObj.pdh - prevDayObj.pdl);
-                    }
-
-                    const levels = [pdh, orbHigh, swingHigh, pivotR1, pivotR2, donchianUpper, bbUpper].filter(v => v !== null && v !== undefined && !isNaN(v));
-                    const tolerance = r.tolerance || r.threshold || cfgInds.srTolerance || 35;
-
-                    const isAtResistance = levels.some(lvl => {
-                        return Math.abs(spotPrice - lvl) <= tolerance || Math.abs(candleHigh - lvl) <= tolerance || (spotPrice >= (lvl - tolerance) && spotPrice <= (lvl + tolerance));
-                    });
-
-                    if (!isAtResistance) sellMatch = false;
+        // 🔴 SELL (पुट) का लॉजिक
+        if (strat.rules.sell && strat.rules.sell.some(r => r.target === "fibonacci" || r.target === "fib")) {
+            if (!isFirstGreen) {
+                const isNearResistance = (Number(c.high) >= (lvl44 - tolerance) && currentClose < lvl44);
+                if (isNearResistance && !isCurrentGreen) {
+                    signalType = "SELL";
+                    customSl = lvl44; // ऊपर वाली लाइन का SL
+                    strategyReason = `Fib Resistance (0.44) Rejection`;
                 }
-                if (r.target === "supertrend" && r.condition === "bearish" && !isStBear) sellMatch = false;
-                if (r.target === "vwap" && r.condition === "below" && (vwapVal === null || spotPrice >= vwapVal)) sellMatch = false;
-                if (r.target === "rvol" && r.condition === "gte" && (effectiveRvol === null || effectiveRvol < (r.value || minRvol))) sellMatch = false;
-                if (r.target === "rsi" && r.condition === "lte" && (rsiVal === null || rsiVal > (r.value || 50))) sellMatch = false;
-                if (r.target === "adx" && r.condition === "gte" && (adxVal === null || adxVal < (r.value || minAdx))) sellMatch = false;
-                if (r.target === "orb" && r.condition === "belowLow" && (!orbObj || orbObj.low === null || spotPrice >= orbObj.low)) sellMatch = false;
-                if (r.target === "ema" && r.condition === "deathCross" && (eFast === null || eSlow === null || eFast >= eSlow)) sellMatch = false;
-                if (r.target === "tripleEMA" && r.condition === "bearishStack" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) sellMatch = false;
-                if (r.target === "priceAction" && r.condition === "upperWickRejection" && !isUpperWickRej) sellMatch = false;
-                if ((r.target === "candlestickPattern" || r.target === "candlestick") && !candlePatterns.some(p => p.name === (r.pattern || r.condition || r.value) || (r.condition === "bearish" && p.type === "BEARISH"))) sellMatch = false;
-                if (r.target === "trendline" && r.condition === "bearishBreakout" && (!trendlineObj || !trendlineObj.bearishBreakout)) sellMatch = false;
-                if (r.target === "macd" && r.condition === "bearishCross" && (!macdObj || macdObj.macd === null || macdObj.signal === null || macdObj.macd >= macdObj.signal)) sellMatch = false;
-                if (r.target === "donchian" && r.condition === "lowerBreak" && (!donchianObj || donchianObj.lower === null || spotPrice >= donchianObj.lower)) sellMatch = false;
-                if (r.target === "atrExpansion" && r.condition === "rangeSpike" && candleRange < (safeAtr * atrMult)) sellMatch = false;
-                if (r.target === "prevDay" && r.condition === "belowPDL" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellMatch = false;
-                if (r.target === "bollinger" && r.condition === "lowerBandBreak" && (!bbObj || !bbObj.lower || spotPrice >= bbObj.lower)) sellMatch = false;
-                if (r.target === "marketStructure" && r.condition === "swingLowBreak" && (!swingLow || spotPrice >= swingLow)) sellMatch = false;
-                if (r.target === "liquiditySweep" && r.condition === "bearishSweep") {
-                    let isBearSweep = false;
-                    if (i >= 5 && candles && Array.isArray(candles)) {
-                        const prior5 = candles.slice(i - 5, i);
-                        const priorHigh = Math.max(...prior5.map(x => Number(x.high || x.close || 0)));
-                        const openP = Number(c.open || c.candleOpen || c.close);
-                        const closeP = Number(c.close || c.candleClose || c.price);
-                        const lowP = Number(c.low || c.candleLow || c.close);
-                        const highP = Number(c.high || c.candleHigh || c.close);
-                        const rangeP = highP - lowP;
-                        const upperWickP = highP - Math.max(openP, closeP);
-                        const ratioP = rangeP > 0 ? (upperWickP / rangeP) : 0;
-                        isBearSweep = (highP > priorHigh && closeP < openP && closeP < priorHigh && ratioP >= 0.40);
-                    }
-                    if (!isBearSweep) sellMatch = false;
-                }
-                if (r.target === "candleBreakout") {
-                    if (i >= 1 && candles && Array.isArray(candles)) {
-                        const prevCandleA = candles[i - 1];
-                        const prevHighA = Number(prevCandleA.high || prevCandleA.candleHigh || prevCandleA.close);
-                        const prevLowA = Number(prevCandleA.low || prevCandleA.candleLow || prevCandleA.close);
-
-                        const maxRange = r.maxCandleARange || r.candleARange || r.maxRange || cfgInds.maxCandleARange || cfgInds.candleARange;
-                        if (maxRange && (prevHighA - prevLowA) > maxRange) {
-                            sellMatch = false;
-                        }
-
-                        if (r.condition === "closeBelowPrevLow" || r.condition === "belowPrevLow" || r.condition === "openBelowPrevLow" || r.condition === "openAndCloseBelowPrevLow") {
-                            if (spotPrice >= prevLowA) sellMatch = false;
-                        } else if (r.condition === "closeAbovePrevHigh" || r.condition === "abovePrevHigh" || r.condition === "openAbovePrevHigh" || r.condition === "openAndCloseAbovePrevHigh") {
-                            if (spotPrice <= prevHighA) sellMatch = false;
-                        }
-                    } else {
-                        sellMatch = false;
-                    }
+                else if (currentClose < lvl56 && prevClose >= lvl56) {
+                    signalType = "SELL";
+                    customSl = lvl50;
+                    strategyReason = `Fib Breakdown (Below 0.56)`;
                 }
             }
         }
-
-        if (buyMatch) signalType = "BUY";
-        else if (sellMatch) signalType = "SELL";
     }
 
     if (signalType !== "NONE") {
-        const configuredSL = (options.slPoints !== undefined && options.slPoints !== null && !isNaN(Number(options.slPoints)))
-            ? Number(options.slPoints)
-            : ((strat.indicators && strat.indicators.slPoints) ? Number(strat.indicators.slPoints) : null);
-
-        const configuredTR = (options.targetPoints !== undefined && options.targetPoints !== null && !isNaN(Number(options.targetPoints)))
-            ? Number(options.targetPoints)
-            : ((strat.indicators && strat.indicators.targetPoints) ? Number(strat.indicators.targetPoints) : null);
-
-        const slPts = configuredSL !== null ? configuredSL : Math.max(15.0, Math.min(35.0, safeAtr * 1.5));
-        const trPts = configuredTR !== null ? configuredTR : (slPts * (strat.riskRewardRatio || 2.0));
-
-        let sl = signalType === "BUY" ? (spotPrice - slPts) : (spotPrice + slPts);
-        let tp = signalType === "BUY" ? (spotPrice + trPts) : (spotPrice - trPts);
+        let sl, tp;
+        // SL हमेशा फिब लाइन पर होगा, और TP 1:2 जोखिम पर
+        if (customSl !== null) {
+            sl = customSl;
+            const risk = Math.abs(spotPrice - sl);
+            tp = signalType === "BUY" ? spotPrice + (risk * 2) : spotPrice - (risk * 2);
+        } else {
+            // फॉलबैक (अगर कभी लाइन न मिले, जो कि नहीं होना चाहिए)
+            const slPts = 10;
+            sl = signalType === "BUY" ? spotPrice - slPts : spotPrice + slPts;
+            tp = signalType === "BUY" ? spotPrice + (slPts * 2) : spotPrice - (slPts * 2);
+        }
 
         return {
             strategyId: strat.id,
@@ -443,178 +191,34 @@ function evaluateSingleStrategy(c, i, candles, strat, computed, options = {}) {
             sl: Number(sl.toFixed(2)),
             tr: Number(tp.toFixed(2)),
             confidence: strat.winrate || "70.0%",
-            reason: `🟢 All Rules Met (${signalType})`
+            reason: strategyReason || `🟢 Fib Rules Met (${signalType})`
         };
     }
 
     return null;
 }
 
-/**
- * Detailed Reason Helper: Returns exact indicator values & reasons why strategy did or didn't vote
- */
-function getStrategyFailureReason(c, i, candles, strat, computed) {
-    const spotPrice = c.close || c.candleClose || c.price;
-    const vwapVal = computed.vwap ? computed.vwap[i] : null;
-    const stObj = computed.supertrend ? computed.supertrend[i] : null;
-    const rvolVal = (computed.rvol && computed.rvol[i] !== null) ? computed.rvol[i] : 1.0;
-    const rsiVal = (computed.rsi && computed.rsi[i] !== null) ? computed.rsi[i] : null;
-    const adxObj = computed.adx ? computed.adx[i] : null;
-    const adxVal = (adxObj && adxObj.adx !== null && adxObj.adx !== undefined) ? adxObj.adx : null;
-
-    const e10 = computed.ema10 ? computed.ema10[i] : null;
-    const eFast = computed.emaFast ? computed.emaFast[i] : null;
-    const eSlow = computed.emaSlow ? computed.emaSlow[i] : null;
-    const orbObj = computed.orb ? (computed.orb[c.date] || computed.orb['DEFAULT']) : null;
-    const prevDayObj = computed.prevDay ? (computed.prevDay[c.date] || null) : null;
-    const macdObj = computed.macd ? computed.macd[i] : null;
-    const donchianObj = computed.donchian ? computed.donchian[i] : null;
-
-    const isStBull = stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY");
-    const isStBear = stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL");
-
-    const cfgInds = strat.indicators || {};
-    const minRvol = cfgInds.rvolMin || 1.20;
-    const minAdx = cfgInds.adxMin || 18;
-
-    const buyReasons = [];
-    const sellReasons = [];
-
-    if (strat.rules && Array.isArray(strat.rules.buy)) {
-        for (const r of strat.rules.buy) {
-            if (r.target === "supertrend" && !isStBull) buyReasons.push("Supertrend Bearish/Neutral");
-            if (r.target === "vwap" && (vwapVal === null || spotPrice <= vwapVal)) buyReasons.push(`Price Below VWAP (₹${spotPrice.toFixed(1)} <= ₹${vwapVal ? vwapVal.toFixed(1) : 'N/A'})`);
-            if (r.target === "rsi" && (rsiVal === null || rsiVal < (r.value || 50))) buyReasons.push(`RSI Low (${rsiVal !== null ? rsiVal.toFixed(1) : 'N/A'} < ${r.value || 50})`);
-            if (r.target === "rvol" && (rvolVal || 1.0) < (r.value || minRvol)) buyReasons.push(`RVOL Low (${(rvolVal || 1.0).toFixed(2)} < ${r.value || minRvol})`);
-            if (r.target === "adx" && (adxVal === null || adxVal < (r.value || minAdx))) buyReasons.push(`ADX Weak (${adxVal !== null ? adxVal.toFixed(1) : 'N/A'} < ${r.value || minAdx})`);
-            if (r.target === "orb" && (!orbObj || !orbObj.high || spotPrice <= orbObj.high)) buyReasons.push(`Below ORB High (₹${orbObj?.high ? orbObj.high.toFixed(1) : 'N/A'})`);
-            if (r.target === "tripleEMA" && (e10 === null || eFast === null || eSlow === null || e10 <= eFast || eFast <= eSlow)) buyReasons.push("EMA 10/20/50 Not Bullish");
-            if (r.target === "ema" && (eFast === null || eSlow === null || eFast <= eSlow)) buyReasons.push("EMA Fast <= Slow");
-            if (r.target === "macd" && (!macdObj || !macdObj.macd || !macdObj.signal || macdObj.macd <= macdObj.signal)) buyReasons.push("MACD Below Signal");
-            if (r.target === "donchian" && (!donchianObj || !donchianObj.upper || spotPrice <= donchianObj.upper)) buyReasons.push("Below Donchian Upper");
-            if (r.target === "prevDay" && (!prevDayObj || !prevDayObj.pdh || spotPrice <= prevDayObj.pdh)) buyReasons.push("Below Previous Day High");
-        }
-    }
-
-    if (strat.rules && Array.isArray(strat.rules.sell)) {
-        for (const r of strat.rules.sell) {
-            if (r.target === "supertrend" && !isStBear) sellReasons.push("Supertrend Bullish/Neutral");
-            if (r.target === "vwap" && (vwapVal === null || spotPrice >= vwapVal)) sellReasons.push(`Price Above VWAP (₹${spotPrice.toFixed(1)} >= ₹${vwapVal ? vwapVal.toFixed(1) : 'N/A'})`);
-            if (r.target === "rsi" && (rsiVal === null || rsiVal > (r.value || 50))) sellReasons.push(`RSI High (${rsiVal !== null ? rsiVal.toFixed(1) : 'N/A'} > ${r.value || 50})`);
-            if (r.target === "rvol" && (rvolVal || 1.0) < (r.value || minRvol)) sellReasons.push(`RVOL Low (${(rvolVal || 1.0).toFixed(2)} < ${r.value || minRvol})`);
-            if (r.target === "adx" && (adxVal === null || adxVal < (r.value || minAdx))) sellReasons.push(`ADX Weak (${adxVal !== null ? adxVal.toFixed(1) : 'N/A'} < ${r.value || minAdx})`);
-            if (r.target === "orb" && (!orbObj || !orbObj.low || spotPrice >= orbObj.low)) sellReasons.push(`Above ORB Low (₹${orbObj?.low ? orbObj.low.toFixed(1) : 'N/A'})`);
-            if (r.target === "tripleEMA" && (e10 === null || eFast === null || eSlow === null || e10 >= eFast || eFast >= eSlow)) sellReasons.push("EMA 10/20/50 Not Bearish");
-            if (r.target === "ema" && (eFast === null || eSlow === null || eFast >= eSlow)) sellReasons.push("EMA Fast >= Slow");
-            if (r.target === "macd" && (!macdObj || !macdObj.macd || !macdObj.signal || macdObj.macd >= macdObj.signal)) sellReasons.push("MACD Above Signal");
-            if (r.target === "donchian" && (!donchianObj || !donchianObj.lower || spotPrice >= donchianObj.lower)) sellReasons.push("Above Donchian Lower");
-            if (r.target === "prevDay" && (!prevDayObj || !prevDayObj.pdl || spotPrice >= prevDayObj.pdl)) sellReasons.push("Above Previous Day Low");
-        }
-    }
-
-    const isBearishTrend = (isStBear || (vwapVal && spotPrice < vwapVal));
-    const targetReasons = isBearishTrend && sellReasons.length > 0 ? sellReasons : buyReasons;
-
-    if (targetReasons.length > 0) {
-        return targetReasons.slice(0, 2).join("; ");
-    }
-
-    return "Conditions Not Satisfied";
-}
-
-/**
- * Evaluate real-time directional bias (BULLISH / BEARISH / NEUTRAL) for a strategy
- */
-function getStrategyLiveBias(c, i, candles, strat, computed) {
-    const spotPrice = c.close || c.candleClose || c.price;
-    const vwapVal = computed.vwap ? computed.vwap[i] : null;
-    const stObj = computed.supertrend ? computed.supertrend[i] : null;
-    const rsiVal = computed.rsi ? computed.rsi[i] : 50.0;
-    const e10 = computed.ema10 ? computed.ema10[i] : null;
-    const eFast = computed.emaFast ? computed.emaFast[i] : null;
-    const eSlow = computed.emaSlow ? computed.emaSlow[i] : null;
-    const orbObj = computed.orb ? (computed.orb[c.date] || computed.orb['DEFAULT']) : null;
-    const prevDayObj = computed.prevDay ? (computed.prevDay[c.date] || null) : null;
-    const wickObj = computed.wicks ? computed.wicks[i] : null;
-    const macdObj = computed.macd ? computed.macd[i] : null;
-    const donchianObj = computed.donchian ? computed.donchian[i] : null;
-
-    const isStBull = stObj && (stObj.direction === 1 || stObj.direction === "UP" || stObj.direction === "BUY");
-    const isStBear = stObj && (stObj.direction === -1 || stObj.direction === "DOWN" || stObj.direction === "SELL");
-
-    const id = (strat.id || "").toLowerCase();
-    const name = (strat.name || "").toLowerCase();
-
-    if (id.includes("supertrend") || name.includes("supertrend")) {
-        if (isStBull && vwapVal && spotPrice > vwapVal) return "BULLISH";
-        if (isStBear && vwapVal && spotPrice < vwapVal) return "BEARISH";
-    } else if (id.includes("orb") || name.includes("orb")) {
-        if (orbObj && orbObj.high && spotPrice > orbObj.high) return "BULLISH";
-        if (orbObj && orbObj.low && spotPrice < orbObj.low) return "BEARISH";
-    } else if (id.includes("ema_rsi") || name.includes("ema")) {
-        if (eFast && eSlow && eFast > eSlow && rsiVal >= 50) return "BULLISH";
-        if (eFast && eSlow && eFast < eSlow && rsiVal <= 50) return "BEARISH";
-    } else if (id.includes("liquidity") || name.includes("wick")) {
-        if (wickObj?.rejection === "BUYING_REJECTION" || (wickObj?.lowerWickRatio || 0) >= 30) return "BULLISH";
-        if (wickObj?.rejection === "SELLING_REJECTION" || (wickObj?.upperWickRatio || 0) >= 30) return "BEARISH";
-    } else if (id.includes("triple_confluence") || name.includes("confluence")) {
-        if (isStBull && eFast && eSlow && eFast > eSlow) return "BULLISH";
-        if (isStBear && eFast && eSlow && eFast < eSlow) return "BEARISH";
-    } else if (id.includes("triple_ema") || name.includes("stacked")) {
-        if (e10 && eFast && eSlow && e10 > eFast && eFast > eSlow) return "BULLISH";
-        if (e10 && eFast && eSlow && e10 < eFast && eFast < eSlow) return "BEARISH";
-    } else if (id.includes("macd") || name.includes("macd")) {
-        if (isStBull && macdObj?.macd && macdObj.macd > (macdObj.signal || 0)) return "BULLISH";
-        if (isStBear && macdObj?.macd && macdObj.macd < (macdObj.signal || 0)) return "BEARISH";
-    } else if (id.includes("donchian") || name.includes("donchian")) {
-        if (donchianObj && donchianObj.upper && spotPrice >= donchianObj.upper) return "BULLISH";
-        if (donchianObj && donchianObj.lower && spotPrice <= donchianObj.lower) return "BEARISH";
-    } else if (id.includes("prev_day") || name.includes("previous day")) {
-        if (prevDayObj && prevDayObj.pdh && spotPrice > prevDayObj.pdh) return "BULLISH";
-        if (prevDayObj && prevDayObj.pdl && spotPrice < prevDayObj.pdl) return "BEARISH";
-    }
-
-    // General indicator fallback evaluation
-    if (isStBull || (eFast && eSlow && eFast > eSlow) || (vwapVal && spotPrice > vwapVal)) return "BULLISH";
-    if (isStBear || (eFast && eSlow && eFast < eSlow) || (vwapVal && spotPrice < vwapVal)) return "BEARISH";
-
-    return "NEUTRAL";
-}
-
-/**
- * Consolidate strategy signals into master consensus output
- * 
- * @param {Array} signals - Array of triggered strategy signal objects
- * @param {number} [minVotes=2] - Minimum number of strategy votes required for consensus (configurable)
- */
 function consolidateSignals(signals, minVotes = 1) {
-    let buyCount = 0;
-    let sellCount = 0;
-    let topBuySignal = null;
-    let topSellSignal = null;
+    let buyCount = 0, sellCount = 0;
+    let topBuySignal = null, topSellSignal = null;
 
     for (const sig of signals) {
         if (sig.type === "BUY") {
             buyCount++;
-            if (!topBuySignal || parseFloat(sig.confidence || "0") > parseFloat(topBuySignal.confidence || "0")) {
-                topBuySignal = sig;
-            }
+            if (!topBuySignal || parseFloat(sig.confidence || "0") > parseFloat(topBuySignal.confidence || "0")) topBuySignal = sig;
         } else if (sig.type === "SELL") {
             sellCount++;
-            if (!topSellSignal || parseFloat(sig.confidence || "0") > parseFloat(topSellSignal.confidence || "0")) {
-                topSellSignal = sig;
-            }
+            if (!topSellSignal || parseFloat(sig.confidence || "0") > parseFloat(topSellSignal.confidence || "0")) topSellSignal = sig;
         }
     }
 
     let finalConsensus = "NO_SIGNAL";
     let chosenSignal = null;
-    const reqMinVotes = Number(minVotes !== undefined ? minVotes : 1);
 
-    if (buyCount >= reqMinVotes && buyCount > sellCount && topBuySignal) {
+    if (buyCount >= minVotes && buyCount > sellCount && topBuySignal) {
         finalConsensus = "BUY";
         chosenSignal = topBuySignal;
-    } else if (sellCount >= reqMinVotes && sellCount > buyCount && topSellSignal) {
+    } else if (sellCount >= minVotes && sellCount > buyCount && topSellSignal) {
         finalConsensus = "SELL";
         chosenSignal = topSellSignal;
     }
@@ -629,32 +233,22 @@ function consolidateSignals(signals, minVotes = 1) {
         strategyId: chosenSignal ? chosenSignal.strategyId : null,
         strategyName: chosenSignal ? chosenSignal.strategyName : null,
         triggeredSignals: signals,
-        minVotesRequired: reqMinVotes,
+        minVotesRequired: minVotes,
         buyVotes: buyCount,
         sellVotes: sellCount
     };
 }
 
-/**
- * Primary Async Consensus Engine Function with Auto-Warmup via cached-historical-data.js
- * 
- * If provided inputCandles array has fewer candles than requested warmupCount (default 200),
- * it automatically calls cached-historical-data.js to fetch prior 200/400 candles up to the target date/time!
- * 
- * @param {Array|Object} inputCandles - Single candle object or array of candle objects
- * @param {number} [i=-1] - Candle index to evaluate (-1 = latest candle)
- * @param {Object} [options={}] - Options: { warmupCount: 200, minVotes: 2, securityId: "13", exchangeSegment: "IDX_I", interval: "5" }
- * @returns {Promise<Object>} Signal output { consensus, type, entry, sl, tr, confidence, strategyId, strategyName, triggeredSignals, warmupCandleCount, minVotesRequired }
- */
+// ==========================================
+// 🚀 मुख्य इंजन (Auto-Warmup के साथ)
+// ==========================================
 async function evaluateConsensusEngine(inputCandles = [], i = -1, options = {}) {
     let candlesArray = [];
     let opts = {};
     let candleIndex = i;
 
-    // Support calling evaluateConsensusEngine(options) directly with single options object
-    if (typeof inputCandles === "object" && inputCandles !== null && !Array.isArray(inputCandles) && inputCandles.close === undefined && inputCandles.price === undefined && inputCandles.open === undefined) {
+    if (typeof inputCandles === "object" && inputCandles !== null && !Array.isArray(inputCandles) && inputCandles.close === undefined && inputCandles.open === undefined) {
         opts = { ...inputCandles };
-        candlesArray = [];
         candleIndex = -1;
     } else {
         candlesArray = Array.isArray(inputCandles) ? [...inputCandles] : (inputCandles ? [inputCandles] : []);
@@ -663,19 +257,17 @@ async function evaluateConsensusEngine(inputCandles = [], i = -1, options = {}) 
     }
 
     const config = loadStrategyConfig("consensus_master_head.json");
-    const warmupCount = (opts.warmupCount !== undefined ? Number(opts.warmupCount) : (opts.count !== undefined ? Number(opts.count) : (config.warmupCount !== undefined ? Number(config.warmupCount) : 200)));
+    const warmupCount = (opts.warmupCount !== undefined ? Number(opts.warmupCount) : (config.warmupCount !== undefined ? Number(config.warmupCount) : 200));
 
-    // Auto-warmup check: If input candles are less than required warmup threshold (e.g. 200 candles)
     if (candlesArray.length < warmupCount) {
         const lastCandle = candlesArray.length > 0 ? candlesArray[candlesArray.length - 1] : null;
-
         const now = new Date();
         const defaultDate = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
         const defaultTime = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" });
 
         const targetDate = opts.date || (lastCandle ? lastCandle.date : defaultDate);
         const targetTime = opts.time || (lastCandle ? lastCandle.time : defaultTime);
-        const securityId = opts.securityId || (lastCandle ? (lastCandle.securityId || lastCandle.scrip || lastCandle.symbol) : null) || "13";
+        const securityId = opts.securityId || (lastCandle ? (lastCandle.securityId || lastCandle.symbol) : null) || "13";
         const exchangeSegment = opts.exchangeSegment || (lastCandle ? lastCandle.exchangeSegment : null) || "IDX_I";
         const interval = String(opts.interval || (lastCandle ? lastCandle.interval : null) || "15");
 
@@ -702,65 +294,28 @@ async function evaluateConsensusEngine(inputCandles = [], i = -1, options = {}) 
     }
 
     if (candlesArray.length === 0) {
-        return {
-            consensus: "NO_SIGNAL",
-            type: "NO_SIGNAL",
-            entry: null,
-            sl: null,
-            tr: null,
-            confidence: "0%",
-            strategyId: null,
-            strategyName: null,
-            triggeredSignals: []
-        };
+        return { consensus: "NO_SIGNAL", type: "NO_SIGNAL", triggeredSignals: [] };
     }
 
     return evaluateConsensusEngineSync(candlesArray, candleIndex, opts);
 }
 
-/**
- * Synchronous version for callers that already pass full prepended candles (e.g. 200+ candles)
- */
 function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
     if (!candlesArray || !Array.isArray(candlesArray) || candlesArray.length < 1) {
-        console.warn(`⚠️ [CONSENSUS ENGINE WARN] Insufficient candle history (${candlesArray?.length || 0} candles). Minimum 10+ candles required for accurate indicator calculation.`);
-        return {
-            consensus: "NO_SIGNAL",
-            type: "NO_SIGNAL",
-            entry: null,
-            sl: null,
-            tr: null,
-            confidence: "0%",
-            strategyId: null,
-            strategyName: null,
-            triggeredSignals: [],
-            reason: "INSUFFICIENT_CANDLE_HISTORY"
-        };
+        return { consensus: "NO_SIGNAL", type: "NO_SIGNAL", triggeredSignals: [], reason: "INSUFFICIENT_CANDLE_HISTORY" };
     }
 
     const index = (i < 0) ? candlesArray.length - 1 : i;
     if (index < 0 || index >= candlesArray.length) {
-        return {
-            consensus: "NO_SIGNAL",
-            type: "NO_SIGNAL",
-            entry: null,
-            sl: null,
-            tr: null,
-            confidence: "0%",
-            strategyId: null,
-            strategyName: null,
-            triggeredSignals: []
-        };
+        return { consensus: "NO_SIGNAL", type: "NO_SIGNAL", triggeredSignals: [] };
     }
 
     const config = loadStrategyConfig("consensus_master_head.json");
     const strategies = resolveAllStrategies(config);
     const activeGroupMinVotes = strategies.find(s => s.groupMinVotes !== undefined)?.groupMinVotes;
-    const minVotes = Number(options.minVotes !== undefined ? options.minVotes : (options.minStrategyVotes !== undefined ? options.minStrategyVotes : (activeGroupMinVotes !== undefined ? activeGroupMinVotes : (config.minStrategyVotes !== undefined ? config.minStrategyVotes : (config.minVotes || 1)))));
+    const minVotes = Number(options.minVotes !== undefined ? options.minVotes : (activeGroupMinVotes !== undefined ? activeGroupMinVotes : (config.minStrategyVotes !== undefined ? config.minStrategyVotes : 1)));
 
     const c = candlesArray[index];
-    const computed = (options && options.precomputed) ? options.precomputed : computeIndicators(candlesArray, {});
-
     const processedCandle = c ? {
         index: index + 1,
         date: c.date,
@@ -777,7 +332,8 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
 
     for (const strat of strategies) {
         if (strat.enabled === false) continue;
-        const res = evaluateSingleStrategy(c, index, candlesArray, strat, computed, options);
+        const res = evaluateSingleStrategy(c, index, candlesArray, strat, options);
+
         if (res) {
             triggeredSignals.push(res);
             strategyStates.push({
@@ -789,10 +345,9 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
                 entry: res.entry,
                 sl: res.sl,
                 tr: res.tr,
-                reason: res.reason || `🟢 All Entry Rules Met (${res.type})`
+                reason: res.reason || `🟢 Fib Entry Met (${res.type})`
             });
         } else {
-            const failReason = getStrategyFailureReason(c, index, candlesArray, strat, computed);
             strategyStates.push({
                 strategyId: strat.id,
                 strategyName: strat.name,
@@ -802,7 +357,7 @@ function evaluateConsensusEngineSync(candlesArray, i = -1, options = {}) {
                 entry: null,
                 sl: null,
                 tr: null,
-                reason: failReason
+                reason: "Waiting for Fib Setup"
             });
         }
     }
@@ -823,6 +378,5 @@ module.exports = {
     evaluateConsensusEngineSync,
     evaluateConsensus: evaluateConsensusEngine,
     evaluateSingleConsensusSignal: evaluateConsensusEngine,
-    loadStrategyConfig,
-    computeIndicators
+    loadStrategyConfig
 };
