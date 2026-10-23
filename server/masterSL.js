@@ -79,8 +79,8 @@ class MasterSL {
             return { status: "ignored", reason: "MAX_TRADES" };
         }
 
-        const isHeads = Math.random() < 0.5;
-        side = isHeads ? "BUY" : "SELL";
+        // const isHeads = Math.random() < 0.5;
+        // side = isHeads ? "BUY" : "SELL";
 
         this.isProcessing = true;
         const cfg = configManager.getConfig();

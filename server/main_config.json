@@ -1,4 +1,4 @@
-{
+ {
   "realTradeEnabled": true,
   "selectedStock": {
     "securityId": "13",
@@ -10,6 +10,6 @@
   "orderExchangeSegment": "NSE_FNO",
   "targetPoints": 100,
   "stopLossPoints": 10,
-  "trailingJumpPoints": 4,
+  "trailingJumpPoints": 9,
   "maxTradesPerRun": 3
 }
