@@ -9,12 +9,13 @@
 const { selectBestOptionStrike } = require('../../../utility/usedfull/select-best-strike');
 
 class StrikePriceSelector {
-    async getBestStrike(stockInfo, amount, optionType, spotPrice) {
+    async getBestStrike(stockInfo, amount, optionType, spotPrice, strikeSteps = 0) {
         const strikeInfo = await selectBestOptionStrike({
             ...stockInfo,
             spotPrice: Number(spotPrice),
             optionType,
-            maxBudget: Number(amount)
+            maxBudget: Number(amount),
+            strikeSteps: Number(strikeSteps) || 0 // N-step OTM shift के लिए पास किया गया
         });
 
         if (!strikeInfo || strikeInfo.status !== 'success' || !strikeInfo.securityId) {

@@ -111,7 +111,8 @@ class MasterSL {
                 },
                 balance,  // 👈 balance नहीं, budgetToSend यूज़ करें
                 optionType,
-                Number(signal.entry || 0)
+                Number(signal.entry || 0),
+                Number(cfg.strikeSteps || 0)
             );
 
             const entry = Number(strike.liveLtp);

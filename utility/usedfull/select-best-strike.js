@@ -6,7 +6,7 @@
  * - Auto-resolves Current Expiry & Live Spot Price.
  * - Auto-checks Account Balance (via DhanFunds) or uses provided maxBudget.
  * - Calculates Lot Quantity (lots * lotSize, e.g. 1 lot Nifty = 65 Qty).
- * - Selects exact ATM strike or closest budget-friendly near-ATM OTM strike.
+ * - Selects exact ATM or closest budget-friendly near-ATM OTM strike based on strikeSteps.
  * 
  * NOTE: Delta को हटा दिया गया है — MasterSL अब Delta use नहीं करता।
  */
@@ -162,75 +162,79 @@ class StrikeSelector {
 
         const safeBudget = (availableBudget !== null && availableBudget > 0) ? Number((availableBudget * 0.85).toFixed(2)) : null;
 
-        // 5. Valid candidates within budget
-        const validCandidates = [];
-
-        for (const item of allStrikes) {
-            const side = getOptionSide(item.key);
-            if (!side || !side.security_id) continue;
-
-            const ltp = Number(side.last_price || side.top_bid_price || 0);
-            if (ltp <= 0) continue;
-
-            const reqMargin = ltp * totalQty;
-            const distFromSpot = item.strike - spotPrice;
-            const isItm = optionType === "CE" ? (item.strike <= spotPrice) : (item.strike >= spotPrice);
-
-            validCandidates.push({
-                item,
-                side,
-                ltp,
-                reqMargin,
-                distFromSpot,
-                isItm,
-                strike: item.strike
-            });
-        }
-
         let selectedItem = null;
         let selectedSide = null;
         let selectedLtp = 0;
         let selectedReqMargin = 0;
 
-        // --- UPDATED LOGIC: Select exact ATM or closest OTM within budget (1 Step) ---
+        // --- NEW LOGIC: Jump N-steps OTM from ATM, then walk back if budget fails ---
 
-        // 1. Filter only ATM and OTM strikes (CE: >= Spot, PE: <= Spot)
-        const otmCandidates = validCandidates.filter(c => {
-            if (optionType === "CE") {
-                return c.strike >= spotPrice;
-            } else {
-                return c.strike <= spotPrice;
+        const strikeSteps = Math.max(0, Number(params.strikeSteps || 0));
+
+        // 1. सभी strikes को sort करें (CE: ascending, PE: descending) ताकि OTM की तरफ जाने का order सही रहे
+        const orderedStrikes = allStrikes
+            .map(item => {
+                const side = getOptionSide(item.key);
+                if (!side || !side.security_id) return null;
+                const ltp = Number(side.last_price || side.top_bid_price || 0);
+                if (ltp <= 0) return null;
+                return {
+                    item,
+                    side,
+                    ltp,
+                    reqMargin: ltp * totalQty,
+                    strike: item.strike
+                };
+            })
+            .filter(c => c !== null)
+            .sort((a, b) => {
+                // CE के लिए ऊपर जाना OTM है, PE के लिए नीचे जाना OTM है
+                return optionType === "CE" ? a.strike - b.strike : b.strike - a.strike;
+            });
+
+        if (orderedStrikes.length === 0) {
+            throw new Error("[STRIKE SELECTOR ERROR] No valid strikes with live LTP found.");
+        }
+
+        // 2. ATM (spot के सबसे करीब) ढूँढें
+        let atmIndex = 0;
+        let minDiff = Infinity;
+        for (let i = 0; i < orderedStrikes.length; i++) {
+            const diff = Math.abs(orderedStrikes[i].strike - spotPrice);
+            if (diff < minDiff) {
+                minDiff = diff;
+                atmIndex = i;
             }
-        });
+        }
 
-        // 2. Fallback to all candidates if no OTM found
-        let poolToSearch = otmCandidates.length > 0 ? otmCandidates : validCandidates;
+        // 3. ATM से N-step OTM जाएँ (जैसे 3 लिखा तो 3 स्टेप आगे)
+        const targetIndex = Math.min(atmIndex + strikeSteps, orderedStrikes.length - 1);
 
-        // 3. Sort by closest distance to spot price (closest ATM first)
-        poolToSearch.sort((a, b) => {
-            const distA = Math.abs(a.distFromSpot);
-            const distB = Math.abs(b.distFromSpot);
-            return distA - distB;
-        });
-
-        // 4. Pick the first candidate that fits within the budget starting from ATM moving outwards
         let bestCandidate = null;
-        for (const candidate of poolToSearch) {
+
+        // 4. Target से शुरू करें और budget में फिट होने तक ATM की तरफ पीछे आएँ
+        for (let i = targetIndex; i >= 0; i--) {
+            const candidate = orderedStrikes[i];
+
+            // अगर safeBudget नहीं है या reqMargin safeBudget से कम है, तो यही select करें
             if (safeBudget === null || candidate.reqMargin <= safeBudget) {
                 bestCandidate = candidate;
-                break; // Stop at the closest strike that fits the budget
+                break;
             }
         }
 
-        // 5. Absolute fallback: if nothing fits the budget (e.g., insufficient funds), pick the cheapest available OTM to avoid errors
+        // 5. Absolute Fallback: अगर ATM से लेकर target तक कुछ भी budget में नहीं आया, 
+        // तो सबसे सस्ता option उठा लें (ताकि error न आए)
         if (!bestCandidate) {
-            const budgetCandidates = validCandidates.filter(c => safeBudget === null || c.reqMargin <= safeBudget);
-            if (budgetCandidates.length > 0) {
-                budgetCandidates.sort((a, b) => b.reqMargin - a.reqMargin);
-                bestCandidate = budgetCandidates[0];
+            const affordable = orderedStrikes.filter(c => safeBudget === null || c.reqMargin <= safeBudget);
+            if (affordable.length > 0) {
+                // सबसे सस्ता (cheapest premium) ढूँढें
+                affordable.sort((a, b) => a.reqMargin - b.reqMargin);
+                bestCandidate = affordable[0];
             }
         }
 
+        // 6. Final selection assign करें
         if (bestCandidate) {
             selectedItem = bestCandidate.item;
             selectedSide = bestCandidate.side;

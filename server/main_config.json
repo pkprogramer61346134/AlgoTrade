@@ -1,4 +1,4 @@
- {
+{
   "realTradeEnabled": true,
   "selectedStock": {
     "securityId": "13",
@@ -11,5 +11,6 @@
   "targetPoints": 100,
   "stopLossPoints": 10,
   "trailingJumpPoints": 9,
+  "strikeSteps": 3,
   "maxTradesPerRun": 3
 }
